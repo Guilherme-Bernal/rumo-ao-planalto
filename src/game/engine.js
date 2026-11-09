@@ -1,4 +1,4 @@
-import { billOutcome } from './bills'
+import { billOutcome, billsOf, billById, statuteFx, billSupport } from './bills'
 import { reactive } from 'vue'
 import { settings, difficultyOf } from './settings'
 import { countries } from './countries'
@@ -129,6 +129,7 @@ const blank = () => ({
   ideas: { name: '', flags: [], force: 50 },
   myParty: null,
   mini: { plenario: false },
+  poder: { statutes: [], timeline: [], pending: null, press: [], seen: [] },
   bigOffer: null,
   bigDone: [],
   flavorSeen: [],
@@ -747,6 +748,7 @@ function beginTurn() {
   maybeInvite()
   game.heat = Math.max(0, (game.heat || 0) * 0.85 - 2)
   tickWorld()
+  roundPoder()
   game.eventId = game.team && game.team.hot ? 'equipe_escandalo' : game.world.pending ? 'guerra_posicao' : game.heat >= 25 && R() < Math.min(0.65, game.heat / 110) ? 'operacao' : drawEvent()
   game.eventMonth = Math.floor(R() * monthsPer())
   driftField()
@@ -779,6 +781,7 @@ export function chooseOption(i) {
     R,
   )
   news.reactions = makeReactions({ who: game.name, tone: news.tone, contacts: game.contacts }, R)
+  if (game.poder && game.poder.press.length) news.side = [...game.poder.press.splice(0, 2), ...(news.side || [])].slice(0, 3)
   game.outcome = { label: ch.label, text: subst(res.out), title: ev.title, news, risky: !!ch.risk, lucky }
   const tn = tone(res.fx)
   game.outcome.tone = tn
@@ -1128,6 +1131,8 @@ export function endTurn() {
   applyFx(contactPerks())
   applyFx(dealPerks())
   applyFx(teamPerks())
+  applyFx(statutePassive())
+  tickStatutes()
   rollTeamRisk()
   tickTeam()
   tickDeals()
@@ -1364,6 +1369,7 @@ export function finishPlenario(votes, total, bill = null, concessions = 0, stanc
   curSphere = STAGE_SPHERE[game.stage] === 'mun' ? 'mun' : 'fed'
   applyFx(bill ? billOutcome(bill, stance === 'pro' ? won : !won, concessions, stance) : won ? { cong: 4, img: 2, pop: 1 } : { cong: -3, img: -1 }, true)
   curSphere = null
+  if (bill) plenaryAftermath(bill, won, concessions, stance)
   log(`Votação${bill ? ` do projeto “${bill.title}” (você ${stance === 'pro' ? 'apoiou' : 'combateu'})` : ''}: ${votes}/${total} com você (${won ? 'vitória' : 'derrota'}).`)
   pushPosts(2, won ? 'up' : 'down', 'Votacao')
   save()
@@ -2419,4 +2425,164 @@ export function paperAct(kind) {
   log(`Jornal: ${o.paper.label}.`)
   save()
   return o.paper
+}
+
+/* ---------- poderes: sanção, veto, leis em vigor, linha do tempo ---------- */
+const EXEC = ['prefeito', 'governador', 'presidente']
+export const isExec = () => EXEC.includes(officeId())
+function ensurePoder() {
+  game.poder = { statutes: [], timeline: [], pending: null, press: [], seen: [], ...(game.poder || {}) }
+}
+export function timelineAdd(icon, text, tn = 'flat') {
+  ensurePoder()
+  game.poder.timeline.unshift({ r: game.total, icon, text, tone: tn })
+  game.poder.timeline = game.poder.timeline.slice(0, 40)
+}
+function enactStatute(bill, how, k = 1) {
+  ensurePoder()
+  const fx = statuteFx(bill, k)
+  if (!Object.keys(fx).length) return
+  game.poder.statutes.unshift({ id: bill.id + ':' + game.total, billId: bill.id, title: bill.title, icon: bill.icon, how, fx, left: 6, stage: game.stage })
+  game.poder.statutes = game.poder.statutes.slice(0, 14)
+}
+export const statutesActive = () => ((game.poder && game.poder.statutes) || []).filter((x) => x.stage === game.stage && x.left > 0)
+function statutePassive() {
+  const fx = {}
+  for (const st of statutesActive()) for (const k in st.fx) fx[k] = Math.max(-1.2, Math.min(1.2, (fx[k] || 0) + st.fx[k]))
+  return fx
+}
+function tickStatutes() {
+  for (const st of statutesActive()) st.left--
+}
+const PRESS = {
+  sancao: ['✍️', (w, b) => `${w} sanciona “${b}”`, 'up'],
+  parcial: ['✂️', (w, b) => `${w} veta parte de “${b}” e sanciona o resto`, 'flat'],
+  veto: ['🛑', (w, b) => `${w} veta “${b}”`, 'down'],
+  derrubado: ['💥', (w, b) => `Veto de ${w} a “${b}” é derrubado pelo Legislativo`, 'down'],
+  mantido: ['🧱', (w, b) => `Veto de ${w} a “${b}” é mantido`, 'up'],
+  aprovada: ['🏛️', (w, b) => `“${b}” é aprovado com a articulação de ${w}`, 'up'],
+  passou: ['📜', (w, b) => `“${b}” passa, apesar da oposição de ${w}`, 'down'],
+  barrada: ['🚧', (w, b) => `Plenário barra “${b}” com a ajuda de ${w}`, 'up'],
+  rejeitada: ['📉', (w, b) => `“${b}” é rejeitado e ${w} perde a votação`, 'down'],
+  prazo: ['⏳', (w, b) => `“${b}” vira lei por decurso de prazo; ${w} não decidiu`, 'flat'],
+}
+function pressLaw(kind, bill) {
+  const [icon, fn, tn] = PRESS[kind]
+  const text = fn(game.name, bill.title)
+  ensurePoder()
+  timelineAdd(icon, text, tn)
+  game.poder.press.push({ icon, text })
+  game.poder.press = game.poder.press.slice(-4)
+  toast(icon, text)
+  pushPosts(2, tn, 'Lei')
+  pushTrend('#' + slug(bill.title).slice(0, 18), 70)
+}
+function betray(delta, why) {
+  const c = (game.contacts || []).find((x) => x.id === 'aliado')
+  if (!c) return
+  const r0 = c.rel
+  c.rel = clampRel(c.rel + delta)
+  remember(c, why, c.rel - r0)
+}
+function plenaryAftermath(bill, won, concessions, stance) {
+  const sup = billSupport(bill, game.total)
+  const op = {}
+  if (sup >= 65 && stance === 'con') op.pop = -1
+  if (sup <= 35 && stance === 'pro') op.img = -1
+  if (sup >= 65 && stance === 'pro' && won) op.pop = 1
+  if (sup <= 35 && stance === 'con' && won) op.img = 1
+  if (Object.keys(op).length) applyFx(op, true)
+  const k = Math.max(0.25, 1 - 0.25 * concessions)
+  if (stance === 'pro') {
+    if (won) {
+      enactStatute(bill, 'plenario', k)
+      pressLaw('aprovada', bill)
+      betray(1, `Aprovou “${bill.title}” com você`)
+    } else {
+      pressLaw('rejeitada', bill)
+      betray(-1, `Derrota em “${bill.title}”`)
+    }
+  } else if (won) {
+    pressLaw('barrada', bill)
+    betray(1, `Barrou “${bill.title}” com você`)
+  } else {
+    enactStatute(bill, 'plenario', k * 0.5)
+    pressLaw('passou', bill)
+    betray(-1, `Perdeu a briga contra “${bill.title}”`)
+  }
+}
+
+// Executivo: um projeto do Legislativo chega para sanção ou veto
+function roundPoder() {
+  ensurePoder()
+  const p = game.poder
+  if (p.pending) {
+    // não decidiu na rodada: vira lei por decurso de prazo
+    const b = billById(p.pending.billId)
+    p.pending = null
+    if (b) {
+      enactStatute(b, 'prazo', 0.7)
+      pressLaw('prazo', b)
+    }
+  }
+  if (!isExec() || R() > 0.65) return
+  const pool = billsOf(officeId()).filter((b) => !p.seen.includes(b.id))
+  const list = pool.length ? pool : billsOf(officeId())
+  const b = list[Math.floor(R() * list.length)]
+  p.pending = { billId: b.id, round: game.total }
+  p.seen = [b.id, ...p.seen].slice(0, 3)
+  toast('📜', `Um projeto do Legislativo aguarda sua decisão: ${b.title}.`)
+}
+export const pendingBill = () => (game.poder && game.poder.pending ? billById(game.poder.pending.billId) : null)
+export function overrideChance(bill, choice) {
+  const round = game.poder && game.poder.pending ? game.poder.pending.round : game.total
+  let p = 0.5 - (game.stats.cong - 50) / 120 + (billSupport(bill, round) - 50) / 160
+  if (choice === 'parcial') p -= 0.3
+  return Math.max(0.05, Math.min(0.9, p))
+}
+export function decideBill(choice) {
+  ensurePoder()
+  const bill = pendingBill()
+  if (!bill || game.phase === 'over') return null
+  game.poder.pending = null
+  game.delta = {}
+  curSphere = STAGE_SPHERE[game.stage] === 'mun' ? 'mun' : 'fed'
+  let fx
+  let overridden = false
+  let passed = true
+  if (choice === 'sancionar') {
+    fx = billOutcome(bill, true, 0, 'pro')
+    enactStatute(bill, 'sancao', 1)
+    pressLaw('sancao', bill)
+    betray(2, `Você sancionou “${bill.title}”`)
+  } else if (choice === 'parcial') {
+    fx = billOutcome(bill, true, 2, 'pro')
+    fx.cong = 1
+    if (R() < overrideChance(bill, 'parcial')) {
+      overridden = true
+      fx = billOutcome(bill, true, 0, 'con')
+      enactStatute(bill, 'derrubado', 1)
+      pressLaw('derrubado', bill)
+    } else {
+      enactStatute(bill, 'parcial', 0.5)
+      pressLaw('parcial', bill)
+    }
+    betray(-1, `Vetou parte de “${bill.title}”`)
+  } else if (R() < overrideChance(bill, 'vetar')) {
+    overridden = true
+    fx = billOutcome(bill, true, 0, 'con')
+    enactStatute(bill, 'derrubado', 1)
+    pressLaw('derrubado', bill)
+    betray(-4, `Veto a “${bill.title}” foi derrubado`)
+  } else {
+    passed = false
+    fx = billOutcome(bill, false, 0, 'con')
+    pressLaw('mantido', bill)
+    betray(-3, `Você vetou “${bill.title}”`)
+  }
+  applyFx(fx, true)
+  curSphere = null
+  log(`${choice === 'sancionar' ? 'Sancionou' : choice === 'parcial' ? 'Vetou parcialmente' : 'Vetou'} “${bill.title}”${overridden ? ' (veto derrubado)' : ''}.`)
+  save()
+  return { choice, bill, fx, overridden, passed }
 }

@@ -231,3 +231,21 @@
 .hm-stance p { margin: 6px 0; font-size: .9rem; }
 .hm-stance .hm-args small { font-size: .66rem; color: var(--muted); }
 .hm-mine { font-size: .82rem; }
+
+.vt-banner { display: flex; align-items: center; gap: 12px; border-color: rgba(251,191,36,.6); background: rgba(251,191,36,.08); }
+.vt-banner > div { flex: 1; display: grid; }
+.vt-banner > span { font-size: 1.6rem; }
+.vt-sup { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: .8rem; }
+.vt-bar { height: 7px; border-radius: 5px; background: rgba(255,255,255,.12); overflow: hidden; }
+.vt-bar i { display: block; height: 100%; }
+.vt-opts { display: grid; gap: 8px; margin-top: 8px; }
+.vt-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 10px 12px; }
+.vt-ico { font-size: 1.6rem; }
+.vt-body { display: grid; gap: 3px; min-width: 0; }
+.vt-body small { color: var(--muted); }
+.vt-body .hm-fx { justify-content: flex-start; }
+.vt-hint { font-size: .8rem; text-align: center; margin: 8px 0 0; }
+.tline { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; }
+.tline li { display: grid; grid-template-columns: 34px 1fr; gap: 8px; padding: 5px 8px; border-left: 3px solid var(--border); background: rgba(255,255,255,.04); border-radius: 0 8px 8px 0; font-size: .86rem; }
+.tline li.t-up { border-left-color: var(--good); } .tline li.t-down { border-left-color: var(--bad); }
+.tl-r { color: var(--muted); font-size: .72rem; }

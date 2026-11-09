@@ -156,3 +156,39 @@ describe('projetos em votação', () => {
     })
   })
 })
+
+describe('sanção, veto e leis em vigor', () => {
+  it('sancionar cria lei com efeito contínuo e registra na linha do tempo', () => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = 'presidente'
+    E.game.poder.pending = { billId: 'f-saude', round: 1 }
+    E.game.phase = 'actions'
+    const r = E.decideBill('sancionar')
+    expect(r.choice).toBe('sancionar')
+    expect(E.game.poder.pending).toBe(null)
+    expect(E.statutesActive().length).toBe(1)
+    expect(E.game.poder.timeline.length).toBeGreaterThan(0)
+  })
+  it('vetar nunca deixa o jogo num estado quebrado, com ou sem derrubada', () => {
+    for (let i = 0; i < 30; i++) {
+      E.startGame({ name: 'Teste', regionId: 'SP' })
+      E.game.office = 'presidente'
+      E.game.poder.pending = { billId: 'f-fake', round: 1 }
+      E.game.phase = 'actions'
+      const r = E.decideBill('vetar')
+      expect(typeof r.overridden).toBe('boolean')
+      expect(E.game.poder.pending).toBe(null)
+      expect(E.game.stats.cong).toBeGreaterThanOrEqual(0)
+    }
+  })
+  it('chance de derrubar o veto fica entre 5% e 90%', () => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.poder.pending = { billId: 'f-saude', round: 1 }
+    const b = E.pendingBill()
+    for (const c of ['vetar', 'parcial']) {
+      const p = E.overrideChance(b, c)
+      expect(p).toBeGreaterThanOrEqual(0.05)
+      expect(p).toBeLessThanOrEqual(0.9)
+    }
+  })
+})

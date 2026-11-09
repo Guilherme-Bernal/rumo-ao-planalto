@@ -6,6 +6,7 @@ import MiniDebate from '../minigames/MiniDebate.vue'
 import MiniPlenario from '../minigames/MiniPlenario.vue'
 import MiniComicio from '../minigames/MiniComicio.vue'
 import MiniContato from '../minigames/MiniContato.vue'
+import MiniVeto from '../minigames/MiniVeto.vue'
 import { LIGAR } from '../../game/contacts'
 import { SPHERES } from '../../game/ideas'
 import { fmtNum } from '../../game/social'
@@ -154,6 +155,11 @@ const planIds = ref([])
         <span v-if="game.bigOffer.risky"> · {{ game.bigOffer.lucky ? '🎲 deu certo!' : '🎲 deu errado...' }}</span>
         <div class="muted">{{ game.bigOffer.out }}</div>
       </div>
+      <div v-if="game.poder && game.poder.pending" class="sumbox vt-banner">
+        <span>📜</span>
+        <div><b>Um projeto do Legislativo aguarda a sua decisão.</b><small class="muted">Sancione ou vete. Se deixar passar, vira lei sozinho.</small></div>
+        <button class="primary" @click="mini = 'veto'">Decidir</button>
+      </div>
       <div class="sumbox minirow">
         <button :disabled="game.mini.plenario" @click="mini = 'plenario'">🏛️ {{ plenLabel }} <small>(grátis, 1 vez por rodada)</small></button>
         <span v-if="miniMsg" class="muted">{{ miniMsg }}</span>
@@ -274,6 +280,7 @@ const planIds = ref([])
       <MiniDebate v-if="mini === 'debate'" @done="miniDone" />
       <MiniPlenario v-if="mini === 'plenario'" @done="miniDone" />
       <MiniComicio v-if="mini === 'comicio'" @done="miniDone" />
+      <MiniVeto v-if="mini === 'veto'" @close="(r) => { mini = null; if (r) miniMsg = `📜 “${r.bill.title}”: ${r.choice === 'sancionar' ? 'sancionado' : r.overridden ? 'veto derrubado' : 'veto mantido'}.` }" />
       <MiniContato v-if="mini === 'conversa'" mode="in" @close="mini = null" />
       <MiniContato v-if="mini === 'ligar'" mode="out" :month="miniMonth" @close="mini = null; armed = null" />
     </Teleport>

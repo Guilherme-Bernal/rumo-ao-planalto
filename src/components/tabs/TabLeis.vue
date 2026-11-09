@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
+import { game, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
 
 const w = computed(() => game.world)
 const co = computed(() => coalition())
@@ -10,6 +10,10 @@ const can = computed(() => game.phase === 'actions' && !w.value.lawUsed)
 const why = computed(() => (game.phase !== 'actions' ? 'Disponível na fase de ações da rodada.' : w.value.lawUsed ? 'Você já propôs uma lei nesta rodada.' : ''))
 const pct = (t, o) => Math.round(lawChance(t, o) * 100)
 const col = (p) => (p < 30 ? 'var(--bad)' : p < 55 ? 'var(--warn)' : 'var(--good)')
+const stat = computed(() => statutesActive())
+const HOW = { plenario: 'aprovada no plenário', sancao: 'sancionada', parcial: 'sancionada com veto parcial', derrubado: 'veto derrubado', prazo: 'por decurso de prazo' }
+const fxTxt = (fx) => Object.entries(fx).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${statName[k] || k}`).join(' · ')
+const tl = computed(() => (game.poder && game.poder.timeline) || [])
 const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: 'Caixa', img: 'Imagem', pop: 'Popularidade' }
 </script>
 
@@ -37,6 +41,18 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
         </button>
       </div>
     </div>
+
+    <h3 class="sub">📜 Leis do seu mandato ({{ stat.length }})</h3>
+    <p v-if="!stat.length" class="legend">Projetos aprovados no plenário ou sancionados por você aparecem aqui e continuam rendendo por algumas rodadas.</p>
+    <ul v-else class="laws">
+      <li v-for="l in stat" :key="l.id">{{ l.icon }} <b>{{ l.title }}</b> <small class="muted">· {{ HOW[l.how] }} · {{ fxTxt(l.fx) }} por rodada · {{ l.left }} rodada(s)</small></li>
+    </ul>
+
+    <h3 class="sub">🕰️ Linha do tempo do mandato</h3>
+    <p v-if="!tl.length" class="legend">Sanções, vetos e votações importantes ficam registrados aqui.</p>
+    <ol v-else class="tline">
+      <li v-for="(t, i) in tl.slice(0, 12)" :key="i" :class="'t-' + t.tone"><span class="tl-r">R{{ t.r }}</span><span>{{ t.icon }} {{ t.text }}</span></li>
+    </ol>
 
     <h3 class="sub">📚 Leis em vigor neste cargo ({{ active.length }})</h3>
     <p v-if="!active.length" class="legend">Nenhuma ainda. Proponha a primeira.</p>

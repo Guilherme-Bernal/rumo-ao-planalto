@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { game, coalition, STATS } from '../../game/engine'
-import { billFor, billOutcome } from '../../game/bills'
+import { billFor, billOutcome, billBloc, billSupport, BLOCS } from '../../game/bills'
+import { PARTIES } from '../../game/countries/brasil-parties'
 import { candName } from '../../game/social'
 import { sfx } from '../../game/audio'
 
@@ -11,9 +12,10 @@ const PREF = {
   ideia: { ico: '💡', hint: 'Gosta de debater o mérito', label: 'Defender o mérito', tag: 'Quer mérito' },
   povo: { ico: '📣', hint: 'Vive de olho nas redes', label: 'Mostrar apoio popular', tag: 'Olha as redes' },
 }
-const SIG = ['PAT', 'PCS', 'MRB', 'UNI', 'PDL', 'PFB', 'PVD']
-const SIGCOL = { PAT: 210, PCS: 160, MRB: 30, UNI: 280, PDL: 350, PFB: 100, PVD: 55 }
+const SIG = PARTIES.filter((p) => !p.tag).map((p) => p.sigla)
+const hueOf = (sg) => [...sg].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)
 const prefs = ['verba', 'ideia', 'povo']
+const BLOC_KEYS = Object.keys(BLOCS)
 const total = 9
 const need = Math.floor(total / 2) + 1
 const co = coalition()
@@ -31,9 +33,16 @@ const members = ref(
       vote: i < yes ? 'sim' : i < yes + no ? 'nao' : 'ind',
       note: '',
       shown: null,
+      bloc: BLOC_KEYS[Math.floor(Math.random() * BLOC_KEYS.length)],
+      leader: false,
     }
   }).sort(() => Math.random() - 0.5),
 )
+// o primeiro de cada bancada é o líder: convencer o líder arrasta os colegas
+for (const k of BLOC_KEYS) {
+  const f = members.value.find((m) => m.bloc === k)
+  if (f) f.leader = true
+}
 
 // assentos em semicírculo: fila de fora com 5 e de dentro com 4
 const ASPECT = 0.62
@@ -52,6 +61,8 @@ const bill = billFor(game.office, game.total)
 const concessions = ref(0)
 const short = Object.fromEntries(STATS.map((x) => [x.k, x.short]))
 const fxChips = (fx) => Object.entries(fx).filter(([, v]) => v).map(([k, v]) => ({ t: `${v > 0 ? '+' : ''}${v} ${short[k]}`, good: v > 0 }))
+const support = billSupport(bill, game.total)
+const billBl = BLOCS[billBloc(bill)]
 const stance = ref(null) // 'pro' (defender o projeto) | 'con' (derrubar)
 const ifPass = computed(() => fxChips(billOutcome(bill, stance.value === 'pro', concessions.value, stance.value || 'pro')))
 const ifFail = computed(() => fxChips(billOutcome(bill, stance.value !== 'pro', concessions.value, stance.value || 'pro')))
@@ -70,8 +81,21 @@ const nao = computed(() => members.value.filter((m) => m.vote === 'nao').length)
 const ind = computed(() => total - sim.value - nao.value)
 const cur = computed(() => (sel.value === null ? null : members.value[sel.value]))
 const office = computed(() => ({ vereador: 'na Câmara Municipal', prefeito: 'na Câmara Municipal', dep_estadual: 'na Assembleia Legislativa', dep_federal: 'na Câmara dos Deputados', senador: 'no Senado Federal', governador: 'na Assembleia Legislativa', presidente: 'no Congresso Nacional' })[game.office] || 'no plenário')
-const hue = (m) => SIGCOL[m.sig] ?? 200
+const hue = (m) => hueOf(m.sig)
 const state = (m) => m.shown || m.vote
+
+// líder de bancada convencido arrasta colegas da mesma bancada
+function pull(m) {
+  if (!m.leader) return ''
+  let n = 0
+  for (const o of members.value) {
+    if (o !== m && o.bloc === m.bloc && o.vote !== 'sim' && n < 2 && Math.random() < 0.6) {
+      o.vote = 'sim'
+      n++
+    }
+  }
+  return n ? ` 👑 A bancada acompanhou: +${n}.` : ''
+}
 
 // negociar: o parlamentar aceita votar com você em troca de uma emenda que enfraquece o projeto
 function negotiate() {
@@ -83,7 +107,7 @@ function negotiate() {
   else if (Math.random() < (m.vote === 'ind' ? 0.85 : 0.55)) {
     m.vote = 'sim'
     concessions.value++
-    t = '🤝 “Fechado, se entrar a minha emenda. Estou com você.”'
+    t = '🤝 “Fechado, se entrar a minha emenda. Estou com você.”' + pull(m)
     sfx('good')
   } else t = '❌ “Nem com emenda. Fico do outro lado.”'
   m.note = t
@@ -101,7 +125,7 @@ function argue(p) {
   else if (m.vote === 'ind') {
     if (hit ? Math.random() < 0.9 : Math.random() < 0.2) {
       m.vote = 'sim'
-      t = hit ? '✅ “É isso que eu queria ouvir. Estou com você.”' : '✅ “Não era o que eu esperava, mas me convenceu.”'
+      t = (hit ? '✅ “É isso que eu queria ouvir. Estou com você.”' : '✅ “Não era o que eu esperava, mas me convenceu.”') + pull(m)
       sfx('good')
     } else {
       t = hit ? '“Estou quase lá, mas ainda tenho dúvida.”' : '🤔 “Não é bem isso que eu queria ouvir.”'
@@ -113,7 +137,7 @@ function argue(p) {
     }
   } else if (hit && Math.random() < 0.3) {
     m.vote = 'sim'
-    t = '✅ “Vou repensar... fechado, estou com você.”'
+    t = '✅ “Vou repensar... fechado, estou com você.”' + pull(m)
     sfx('good')
   } else t = '❌ “Continuo do outro lado.”'
   m.note = t
@@ -159,6 +183,8 @@ async function vote() {
         </div>
       </div>
       <div v-if="!stance" class="hm-stance">
+        <div class="vt-sup"><span>Apoio popular ao projeto</span><span class="vt-bar"><i :style="{ width: support + '%', background: support >= 55 ? 'var(--good)' : support >= 40 ? 'var(--warn)' : 'var(--bad)' }"></i></span><b>{{ support }}%</b></div>
+        <small class="muted">{{ support >= 65 ? 'Popular: combater custa popularidade.' : support <= 35 ? 'Impopular: defender custa imagem.' : 'Opinião dividida.' }} · {{ billBl.icon }} Mexe com a {{ billBl.name.toLowerCase() }}.</small>
         <p><b>De que lado você vai ficar?</b> Defender ou derrubar muda o que você ganha. Depois é só convencer os parlamentares a ficar do seu lado.</p>
         <div class="hm-args">
           <button @click="stance = 'pro'"><span>👍</span>Defender o projeto<small>passar traz o benefício</small></button>
@@ -198,7 +224,7 @@ async function vote() {
         <div v-if="cur" class="hm-card">
           <div class="hm-cava" :style="{ '--h': hue(cur) }">{{ cur.first[0] }}</div>
           <div class="hm-cinfo">
-            <b>{{ cur.name }}</b> <span class="chip">{{ cur.sig }}</span>
+            <b>{{ cur.name }}</b> <span class="chip">{{ cur.sig }}</span><span class="chip">{{ BLOCS[cur.bloc].icon }} {{ BLOCS[cur.bloc].short }}{{ cur.leader ? ' · 👑 líder' : '' }}</span>
             <div class="muted">{{ PREF[cur.pref].ico }} {{ PREF[cur.pref].hint }}</div>
             <div class="hm-st" :class="cur.vote">{{ cur.vote === 'sim' ? '✅ Com você' : cur.vote === 'nao' ? '❌ Do outro lado' : '❔ Indeciso' }}</div>
           </div>

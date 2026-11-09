@@ -50,3 +50,44 @@ export const billOutcome = (bill, passed, concessions = 0, stance = 'pro') => {
   }
   return out
 }
+
+// ---------- bancadas ----------
+// Cada parlamentar pertence a uma bancada. O projeto mexe mais com uma delas.
+export const BLOCS = {
+  soc: { name: 'Bancada da saúde e educação', short: 'Saúde/Educ.', icon: '🩺' },
+  seg: { name: 'Bancada da segurança', short: 'Segurança', icon: '🛡️' },
+  eco: { name: 'Bancada econômica', short: 'Economia', icon: '📈' },
+  pov: { name: 'Bancada popular', short: 'Popular', icon: '📣' },
+}
+const STAT_BLOC = { soc: 'soc', seg: 'seg', eco: 'eco', cash: 'eco', pop: 'pov', img: 'pov' }
+export const billBloc = (bill) => {
+  let best = 'pov'
+  let top = -1
+  for (const [st, v] of Object.entries(bill.win)) {
+    if (Math.abs(v) > top && STAT_BLOC[st]) {
+      top = Math.abs(v)
+      best = STAT_BLOC[st]
+    }
+  }
+  return best
+}
+// Apoio popular ao projeto (0 a 100), estável por projeto e rodada
+export const billSupport = (bill, round = 0) => {
+  const w = bill.win
+  let s = 50 + (w.pop || 0) * 12 + (w.soc || 0) * 5 + (w.seg || 0) * 4 + (w.eco || 0) * 3 + (w.img || 0) * 2 + (w.cash < 0 ? 0 : 3)
+  const h = [...bill.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, round + 7)
+  s += (h % 13) - 6
+  return Math.max(12, Math.min(92, Math.round(s)))
+}
+// Efeito contínuo de uma lei em vigor: uma fração do benefício, por rodada
+export const statuteFx = (bill, k = 1) => {
+  const out = {}
+  for (const [st, v] of Object.entries(bill.win)) {
+    if (st === 'cong') continue
+    const per = Math.sign(v) * Math.min(1, Math.abs(v) * 0.22 * k)
+    if (Math.abs(per) >= 0.15) out[st] = Math.round(per * 10) / 10
+  }
+  return out
+}
+export const billById = (id) => ALL_BILLS.find((b) => b.id === id)
+export const billsOf = (office) => T[billTier(office)]
