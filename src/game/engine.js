@@ -2534,6 +2534,7 @@ function roundPoder() {
   p.exe = { used: [] }
   julgarDecretos()
   riscoNomeados()
+  roundJudiciario()
   if (p.pending) {
     // não decidiu na rodada: vira lei por decurso de prazo
     const b = billById(p.pending.billId)
@@ -2890,4 +2891,113 @@ function julgarDecretos() {
     }
   }
   game.poder.sus = Math.max(0, (game.poder.sus || 0) - 1)
+}
+
+/* ---------- Judiciário: controle de constitucionalidade e inquéritos ---------- */
+export const courtName = () => (['presidente', 'dep_federal', 'senador'].includes(officeId()) ? 'Supremo Tribunal Federal' : 'Tribunal de Justiça')
+export const courtShort = () => (courtName().startsWith('Supremo') ? 'STF' : 'TJ')
+const polemicOf = (st) => (st.how === 'decreto' ? 2 : st.how === 'derrubado' ? 1 : 0) + (Object.values(st.fx || {}).some((v) => v < 0) ? 1 : 0)
+export const acaoPendente = () => (game.poder && game.poder.acao) || null
+export const upholdChance = () => {
+  const a = acaoPendente()
+  const pol = a ? a.pol : 1
+  return Math.max(0.15, Math.min(0.9, 0.58 + (game.stats.img - 50) / 300 - pol * 0.1 + 0.04 * ((game.know && game.know.dir) || 0) + (a && a.defended ? 0.15 : 0)))
+}
+function roundJudiciario() {
+  const p = game.poder
+  const a = p.acao
+  if (a) {
+    const st = p.statutes.find((x) => x.id === a.id)
+    const chance = Math.max(0.15, Math.min(0.9, 0.58 + (game.stats.img - 50) / 300 - a.pol * 0.1 + 0.04 * ((game.know && game.know.dir) || 0) + (a.defended ? 0.15 : 0)))
+    p.acao = null
+    if (st && st.left > 0) {
+      if (R() < chance) {
+        applyFx({ img: 1.5, cong: 1 }, true)
+        timelineAdd('⚖️', `${courtShort()} mantém “${st.title}” de ${game.name}`, 'up')
+        toast('⚖️', `${courtShort()} manteve a lei.`)
+      } else {
+        st.left = 0
+        applyFx({ img: -3, cong: -1, pop: -1 }, true)
+        timelineAdd('🔨', `${courtShort()} derruba “${st.title}” por inconstitucionalidade`, 'down')
+        toast('🔨', `${courtShort()} derrubou “${st.title}”.`)
+        pushPosts(3, 'down', courtShort())
+      }
+    }
+  }
+  if (!p.acao) {
+    const el = (p.statutes || []).filter((x) => x.stage === game.stage && x.left > 0 && !x.stf)
+    for (const st of el) {
+      const pol = polemicOf(st)
+      if (R() < 0.03 + 0.07 * pol + (game.heat || 0) / 700) {
+        st.stf = true
+        p.acao = { id: st.id, title: st.title, pol, round: game.total, defended: false }
+        toast('⚖️', `Ação de inconstitucionalidade contra “${st.title}” chegou ao ${courtShort()}.`)
+        timelineAdd('📑', `Oposição aciona o ${courtShort()} contra “${st.title}”`, 'down')
+        break
+      }
+    }
+  }
+  // inquérito
+  const q = p.inq
+  if (q && q.stage === game.stage) {
+    q.round++
+    applyFx({ img: -0.5 }, true)
+    if (q.round >= 3) {
+      const ok = R() < 0.45 + (q.def ? 0.2 : 0) + (q.col ? 0.15 : 0) + (game.stats.img - 50) / 300
+      p.inq = null
+      game.heat = clamp(game.heat - 15)
+      if (ok) {
+        applyFx({ img: 3, pop: 1 }, true)
+        timelineAdd('✅', `${courtShort()} arquiva o inquérito contra ${game.name}`, 'up')
+        toast('✅', 'Inquérito arquivado.')
+      } else {
+        applyFx({ img: -9, pop: -4, cong: -4 }, true)
+        timelineAdd('⛓️', `${game.name} é denunciado(a) após o inquérito`, 'down')
+        toast('⛓️', 'Você virou réu. O desgaste foi pesado.')
+        pushPosts(3, 'down', 'Reu')
+      }
+    }
+  } else if (!q && (game.heat || 0) >= 35 && R() < Math.min(0.5, (game.heat - 30) / 100)) {
+    p.inq = { stage: game.stage, round: 0, def: false, col: false }
+    toast('🕵️', `O ${courtShort()} abriu um inquérito sobre você.`)
+    timelineAdd('🕵️', `${courtShort()} abre inquérito contra ${game.name}`, 'down')
+  }
+}
+export const inquerito = () => (game.poder && game.poder.inq && game.poder.inq.stage === game.stage ? game.poder.inq : null)
+export function defenderAcao() {
+  const a = acaoPendente()
+  if (!a || a.defended || game.stats.cash < 2) return false
+  a.defended = true
+  game.delta = {}
+  applyFx({ cash: -2 }, true)
+  toast('🧑‍⚖️', 'Advocacia do governo entrou com a defesa.')
+  save()
+  return true
+}
+export function acatarAcao() {
+  const a = acaoPendente()
+  if (!a) return false
+  const st = game.poder.statutes.find((x) => x.id === a.id)
+  game.poder.acao = null
+  if (st) st.left = 0
+  game.delta = {}
+  applyFx({ img: 0.5, cong: -0.5 }, true)
+  timelineAdd('🏳️', `${game.name} recua e revoga “${a.title}”`, 'flat')
+  save()
+  return true
+}
+export function defesaInquerito(tipo) {
+  const q = inquerito()
+  if (!q) return false
+  game.delta = {}
+  if (tipo === 'defesa' && !q.def && game.stats.cash >= 3) {
+    q.def = true
+    applyFx({ cash: -3 }, true)
+  } else if (tipo === 'colaborar' && !q.col) {
+    q.col = true
+    applyFx({ img: -2 }, true)
+    game.heat = clamp(game.heat - 10)
+  } else return false
+  save()
+  return true
 }

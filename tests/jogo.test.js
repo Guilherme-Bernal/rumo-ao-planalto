@@ -286,3 +286,39 @@ describe('governo: nomeações, emendas e decretos', () => {
     }
   })
 })
+
+describe('judiciário', () => {
+  const novo = () => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = 'presidente'
+    E.game.phase = 'actions'
+    E.game.stats.cash = 50
+    E.game.poder.exe = { used: [] }
+  }
+  it('o tribunal muda conforme o cargo', () => {
+    novo()
+    expect(E.courtShort()).toBe('STF')
+    E.game.office = 'prefeito'
+    expect(E.courtShort()).toBe('TJ')
+  })
+  it('ação contra decreto pode ser defendida ou acatada', () => {
+    novo()
+    E.decretar('d-social')
+    const st = E.game.poder.statutes[0]
+    E.game.poder.acao = { id: st.id, title: st.title, pol: 3, round: 1, defended: false }
+    const antes = E.upholdChance()
+    expect(E.defenderAcao()).toBe(true)
+    expect(E.upholdChance()).toBeGreaterThan(antes)
+    expect(E.acatarAcao()).toBe(true)
+    expect(st.left).toBe(0)
+    expect(E.acaoPendente()).toBe(null)
+  })
+  it('inquérito aceita defesa e colaboração uma vez cada', () => {
+    novo()
+    E.game.poder.inq = { stage: E.game.stage, round: 0, def: false, col: false }
+    expect(E.defesaInquerito('defesa')).toBe(true)
+    expect(E.defesaInquerito('defesa')).toBe(false)
+    expect(E.defesaInquerito('colaborar')).toBe(true)
+    expect(E.inquerito().def && E.inquerito().col).toBe(true)
+  })
+})

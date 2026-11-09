@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
+import { courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
 
 const w = computed(() => game.world)
 const co = computed(() => coalition())
@@ -53,6 +53,23 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
             · <span class="u">+{{ o.one }} {{ statName[t.stat] }}</span><span v-if="o.cost" class="dn"> · -{{ o.cost }} Caixa</span>
           </small>
         </button>
+      </div>
+    </div>
+
+    <h3 class="sub">⚖️ {{ courtName() }}</h3>
+    <p v-if="!acaoPendente() && !inquerito()" class="legend">Nada em julgamento. Leis polêmicas e decretos podem ser questionados pela oposição, e escândalos podem virar inquérito.</p>
+    <div v-if="acaoPendente()" class="sumbox">
+      📑 Ação de inconstitucionalidade contra <b>{{ acaoPendente().title }}</b>. Chance de a lei ser mantida: {{ Math.round(upholdChance() * 100) }}%. Se nada for feito, o tribunal julga na próxima rodada.
+      <div class="acts" style="margin-top: 6px">
+        <button type="button" :disabled="acaoPendente().defended || game.stats.cash < 2" @click="defenderAcao()"><b>🧑‍⚖️ Reforçar a defesa</b><small>-2 Caixa, +15% de chance</small></button>
+        <button type="button" @click="acatarAcao()"><b>🏳️ Recuar e revogar</b><small>A lei cai sem desgaste maior</small></button>
+      </div>
+    </div>
+    <div v-if="inquerito()" class="sumbox" :style="{ marginTop: '8px', borderColor: 'var(--bad)' }">
+      🕵️ Inquérito aberto sobre você (fase {{ inquerito().round }}/3). Perde Imagem a cada rodada e é decidido na terceira.
+      <div class="acts" style="margin-top: 6px">
+        <button type="button" :disabled="inquerito().def || game.stats.cash < 3" @click="defesaInquerito('defesa')"><b>🧑‍⚖️ Contratar defesa</b><small>-3 Caixa, melhora o desfecho</small></button>
+        <button type="button" :disabled="inquerito().col" @click="defesaInquerito('colaborar')"><b>🤝 Colaborar com a investigação</b><small>-2 Imagem, esfria o caso</small></button>
       </div>
     </div>
 
