@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { game, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
+import { game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
 
 const w = computed(() => game.world)
 const co = computed(() => coalition())
@@ -12,16 +12,20 @@ const pct = (t, o) => Math.round(lawChance(t, o) * 100)
 const col = (p) => (p < 30 ? 'var(--bad)' : p < 55 ? 'var(--warn)' : 'var(--good)')
 const stat = computed(() => statutesActive())
 const leg = computed(() => isLeg())
+const exe = computed(() => isExec())
 const com = computed(() => comissaoAtiva())
 const msg = ref('')
 const run = (fn, ...a) => {
   const r = fn(...a)
   if (r && r.text) msg.value = r.text
   else if (r && r.ok !== undefined) msg.value = r.ok ? 'A CPI deu resultado: você virou referência no assunto.' : 'A CPI não vingou e a base ficou irritada.'
+  else if (r && r.pa) msg.value = `${r.nome} assume ${r.pa.name}.`
+  else if (r && r.d) msg.value = 'Decreto editado. O Legislativo pode tentar sustá-lo na próxima rodada.'
+  else if (r && r.secreto !== undefined) msg.value = r.caught ? 'O orçamento paralelo vazou e virou escândalo.' : r.secreto ? 'Verba negociada por fora. Ninguém viu, por enquanto.' : 'Emendas liberadas. Sua base vota com você.'
   else if (r && r.e) msg.value = 'Emenda destinada. A população percebe o benefício.'
   else if (r && r.c) msg.value = r.bill ? `Relatoria concluída e o projeto “${r.bill.title}” foi aprovado.` : 'Relatoria concluída. Você ganhou crédito na comissão.'
 }
-const HOW = { plenario: 'aprovada no plenário', sancao: 'sancionada', parcial: 'sancionada com veto parcial', derrubado: 'veto derrubado', prazo: 'por decurso de prazo' }
+const HOW = { plenario: 'aprovada no plenário', decreto: 'decreto (pode ser sustado)', sancao: 'sancionada', parcial: 'sancionada com veto parcial', derrubado: 'veto derrubado', prazo: 'por decurso de prazo' }
 const fxTxt = (fx) => Object.entries(fx).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${statName[k] || k}`).join(' · ')
 const tl = computed(() => (game.poder && game.poder.timeline) || [])
 const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: 'Caixa', img: 'Imagem', pop: 'Popularidade' }
@@ -51,6 +55,26 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
         </button>
       </div>
     </div>
+
+    <template v-if="exe">
+      <h3 class="sub">🏛️ Governo <small class="muted">· {{ exeLeft() }} ação(ões) nesta rodada</small></h3>
+      <p v-if="msg" class="sumbox">{{ msg }}</p>
+      <p class="legend">{{ cargoName() }}s: técnico rende na pasta, indicação política compra base e amigo é leal, mas é arriscado.</p>
+      <div v-for="pa in PASTAS" :key="pa.id" class="tema">
+        <div><b>{{ pa.icon }} {{ pa.name }}</b> <small class="muted">{{ nomeadoDe(pa.id) && nomeadoDe(pa.id).stage === game.stage ? nomeadoDe(pa.id).nome + ' · ' + nomeadoDe(pa.id).perfil : 'vaga' }}</small></div>
+        <div class="acts">
+          <button v-for="pf in PERFIS" :key="pf.id" type="button" :disabled="!exeCan('nomear:' + pa.id)" :title="pf.desc" @click="run(nomear, pa.id, pf.id)"><b>{{ pf.icon }} {{ pf.name }}</b><small>{{ pf.desc }}</small></button>
+        </div>
+      </div>
+      <h3 class="sub">💸 Emendas e decretos</h3>
+      <div class="acts">
+        <button type="button" :disabled="!exeCan('emendas') || game.stats.cash < 3" @click="run(liberarEmendas, false)"><b>💸 Liberar emendas</b><small>+4 Base, +1 Pop, -3 Caixa</small></button>
+        <button type="button" :disabled="!exeCan('secreto') || game.stats.cash < 1" @click="run(liberarEmendas, true)"><b>🕳️ Verba por fora do radar</b><small>+7 Base, mas 35% de virar escândalo</small></button>
+      </div>
+      <div class="acts" style="margin-top: 8px">
+        <button v-for="d in DECRETOS" :key="d.id" type="button" :disabled="!exeCan('decreto')" @click="run(decretar, d.id)"><b>{{ d.icon }} {{ d.title.replace('Decreto de ', '') }}</b><small>Vale já, mas {{ Math.round(sustarChance() * 100) }}% de ser sustado</small></button>
+      </div>
+    </template>
 
     <template v-if="leg">
       <h3 class="sub">🔎 Mandato legislativo <small class="muted">· {{ legLeft() }} ação(ões) nesta rodada · escopo {{ legScope().name }}</small></h3>

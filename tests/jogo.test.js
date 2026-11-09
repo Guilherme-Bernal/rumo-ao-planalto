@@ -247,3 +247,42 @@ describe('mandato legislativo', () => {
     expect(n).toBe(3)
   })
 })
+
+describe('governo: nomeações, emendas e decretos', () => {
+  const novo = (office = 'presidente') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 50
+    E.game.poder.exe = { used: [] }
+  }
+  it('nomear cria o ministro e reforça a pasta; legislador não nomeia', () => {
+    novo()
+    expect(E.nomear('saude', 'tecnico')).toBeTruthy()
+    expect(E.nomeados().length).toBe(1)
+    novo('dep_federal')
+    expect(E.nomear('saude', 'tecnico')).toBe(null)
+  })
+  it('só 2 ações de governo por rodada', () => {
+    novo()
+    expect(E.liberarEmendas(false)).toBeTruthy()
+    expect(E.decretar('d-tarifa')).toBeTruthy()
+    expect(E.decretar('d-policia')).toBe(null)
+  })
+  it('decreto é frágil e pode ser sustado sem quebrar o jogo', () => {
+    for (let i = 0; i < 20; i++) {
+      novo()
+      E.decretar('d-social')
+      expect(E.game.poder.statutes[0].fragile).toBe(true)
+      expect(E.sustarChance()).toBeGreaterThan(0)
+    }
+  })
+  it('orçamento paralelo arrisca escândalo mas não quebra os atributos', () => {
+    for (let i = 0; i < 20; i++) {
+      novo()
+      const r = E.liberarEmendas(true)
+      expect(typeof r.caught).toBe('boolean')
+      for (const k of Object.keys(E.game.stats)) expect(E.game.stats[k]).toBeGreaterThanOrEqual(0)
+    }
+  })
+})

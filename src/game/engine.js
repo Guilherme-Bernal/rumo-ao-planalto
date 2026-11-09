@@ -2455,6 +2455,7 @@ function statutePassive() {
   for (const st of statutesActive()) for (const k in st.fx) fx[k] = Math.max(-1.2, Math.min(1.2, (fx[k] || 0) + st.fx[k]))
   const c = comissaoAtiva()
   if (c) fx[c.stat] = Math.min(1.2, (fx[c.stat] || 0) + 0.4)
+  for (const a of nomeados()) for (const k in a.pass) fx[k] = Math.min(1.2, (fx[k] || 0) + a.pass[k])
   return fx
 }
 function tickStatutes() {
@@ -2471,6 +2472,8 @@ const PRESS = {
   barrada: ['🚧', (w, b) => `Plenário barra “${b}” com a ajuda de ${w}`, 'up'],
   rejeitada: ['📉', (w, b) => `“${b}” é rejeitado e ${w} perde a votação`, 'down'],
   adiada: ['⏸️', (w, b) => `Pedido de vista de ${w} adia a votação de “${b}”`, 'up'],
+  decreto: ['🖋️', (w, b) => `${w} edita o ${b.toLowerCase()}`, 'flat'],
+  sustado: ['🧨', (w, b) => `Legislativo susta o ${b.toLowerCase()} de ${w}`, 'down'],
   prazo: ['⏳', (w, b) => `“${b}” vira lei por decurso de prazo; ${w} não decidiu`, 'flat'],
 }
 function pressLaw(kind, bill) {
@@ -2528,6 +2531,9 @@ function roundPoder() {
   ensurePoder()
   const p = game.poder
   p.leg = { used: [] }
+  p.exe = { used: [] }
+  julgarDecretos()
+  riscoNomeados()
   if (p.pending) {
     // não decidiu na rodada: vira lei por decurso de prazo
     const b = billById(p.pending.billId)
@@ -2756,4 +2762,132 @@ export function obstruir() {
   log('Armou obstrução.')
   save()
   return true
+}
+
+/* ---------- Executivo: nomeações, emendas, decretos ---------- */
+const exeUsed = (id) => !!(game.poder && game.poder.exe && game.poder.exe.used.includes(id))
+export const exeLeft = () => 2 - ((game.poder && game.poder.exe && game.poder.exe.used.length) || 0)
+export const exeCan = (id) => isExec() && game.phase === 'actions' && !exeUsed(id) && exeLeft() > 0
+function exeMark(id) {
+  ensurePoder()
+  if (!game.poder.exe) game.poder.exe = { used: [] }
+  game.poder.exe.used.push(id)
+}
+export const CARGO = { prefeito: 'Secretário(a)', governador: 'Secretário(a)', presidente: 'Ministro(a)' }
+export const cargoName = () => CARGO[officeId()] || 'Secretário(a)'
+export const PASTAS = [
+  { id: 'economia', icon: '📈', name: 'Fazenda e Economia', stat: 'eco' },
+  { id: 'saude', icon: '🩺', name: 'Saúde e Educação', stat: 'soc' },
+  { id: 'seguranca', icon: '🛡️', name: 'Segurança Pública', stat: 'seg' },
+]
+export const PERFIS = [
+  { id: 'tecnico', icon: '🎓', name: 'Técnico(a) de carreira', desc: 'Entrega resultado e dá pouca confusão, mas não traz votos.', pass: (st) => ({ [st]: 0.5 }), risk: 0.02 },
+  { id: 'politico', icon: '🗳️', name: 'Indicação política', desc: 'Compra apoio no Congresso. Rende menos na pasta e tem risco médio de escândalo.', pass: (st) => ({ [st]: 0.2, cong: 0.5 }), risk: 0.05 },
+  { id: 'amigo', icon: '🍻', name: 'Amigo de confiança', desc: 'Lealdade total e base tranquila, mas é o que mais dá manchete ruim.', pass: (st) => ({ cong: 0.3, [st]: 0.1 }), risk: 0.09 },
+]
+export const nomeados = () => {
+  const c = (game.poder && game.poder.cab) || {}
+  return Object.values(c).filter((a) => a && a.stage === game.stage && isExec())
+}
+export const nomeadoDe = (pasta) => ((game.poder && game.poder.cab) || {})[pasta] || null
+export function nomear(pasta, perfil) {
+  const pa = PASTAS.find((x) => x.id === pasta)
+  const pf = PERFIS.find((x) => x.id === perfil)
+  if (!pa || !pf || !exeCan('nomear:' + pasta)) return null
+  ensurePoder()
+  const prev = nomeadoDe(pasta)
+  game.delta = {}
+  if (prev && prev.stage === game.stage) applyFx({ img: -1, cong: prev.perfil === 'politico' ? -1 : 0 }, true)
+  exeMark('nomear:' + pasta)
+  const nome = candName(R)
+  game.poder.cab = { ...(game.poder.cab || {}), [pasta]: { nome, perfil, pasta, stage: game.stage, pass: pf.pass(pa.stat), risk: pf.risk } }
+  applyFx({ cong: perfil === 'politico' ? 2 : perfil === 'amigo' ? 1 : 0, img: perfil === 'tecnico' ? 1 : 0 }, true)
+  timelineAdd(pa.icon, `${game.name} nomeia ${nome} para ${pa.name}`, 'up')
+  toast(pa.icon, `${nome} assume ${pa.name}.`)
+  log(`Nomeou ${nome} (${pf.name}).`)
+  save()
+  return { nome, pa, pf }
+}
+function riscoNomeados() {
+  if (!isExec()) return
+  const cab = (game.poder && game.poder.cab) || {}
+  for (const k of Object.keys(cab)) {
+    const a = cab[k]
+    if (!a || a.stage !== game.stage) continue
+    if (R() < a.risk + (game.heat || 0) / 1500) {
+      const pa = PASTAS.find((x) => x.id === k)
+      delete game.poder.cab[k]
+      applyFx({ img: -5, pop: -1, cong: a.perfil === 'tecnico' ? 0 : -1 }, true)
+      game.heat = clamp(game.heat + 4)
+      timelineAdd('🚨', `${a.nome} cai da ${pa ? pa.name : 'pasta'} após denúncia`, 'down')
+      toast('🚨', `${a.nome} caiu após uma denúncia. A pasta ficou vaga.`)
+      pushPosts(2, 'down', 'Ministro')
+    }
+  }
+}
+export function liberarEmendas(secreto = false) {
+  if (!exeCan(secreto ? 'secreto' : 'emendas') || game.stats.cash < (secreto ? 1 : 3)) return null
+  exeMark(secreto ? 'secreto' : 'emendas')
+  game.delta = {}
+  let fx
+  let caught = false
+  if (secreto) {
+    caught = R() < 0.35
+    fx = caught ? { cong: 4, cash: -1, img: -8, pop: -2 } : { cong: 7, cash: -1 }
+    game.heat = clamp(game.heat + (caught ? 10 : 5))
+  } else {
+    fx = { cong: 4, pop: 1, cash: -3 }
+  }
+  applyFx(fx, true)
+  betray(secreto ? 1 : 2, secreto ? 'Verba por fora do radar' : 'Emendas liberadas')
+  const text = secreto ? (caught ? `Reportagem expõe orçamento paralelo de ${game.name}` : `${game.name} negocia verbas fora do radar com o Congresso`) : `${game.name} libera emendas parlamentares para aprovar a pauta`
+  timelineAdd(secreto ? '🕳️' : '💸', text, caught ? 'down' : secreto ? 'flat' : 'up')
+  toast(caught ? '🚨' : '💸', caught ? 'O orçamento paralelo vazou!' : 'Emendas liberadas. A base agradece.')
+  if (caught) pushPosts(3, 'down', 'Emendas')
+  log(secreto ? 'Orçamento paralelo.' : 'Liberou emendas.')
+  save()
+  return { fx, caught, secreto }
+}
+export const DECRETOS = [
+  { id: 'd-tarifa', icon: '⚡', title: 'Decreto de redução de tarifas', win: { pop: 3, cash: -3, eco: 1 }, lose: {} },
+  { id: 'd-policia', icon: '🚓', title: 'Decreto de reforço policial', win: { seg: 3, cash: -2, pop: 1 }, lose: {} },
+  { id: 'd-social', icon: '🍲', title: 'Decreto de programa emergencial', win: { soc: 3, pop: 2, cash: -3 }, lose: {} },
+  { id: 'd-corte', icon: '✂️', title: 'Decreto de corte de gastos', win: { cash: 4, pop: -2, eco: 1 }, lose: {} },
+]
+export const sustarChance = () => Math.max(0.08, Math.min(0.7, 0.35 - (game.stats.cong - 50) / 160 + (game.poder.sus || 0) * 0.05))
+export function decretar(id) {
+  const d = DECRETOS.find((x) => x.id === id)
+  if (!d || !exeCan('decreto') || game.stats.cash + (d.win.cash || 0) < 0) return null
+  ensurePoder()
+  exeMark('decreto')
+  game.delta = {}
+  curSphere = STAGE_SPHERE[game.stage] === 'mun' ? 'mun' : 'fed'
+  const fx = { ...d.win, cong: -2 }
+  applyFx(fx, true)
+  curSphere = null
+  enactStatute(d, 'decreto', 1)
+  const st = game.poder.statutes[0]
+  if (st && st.billId === d.id) {
+    st.fragile = true
+    st.judged = false
+  }
+  pressLaw('decreto', d)
+  game.poder.sus = Math.min(6, (game.poder.sus || 0) + 1)
+  log(`Decreto: ${d.title}.`)
+  save()
+  return { fx, d }
+}
+function julgarDecretos() {
+  if (!game.poder || !game.poder.statutes) return
+  for (const st of game.poder.statutes) {
+    if (!st.fragile || st.judged) continue
+    st.judged = true
+    if (R() < sustarChance()) {
+      st.left = 0
+      applyFx({ img: -2, cong: -1 }, true)
+      const d = DECRETOS.find((x) => x.id === st.billId)
+      pressLaw('sustado', d || { title: st.title })
+    }
+  }
+  game.poder.sus = Math.max(0, (game.poder.sus || 0) - 1)
 }
