@@ -15,13 +15,24 @@ const showSandbox = import.meta.env.DEV || new URLSearchParams(location.search).
 import EndScreen from './components/screens/EndScreen.vue'
 import { downloadSave } from './game/savefile'
 
+// cada aviso some sozinho depois de ~10 s (agenda um timer por aviso, mesmo quando v?rios chegam juntos)
+const toastAgendado = new Set()
 watch(
-  () => game.toasts.length,
-  (n, o) => {
-    if (n > o) {
-      setTimeout(() => game.toasts.shift(), 3800)
-      sfx('good')
+  () => game.toasts.map((t) => t.id).join(','),
+  () => {
+    let novo = false
+    for (const t of game.toasts) {
+      if (toastAgendado.has(t.id)) continue
+      toastAgendado.add(t.id)
+      novo = true
+      setTimeout(() => {
+        const k = game.toasts.findIndex((x) => x.id === t.id)
+        if (k >= 0) game.toasts.splice(k, 1)
+        toastAgendado.delete(t.id)
+      }, 10000)
     }
+    while (game.toasts.length > 5) game.toasts.shift()
+    if (novo) sfx('good')
   },
 )
 
