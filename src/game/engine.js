@@ -2031,6 +2031,11 @@ export function proposeLaw(temaId, ousId) {
     w.laws.unshift({ id: Math.random().toString(36).slice(2), name, tema: t.id, stat: t.stat, ous: o.id, stage: game.stage, office: officeId() })
     if (w.laws.length > 16) w.laws.pop()
     applyFx({ [t.stat]: o.one, pop: o.id * 0.5, cash: -o.cost }, true)
+    if (t.id === 'educacao') eduAdd(o.id * 1.5)
+    if (t.id === 'ciencia') {
+      eduAdd(o.id)
+      cienAdd(1)
+    }
     w.last = { text: `Aprovada: ${name}`, ok: true }
     log(`Lei aprovada: ${name}.`)
     toast('⚖️', 'Lei aprovada!')
@@ -2444,6 +2449,7 @@ export function timelineAdd(icon, text, tn = 'flat') {
 }
 function enactStatute(bill, how, k = 1) {
   ensurePoder()
+  if (bill.edu) eduAdd(bill.edu * k)
   const fx = statuteFx(bill, k)
   if (!Object.keys(fx).length) return
   game.poder.statutes.unshift({ id: bill.id + ':' + game.total, billId: bill.id, title: bill.title, icon: bill.icon, how, fx, left: 6, stage: game.stage })
@@ -2456,6 +2462,9 @@ function statutePassive() {
   const c = comissaoAtiva()
   if (c) fx[c.stat] = Math.min(1.2, (fx[c.stat] || 0) + 0.4)
   for (const a of nomeados()) for (const k in a.pass) fx[k] = Math.min(1.2, (fx[k] || 0) + a.pass[k])
+  const e = eduNow()
+  const ef = { eco: clamp((e - 50) / 150, -0.3, 0.5) + Math.min(0.5, cienNow() * 0.1), seg: clamp((e - 50) / 250, -0.2, 0.3), pop: clamp((e - 50) / 300, -0.15, 0.2) }
+  for (const k in ef) fx[k] = Math.max(-1.2, Math.min(1.2, (fx[k] || 0) + ef[k]))
   return fx
 }
 function tickStatutes() {
@@ -2532,6 +2541,7 @@ function roundPoder() {
   const p = game.poder
   p.leg = { used: [] }
   p.exe = { used: [] }
+  p.eduDone = false
   julgarDecretos()
   riscoNomeados()
   roundJudiciario()
@@ -3064,6 +3074,8 @@ function roundMundo() {
     timelineAdd('✊', `${p.prot.name} contra ${game.name}`, 'down')
     pushTrend('#' + (greve ? 'Greve' : 'Protesto'), 75)
   }
+  eduAdd(-0.5)
+  greveUniversitaria()
   checkGoals()
 }
 export function responderProtesto(how) {
@@ -3113,4 +3125,93 @@ export function articular() {
   timelineAdd('🤝', `${game.name} articula com a base para evitar o pior`, 'flat')
   save()
   return true
+}
+
+/* ---------- Educação e universidade ---------- */
+export const eduNow = () => (game.poder && game.poder.edu != null ? game.poder.edu : 40)
+export const cienNow = () => (game.poder && game.poder.cien) || 0
+function eduAdd(v) {
+  ensurePoder()
+  game.poder.edu = clamp((game.poder.edu != null ? game.poder.edu : 40) + v)
+}
+function cienAdd(v) {
+  ensurePoder()
+  game.poder.cien = Math.min(8, (game.poder.cien || 0) + v)
+}
+const UNIV_OFFICES = ['governador', 'dep_estadual', 'presidente', 'dep_federal', 'senador']
+export const temUniv = () => UNIV_OFFICES.includes(officeId())
+export const EDU_ACTIONS = [
+  { id: 'creche', icon: '🧸', name: 'Creches e pré-escola', offices: ['vereador', 'prefeito'], edu: 3, fx: { cash: -2, pop: 1 }, desc: 'A base de tudo: família trabalha e a criança chega melhor à escola.' },
+  { id: 'merenda', icon: '🍲', name: 'Merenda e transporte escolar', offices: ['vereador', 'prefeito', 'governador', 'dep_estadual'], edu: 2, fx: { cash: -1, soc: 1 }, desc: 'Aluno alimentado e com condução falta menos.' },
+  { id: 'reforco', icon: '📖', name: 'Reforço e formação de professores', offices: ['vereador', 'prefeito', 'governador', 'dep_estadual', 'presidente', 'dep_federal', 'senador'], edu: 2, fx: { cash: -1 }, desc: 'Cursos, material e piso para quem ensina.' },
+  { id: 'tecnico', icon: '🛠️', name: 'Ensino médio técnico', offices: ['governador', 'dep_estadual', 'presidente', 'dep_federal', 'senador'], edu: 3, fx: { cash: -2, eco: 0.5 }, desc: 'Jovem formado já sai com emprego na indústria local.' },
+  { id: 'univ', icon: '🏫', name: 'Expandir a universidade pública', offices: UNIV_OFFICES, edu: 4, fx: { cash: -3, img: 1 }, desc: 'Novos campi e vagas. Caro, mas rende por muitas rodadas.' },
+  { id: 'fies', icon: '💳', name: 'Financiamento estudantil e bolsas', offices: ['presidente', 'dep_federal', 'senador'], edu: 3, fx: { cash: -3, pop: 2 }, desc: 'Abre o ensino superior para quem não tem como pagar.' },
+  { id: 'pesquisa', icon: '🔬', name: 'Bolsas de pesquisa e laboratórios', offices: UNIV_OFFICES, edu: 2, fx: { cash: -3, img: 1 }, cien: 1, desc: 'Ciência que, com o tempo, vira indústria e tecnologia.' },
+  { id: 'cotas', icon: '🎟️', name: 'Cotas e permanência estudantil', offices: UNIV_OFFICES, edu: 2, fx: { pop: 1.5, cong: -1 }, desc: 'Amplia o acesso e divide opiniões no Congresso.' },
+  { id: 'cmil', icon: '🎖️', name: 'Escolas cívico-militares', offices: ['prefeito', 'governador', 'presidente', 'vereador', 'dep_estadual', 'dep_federal', 'senador'], edu: 1, fx: { seg: 2, cong: 1, img: -1 }, polemic: true, desc: 'Disciplina e ordem para uns, militarização do ensino para outros. Parte dos professores protesta.' },
+]
+export const eduActionsNow = () => EDU_ACTIONS.filter((a) => a.offices.includes(officeId()))
+export const eduCan = () => game.phase === 'actions' && !(game.poder && game.poder.eduDone)
+export function eduAgir(id) {
+  const a = eduActionsNow().find((x) => x.id === id)
+  if (!a || !eduCan()) return null
+  const m = isExec() ? 1 : 0.6
+  const fx = { ...a.fx }
+  if (fx.cash) fx.cash = Math.round(fx.cash * (isExec() ? 1 : 0.5) * 10) / 10
+  if (game.stats.cash + (fx.cash || 0) < 0) return null
+  ensurePoder()
+  game.poder.eduDone = true
+  game.delta = {}
+  curSphere = STAGE_SPHERE[game.stage] === 'mun' ? 'mun' : 'fed'
+  applyFx(fx, true)
+  curSphere = null
+  eduAdd(a.edu * m)
+  if (a.cien) cienAdd(a.cien)
+  let greve = false
+  if (a.id === 'cmil' && R() < 0.3 && !game.poder.prot) {
+    game.poder.prot = { kind: 'greve', name: 'Greve de professores', round: game.total }
+    greve = true
+  }
+  cnt('edu')
+  timelineAdd(a.icon, `${game.name} investe em educação: ${a.name.toLowerCase()}`, a.polemic ? 'flat' : 'up')
+  toast(a.icon, a.polemic ? 'A medida dividiu opiniões.' : 'Educação reforçada. O efeito vem com o tempo.')
+  if (greve) toast('✊', 'Professores entraram em greve contra a medida.')
+  log(`Educação: ${a.name}.`)
+  save()
+  return { a, fx, greve, edu: true }
+}
+export const REITORES = [
+  { id: 'lista', icon: '🗳️', name: 'Respeitar a lista tríplice', desc: 'A comunidade acadêmica escolhe. Autonomia e imagem sobem; a base política estranha.', fx: { img: 1, cong: -1 }, greve: 0.02, edu: 1 },
+  { id: 'aliado', icon: '🤝', name: 'Nomear um aliado', desc: 'Um reitor de confiança. Base satisfeita, mas a universidade desconfia.', fx: { cong: 2, img: -1 }, greve: 0.12, edu: 0 },
+  { id: 'interventor', icon: '🛑', name: 'Nomear um interventor', desc: 'Controle total, ao custo de imagem e de muita chance de greve.', fx: { cong: 3, img: -3 }, greve: 0.3, edu: -1 },
+]
+export const reitorAtual = () => {
+  const r = game.poder && game.poder.reitor
+  return r && r.stage === game.stage ? REITORES.find((x) => x.id === r.id) : null
+}
+export function nomearReitor(id) {
+  const r = REITORES.find((x) => x.id === id)
+  if (!r || !isExec() || !temUniv() || reitorAtual() || !exeCan('reitor')) return null
+  ensurePoder()
+  exeMark('reitor')
+  game.delta = {}
+  game.poder.reitor = { id, stage: game.stage }
+  applyFx(r.fx, true)
+  if (r.edu) eduAdd(r.edu)
+  timelineAdd(r.icon, `${game.name} escolhe o reitor: ${r.name.toLowerCase()}`, id === 'lista' ? 'up' : 'flat')
+  save()
+  return { r, edu: true }
+}
+function greveUniversitaria() {
+  const p = game.poder
+  if (!temUniv() || p.prot) return
+  const r = reitorAtual()
+  const risk = (r ? r.greve : 0.05) + (eduNow() < 35 ? 0.08 : 0)
+  if (R() < risk) {
+    p.prot = { kind: 'greve', name: 'Greve nas universidades', round: game.total }
+    toast('✊', 'Greve nas universidades: a comunidade acadêmica cobra o governo.')
+    timelineAdd('✊', `Greve nas universidades contra ${game.name}`, 'down')
+    pushTrend('#GreveUniversitaria', 70)
+  }
 }

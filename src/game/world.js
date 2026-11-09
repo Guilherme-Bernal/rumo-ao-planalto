@@ -128,6 +128,11 @@ export const TEMAS = [
   { id: 'tributos', name: 'Tributos e contas', ico: '💰', stat: 'cash', nomes: ['Revisão de isenções e cobrança de dívida', 'Simplificação tributária', 'Reforma fiscal e teto de gastos'] },
   { id: 'etica', name: 'Transparência', ico: '⚖️', stat: 'img', nomes: ['Portal da transparência em tempo real', 'Ficha limpa e controle de contratos', 'Pacote anticorrupção'] },
   { id: 'social', name: 'Programa social', ico: '🤝', stat: 'pop', nomes: ['Cesta e auxílio emergencial local', 'Renda mínima para famílias em risco', 'Grande programa de renda e moradia'] },
+  { id: 'ciencia', name: 'Ciência e inovação', ico: '🔬', stat: 'eco', nomes: ['Bolsas e laboratórios universitários', 'Marco legal da inovação e das startups', 'Fundo nacional de ciência e tecnologia'] },
+  { id: 'trabalho', name: 'Trabalho e juventude', ico: '👷', stat: 'eco', nomes: ['Jovem aprendiz e estágio ampliados', 'Qualificação profissional com a indústria', 'Nova política de emprego e renda'] },
+  { id: 'cultura', name: 'Cultura e comunicação', ico: '🎭', stat: 'img', nomes: ['Calendário cultural e bibliotecas', 'Internet gratuita nas escolas e praças', 'Marco do acesso aberto e dos dados pessoais'] },
+  { id: 'habitacao', name: 'Moradia e transporte', ico: '🚌', stat: 'pop', nomes: ['Passe livre estudantil', 'Moradia popular perto do trabalho', 'Plano integrado de moradia e mobilidade'] },
+  { id: 'saudemental', name: 'Saúde mental e direitos', ico: '🧠', stat: 'soc', nomes: ['Psicólogos nas escolas e postos', 'Rede de atenção psicossocial', 'Política nacional de saúde mental e inclusão'] },
   { id: 'ambiente', name: 'Meio ambiente', ico: '🌳', stat: 'img', nomes: ['Coleta seletiva e áreas verdes', 'Licenciamento verde e incentivo à energia limpa', 'Plano de metas de clima e Amazônia'] },
 ]
 

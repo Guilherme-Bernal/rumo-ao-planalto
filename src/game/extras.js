@@ -60,6 +60,8 @@ export const ACHIEVEMENTS = [
   { id: 'cpi_ok', icon: '🕵️', name: 'Comissão que deu certo', desc: 'Faça uma CPI encontrar irregularidades.', test: (g) => g.poder && g.poder.cnt && Object.keys(g.poder.cnt).some((k) => k.endsWith(':cpiok')) },
   { id: 'consulta', icon: '🗳️', name: 'A voz do povo', desc: 'Vença uma consulta popular.', test: (g) => g.poder && g.poder.cnt && Object.keys(g.poder.cnt).some((k) => k.endsWith(':consulta')) },
   { id: 'arquivado', icon: '🧯', name: 'Arquivado', desc: 'Veja um inquérito contra você ser arquivado.', test: (g) => g.poder && g.poder.cnt && Object.keys(g.poder.cnt).some((k) => k.endsWith(':arq')) },
+  { id: 'educador', icon: '🎓', name: 'Pátria educadora', desc: 'Leve o índice de educação a 75.', test: (g) => g.poder && g.poder.edu >= 75 },
+  { id: 'cientista', icon: '🧪', name: 'País da ciência', desc: 'Chegue a 4 de investimento em pesquisa.', test: (g) => g.poder && g.poder.cien >= 4 },
   { id: 'impeach', icon: '📉', name: 'Tchau, querida', desc: 'Sofra um impeachment.', test: (g) => g.over && g.over.title === 'Impeachment' },
   { id: 'maquiavel', icon: '🦊', name: 'Maquiavel de plantão', desc: 'Faça 5 escolhas que arranham sua imagem.', test: (g) => g.dirty >= 5 },
   { id: 'convidado', icon: '✉️', name: 'Muito requisitado(a)', desc: 'Receba 3 convites de partidos na mesma carreira.', test: (g) => g.invitesTotal >= 3 },

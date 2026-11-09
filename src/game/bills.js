@@ -2,6 +2,7 @@
 // fx usa as mesmas chaves de STATS (pop, cong, eco, cash, soc, seg, img).
 const T = {
   mun: [
+    { id: 'm-creche', icon: '🧸', title: 'Creches em tempo integral', ementa: 'Amplia vagas de creche e o horário de atendimento.', pro: 'Famílias que trabalham e professores da rede', con: 'Secretaria da Fazenda (custo alto)', win: { soc: 2, pop: 2, cash: -2 }, lose: {}, edu: 3 },
     { id: 'm-ciclovia', icon: '🚲', title: 'Ciclovia nos bairros', ementa: 'Cria 30 km de ciclovias ligando os bairros ao centro.', pro: 'Moradores, ciclistas e comércio local', con: 'Motoristas e donos de bar com estacionamento', win: { pop: 1, soc: 2, cash: -1 }, lose: {} },
     { id: 'm-ubs', icon: '🩺', title: 'Horário estendido nos postos de saúde', ementa: 'Postos de saúde passam a atender até as 22h.', pro: 'Quem trabalha o dia todo e as famílias', con: 'Sindicato dos servidores (hora extra)', win: { soc: 3, pop: 1, cash: -2 }, lose: {} },
     { id: 'm-iptu', icon: '🏠', title: 'Desconto no IPTU para bom pagador', ementa: 'Quem paga em dia ganha até 10% de desconto.', pro: 'Classe média e proprietários', con: 'Secretaria da Fazenda (menos arrecadação)', win: { pop: 2, cash: -3, img: 1 }, lose: {} },
@@ -9,12 +10,14 @@ const T = {
     { id: 'm-feira', icon: '🛍️', title: 'Feira livre aos domingos', ementa: 'Regulariza a feira livre e dá vaga fixa aos feirantes.', pro: 'Feirantes e a vizinhança', con: 'Supermercados da região', win: { eco: 2, pop: 1 }, lose: {} },
   ],
   est: [
+    { id: 'e-univ', icon: '🏫', title: 'Interiorização da universidade estadual', ementa: 'Abre campi no interior com cursos técnicos e de graduação.', pro: 'Jovens do interior, reitores e prefeitos', con: 'Fazenda estadual (custo alto)', win: { soc: 2, eco: 1, cash: -3, img: 1 }, lose: {}, edu: 4 },
     { id: 'e-escola', icon: '🎓', title: 'Escolas de tempo integral', ementa: 'Amplia a jornada escolar e a merenda nas escolas estaduais.', pro: 'Professores e pais', con: 'Fazenda estadual (custo alto)', win: { soc: 3, pop: 1, cash: -3 }, lose: {} },
     { id: 'e-pedagio', icon: '🛣️', title: 'Concessão de rodovias', ementa: 'Passa rodovias estaduais para a iniciativa privada, com pedágio.', pro: 'Empresas e o caixa do estado', con: 'Caminhoneiros e quem usa a estrada todo dia', win: { eco: 2, cash: 3, pop: -2 }, lose: {} },
     { id: 'e-policia', icon: '👮', title: 'Reforço da Polícia Militar', ementa: 'Contrata 2 mil policiais e renova as viaturas.', pro: 'Moradores de áreas violentas e a bancada da segurança', con: 'Quem pede mais saúde e educação', win: { seg: 3, cash: -3, pop: 1 }, lose: {} },
     { id: 'e-bonus', icon: '💼', title: 'Incentivo fiscal para indústrias', ementa: 'Reduz ICMS para fábricas que contratarem no estado.', pro: 'Indústria e prefeituras do interior', con: 'Oposição (diz que é renúncia fiscal)', win: { eco: 3, cash: -2, img: -1 }, lose: {} },
   ],
   fed: [
+    { id: 'f-ensino', icon: '🎓', title: 'Plano nacional de ensino técnico e superior', ementa: 'Expande institutos federais, bolsas e financiamento estudantil.', pro: 'Estudantes, reitores e a indústria', con: 'Equipe econômica (gasto novo)', win: { eco: 2, soc: 2, cash: -3 }, lose: {}, edu: 4 },
     { id: 'f-reforma', icon: '📑', title: 'Reforma tributária', ementa: 'Simplifica impostos e reduz a burocracia para empresas.', pro: 'Empresários e o mercado', con: 'Estados e prefeituras que temem perder receita', win: { eco: 3, cash: 2, cong: 1 }, lose: {} },
     { id: 'f-saude', icon: '🏥', title: 'Fila zero no SUS', ementa: 'Aumenta o repasse para cirurgias e exames na fila de espera.', pro: 'Médicos, pacientes e prefeitos', con: 'Equipe econômica (gasto novo)', win: { soc: 4, pop: 2, cash: -3 }, lose: {} },
     { id: 'f-fake', icon: '📵', title: 'Lei contra fake news', ementa: 'Obriga plataformas a retirar desinformação comprovada.', pro: 'Imprensa e a academia', con: 'Influenciadores e parte da oposição (alegam censura)', win: { img: 2, pop: -1, cong: -1 }, lose: {} },

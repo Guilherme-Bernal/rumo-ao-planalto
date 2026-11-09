@@ -371,3 +371,56 @@ describe('mundo: pesquisas, protestos, consulta, metas', () => {
     expect(E.goalsNow().some((g) => g.id === 'nome')).toBe(false)
   })
 })
+
+describe('educação e universidade', () => {
+  const novo = (office = 'governador') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 50
+    E.game.poder.exe = { used: [] }
+    E.game.poder.eduDone = false
+  }
+  it('educação sobe o índice, uma ação por rodada, e respeita o cargo', () => {
+    novo()
+    const antes = E.eduNow()
+    expect(E.eduAgir('univ')).toBeTruthy()
+    expect(E.eduNow()).toBeGreaterThan(antes)
+    expect(E.eduAgir('merenda')).toBe(null)
+    novo('prefeito')
+    expect(E.eduAgir('univ')).toBe(null)
+    expect(E.eduAgir('creche')).toBeTruthy()
+  })
+  it('legislador também age, com efeito menor', () => {
+    novo('dep_federal')
+    const a = E.eduNow()
+    expect(E.eduAgir('fies')).toBeTruthy()
+    const ganho = E.eduNow() - a
+    novo('presidente')
+    const b = E.eduNow()
+    E.eduAgir('fies')
+    expect(E.eduNow() - b).toBeGreaterThan(ganho)
+  })
+  it('reitor só uma vez por mandato e só quem tem universidade', () => {
+    novo()
+    expect(E.nomearReitor('lista')).toBeTruthy()
+    expect(E.reitorAtual().id).toBe('lista')
+    expect(E.nomearReitor('aliado')).toBe(null)
+    novo('prefeito')
+    expect(E.nomearReitor('lista')).toBe(null)
+  })
+  it('pesquisa acumula e o índice nunca sai de 0 a 100', () => {
+    novo('presidente')
+    for (let i = 0; i < 12; i++) {
+      E.game.poder.eduDone = false
+      E.game.stats.cash = 50
+      E.eduAgir('pesquisa')
+    }
+    expect(E.cienNow()).toBeLessThanOrEqual(8)
+    expect(E.eduNow()).toBeLessThanOrEqual(100)
+  })
+  it('há mais temas de lei e um projeto de educação em cada nível', () => {
+    expect(E.worldTemas().length).toBeGreaterThanOrEqual(13)
+    for (const o of ['vereador', 'governador', 'presidente']) expect(billsOf(o).some((b) => b.edu)).toBe(true)
+  })
+})
