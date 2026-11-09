@@ -24,7 +24,9 @@ const copy = async () => {
 </template>
 
 <style scoped>
-.apoie-fab { position: fixed; right: 12px; bottom: 12px; z-index: 50; padding: 8px 12px; border-radius: 22px; }
-.apoie { position: fixed; right: 12px; bottom: 60px; z-index: 50; width: min(340px, calc(100vw - 24px)); padding: 12px; }
+.apoie-fab { position: fixed; left: 64px; bottom: 12px; z-index: 50; height: 44px; padding: 0 14px; border-radius: 22px; }
+@media (max-width: 900px) { .apoie-fab { left: auto; right: 10px; } }
+.apoie { position: fixed; left: 64px; bottom: 64px; z-index: 50; width: min(340px, calc(100vw - 24px)); padding: 12px; }
 .apoie-row { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+@media (max-width: 900px) { .apoie { left: auto; right: 10px; } }
 </style>

@@ -23,6 +23,14 @@ brasil.promises = PROMISES
 brasil.maxPromises = MAX_PROMISES
 brasil.planNames = [PLAN_NAMES_A, PLAN_NAMES_B]
 brasil.events = [...brasil.events, ...extraEvents, ...moreEvents, ...dirtyEvents, ...regionalEvents, ...healthEvents, ...teamEvents, ...worldEvents, ...vidaEvents]
+// ids repetidos entre arquivos faziam o jogo mostrar o texto do evento errado: o repetido ganha sufixo
+{
+  const vistos = {}
+  brasil.events = brasil.events.map((e) => {
+    const n = (vistos[e.id] = (vistos[e.id] || 0) + 1)
+    return n === 1 ? e : { ...e, id: `${e.id}__${n}` }
+  })
+}
 // Reais por ponto de caixa em cada cargo (vereador, deputado, governador, presidente)
 brasil.money = [30e3, 400e3, 120e6, 8e9]
 

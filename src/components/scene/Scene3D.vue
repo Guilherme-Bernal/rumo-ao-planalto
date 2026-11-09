@@ -15,6 +15,7 @@ const root = ref(null)
 const COUNT = 220
 let renderer, scene, camera, sun, people, raf, ro, group, hemi, clouds, smoke, cloudMat
 const flags = []
+let frame = 0
 // qualidade: ?q=low | ?q=high | automático (aparelho fraco = modo leve)
 const qParam = new URLSearchParams(location.search).get('q')
 const isMobile = typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches
@@ -413,12 +414,26 @@ function resize() {
   renderer.setSize(w, h)
   camera.aspect = w / h
   // no desktop, desloca o enquadramento para o centro da área livre entre os painéis
+  lastShift = null
+  applyOffset(w, h)
+  camera.updateProjectionMatrix()
+}
+
+// mede os painéis de verdade (largura muda com a tela) e centraliza a cena no espaço livre
+let lastShift = null
+function applyOffset(w = root.value.clientWidth, h = root.value.clientHeight) {
+  let shift = 0
   if (w > 900) {
-    const rw = Math.min(560, Math.max(420, w * 0.39))
-    camera.setViewOffset(w, h, Math.round((rw - 280) / 2), 0, w, h)
-  } else {
-    camera.clearViewOffset()
+    const l = document.querySelector('.hud .stats')
+    const r = document.querySelector('.hud .main')
+    const lw = l ? l.getBoundingClientRect().width : 0
+    const rw = r ? r.getBoundingClientRect().width : 0
+    shift = l && r ? Math.round((rw - lw) / 2) : 0
   }
+  if (shift === lastShift) return
+  lastShift = shift
+  if (shift) camera.setViewOffset(w, h, shift, 0, w, h)
+  else camera.clearViewOffset()
   camera.updateProjectionMatrix()
 }
 
@@ -442,6 +457,7 @@ onMounted(() => {
     camera.position.set(Math.sin(a) * cam.r, cam.h + (reduced() ? 0 : Math.sin(t * 0.2) * 1.5), Math.cos(a) * cam.r + 16)
     camera.lookAt(...cam.look)
 
+    if (++frame % 30 === 0) applyOffset()
     sky.lerp(targetSky, 0.03)
     scene.background.copy(sky)
     scene.fog.color.copy(sky)

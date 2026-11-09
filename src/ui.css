@@ -104,4 +104,6 @@ html.hc .muted, html.hc small { color: #d5dcea; }
 html.rm *, html.rm *::before, html.rm *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
 
 /* sandbox (só em testes) sai de cima do botão de configurações */
-.sbx-fab { left: 64px !important; }
+.sbx-fab { left: 170px !important; }
+/* tela final: 3 botões quebram linha no celular */
+.row-end { flex-wrap: wrap; }

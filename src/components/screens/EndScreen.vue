@@ -4,13 +4,38 @@ import { game, STATS, resetGame, country } from '../../game/engine'
 import { ACHIEVEMENTS, loadHall } from '../../game/extras'
 import Avatar from '../character/Avatar.vue'
 import { epilogue } from '../../game/epilogue'
+import { shareCard } from '../../game/sharecard'
 
 const epi = epilogue(game)
 
 const copied = ref(false)
+const imgMsg = ref('')
 const hall = loadHall().slice(0, 5)
 const earned = ACHIEVEMENTS.filter((a) => game.runUnlocked.includes(a.id))
 const title = game.phase === 'end' ? game.legacy.title : game.over.title
+
+async function shareImage() {
+  const path = game.history.map((h) => h.office).join(' → ') || 'Nenhuma eleição vencida'
+  const keys = ['pop', 'eco', 'cash', 'img']
+  const stats = STATS.filter((s) => keys.includes(s.k)).map((s) => ({ icon: s.icon, label: s.short, v: Math.round(game.stats[s.k]) }))
+  const r = await shareCard({
+    name: game.name,
+    region: `${game.city?.name || game.region.name} (${game.region.id})`,
+    title,
+    ok: game.phase === 'end',
+    points: game.points,
+    path,
+    stats,
+    epi: epi[0],
+    trophies: earned.slice(0, 8).map((a) => a.icon).join(' '),
+    daily: game.daily,
+    url: location.host + location.pathname.replace(/\/$/, ''),
+  })
+  if (r === 'download') {
+    imgMsg.value = 'Imagem salva!'
+    setTimeout(() => (imgMsg.value = ''), 2500)
+  }
+}
 
 async function share() {
   const c = country()
@@ -76,7 +101,8 @@ async function share() {
       </div>
 
       <div class="row-end" style="margin-top: 18px">
-        <button @click="share">{{ copied ? 'Copiado!' : 'Copiar resultado' }}</button>
+        <button @click="shareImage">{{ imgMsg || '🖼️ Imagem para compartilhar' }}</button>
+        <button @click="share">{{ copied ? 'Copiado!' : 'Copiar texto' }}</button>
         <button class="primary" @click="resetGame">Jogar de novo</button>
       </div>
     </div>
