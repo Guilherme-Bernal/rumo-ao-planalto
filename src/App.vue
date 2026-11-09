@@ -1,5 +1,5 @@
 <script setup>
-import { watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { game, country, stageInfo, resetGame, traitNames, partyObj, officeId } from './game/engine'
 import { OFFICES } from './game/offices'
 const LADDER = Object.values(OFFICES).sort((a, b) => a.rank - b.rank || a.tier - b.tier)
@@ -48,6 +48,17 @@ watch(() => game.phase, (p) => {
   else if (p === 'over') sfx('lose')
 })
 
+// cena 3D de situação: muda o cenário conforme o que está acontecendo no jogo
+const cena = computed(() => {
+  if (game.phase === 'start') return ''
+  if (game.phase === 'result' || game.phase === 'runoff') return 'apuracao'
+  if (game.phase === 'campaign') return 'comicio'
+  const p = game.poder
+  if (p && (p.acao || (p.inq && p.inq.stage === game.stage))) return 'tribunal'
+  if (p && p.prot) return 'protesto'
+  return ''
+})
+
 function restart() {
   if (confirm('Abandonar a carreira atual e voltar ao início?')) resetGame()
 }
@@ -60,6 +71,7 @@ function restart() {
     :stage="game.phase === 'start' ? 1 : game.stage"
     :office="game.phase === 'start' ? '' : officeId()"
     :war="game.phase === 'start' || !game.world ? 0 : game.world.wars.length"
+    :cena="cena"
   />
 
   <div class="toasts">

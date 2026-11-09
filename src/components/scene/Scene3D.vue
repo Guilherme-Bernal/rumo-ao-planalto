@@ -9,12 +9,14 @@ const props = defineProps({
   stage: { type: Number, default: 1 },
   office: { type: String, default: '' },
   war: { type: Number, default: 0 },
+  cena: { type: String, default: '' },
 })
 
 const root = ref(null)
 const COUNT = 220
 let renderer, scene, camera, sun, people, raf, ro, group, hemi, clouds, smoke, cloudMat
 const flags = []
+const floaters = []
 let frame = 0
 // qualidade: ?q=low | ?q=high | automático (aparelho fraco = modo leve)
 const qParam = new URLSearchParams(location.search).get('q')
@@ -44,7 +46,14 @@ const THEME_OV = {
   dep_estadual: { sky: 0xcfe3ff },
   senador: { sky: 0xffd9b8, sun: 0xffe2b8 },
 }
-const theme = () => ({ ...(THEMES[props.stage] || THEMES[1]), ...(THEME_OV[props.office] || {}) })
+// cenas de situação: trocam o cenário enquanto algo especial está acontecendo
+const CENA_OV = {
+  comicio: { sky: 0xffb86b, sun: 0xffe0b0, ground: 0x5b7f3a, cam: { r: 46, h: 12, look: [0, 6, 8] } },
+  tribunal: { sky: 0xcfd8e8, sun: 0xffffff, ground: 0x6b7a63, cam: { r: 56, h: 16, look: [0, 8, 0] } },
+  protesto: { sky: 0xb7a99a, sun: 0xffd9b0 },
+  apuracao: { sky: 0x1b2347, sun: 0x8fa2d6, ground: 0x1f2c25, cam: { r: 46, h: 12, look: [0, 7, 6] } },
+}
+const theme = () => ({ ...(THEMES[props.stage] || THEMES[1]), ...(THEME_OV[props.office] || {}), ...(CENA_OV[props.cena] || {}) })
 const skyFor = (eco) => new THREE.Color(0x1a2233).lerp(new THREE.Color(theme().sky), Math.min(1, Math.max(0, eco / 100)))
 const matCache = new Map()
 const mat = (c, extra = {}) => {
@@ -294,6 +303,98 @@ const SET_BY_OFFICE = {
   governador: buildGovernador,
   presidente: buildPresidente,
 }
+// ---------- cenas de situação ----------
+function balloon(x, y, z, c) {
+  const b = add(new THREE.SphereGeometry(0.9, 12, 10), mat(c), x, y, z)
+  b.scale.y = 1.2
+  b.userData = { y0: y, ph: Math.random() * 6.28 }
+  floaters.push(b)
+}
+function buildComicio() {
+  // palanque de campanha ao entardecer, com telão, torres de luz, balões e bandeirolas
+  box(40, 0.4, 30, 0xcdbd9a, 0, 0.2, 14)
+  box(24, 2, 10, 0x7c2d12, 0, 1.2, -2)
+  box(22, 0.3, 8, 0xf5e6c8, 0, 2.35, -2)
+  box(24, 11, 0.6, 0x1d4ed8, 0, 8, -7)
+  box(20, 7, 0.4, 0xfacc15, 0, 8, -6.6)
+  box(14, 1.6, 0.3, 0x1d4ed8, 0, 10, -6.3)
+  box(10, 1.6, 0.3, 0x16a34a, 0, 7, -6.3)
+  const lamp = mat(0xfff7c2, { emissive: 0xffe58a, emissiveIntensity: 1.2 })
+  for (const x of [-16, 16]) {
+    cyl(0.4, 0.5, 14, 0x374151, x, 7, -2, 8)
+    add(new THREE.BoxGeometry(4, 2.4, 1), lamp, x, 14.5, -1.5)
+  }
+  const cores = [0xef4444, 0x3b82f6, 0xfacc15, 0x22c55e, 0xf472b6]
+  for (let i = 0; i < 16; i++) balloon(-18 + i * 2.4, 5 + (i % 3) * 1.5, 4 + (i % 4) * 0.8, cores[i % cores.length])
+  for (let i = 0; i < 18; i++) box(1.2, 0.8, 0.1, cores[i % cores.length], -20 + i * 2.35, 12 + Math.sin(i * 0.7) * 0.5, 22)
+  cyl(0.15, 0.15, 12, 0x9ca3af, -20, 6, 22, 8)
+  cyl(0.15, 0.15, 12, 0x9ca3af, 22, 6, 22, 8)
+  flag(-14, -6, 15)
+  flag(14, -6, 15)
+  trees(40, 30, 90, 30)
+}
+function buildTribunal() {
+  // fachada de tribunal: escadaria, colunas, frontão e a estátua da Justiça
+  const stone = mat(0xe7e2d6)
+  box(60, 0.4, 60, 0xd6cfc0, 0, 0.2, 18)
+  for (let i = 0; i < 5; i++) box(36 - i * 1.5, 0.6, 5, 0xddd6c5, 0, 0.5 + i * 0.6, 14 - i * 2.2)
+  box(34, 1, 18, 0xd6cfc0, 0, 3.7, -4)
+  for (let i = -6; i <= 6; i++) cyl(1.1, 1.1, 14, 0xf4f1ea, i * 2.5, 11.2, 3, 16)
+  box(36, 2, 18, 0xe7e2d6, 0, 19, -3)
+  const tri = new THREE.Shape()
+  tri.moveTo(-18, 0)
+  tri.lineTo(18, 0)
+  tri.lineTo(0, 6)
+  tri.closePath()
+  add(new THREE.ExtrudeGeometry(tri, { depth: 2, bevelEnabled: false }), stone, 0, 20, 4)
+  box(30, 14, 10, 0xcfc8b8, 0, 11, -12)
+  box(6, 8, 0.6, 0x3b2a1a, 0, 7.8, 5.8)
+  // estátua da Justiça na praça
+  cyl(1.6, 1.8, 3, 0xbfb8a8, 0, 1.8, 24, 12)
+  cyl(0.6, 0.8, 4, 0x6b7280, 0, 5.2, 24, 12)
+  add(new THREE.SphereGeometry(0.6, 12, 10), mat(0x6b7280), 0, 7.6, 24)
+  box(5, 0.18, 0.18, 0x9ca3af, 0, 6.9, 24)
+  for (const x of [-2.4, 2.4]) {
+    add(new THREE.CylinderGeometry(0.9, 0.9, 0.1, 14), mat(0xd4af37), x, 6.2, 24)
+  }
+  flag(-24, 6, 17)
+  flag(24, 6, 17)
+  trees(40, 30, 90, 26)
+}
+function buildApuracao() {
+  // noite de apuração: telão gigante com as barras e a multidão olhando
+  box(50, 0.4, 36, 0x2a3140, 0, 0.2, 14)
+  box(36, 20, 1.2, 0x0f172a, 0, 13, -10)
+  const glow = (c) => mat(c, { emissive: c, emissiveIntensity: 1.1 })
+  const bars = [[-9, 11, 0x3b82f6], [-3, 8, 0xef4444], [3, 5, 0xfacc15], [9, 3, 0x22c55e]]
+  for (const [x, h, c] of bars) add(new THREE.BoxGeometry(4, h, 0.4), glow(c), x, 4.5 + h / 2, -9.2)
+  box(30, 0.5, 0.3, 0xf8fafc, 0, 4.2, -9.2)
+  const lamp = glow(0xfff1c2)
+  for (const x of [-22, 22]) {
+    cyl(0.4, 0.5, 16, 0x374151, x, 8, -4, 8)
+    add(new THREE.BoxGeometry(4, 2, 1), lamp, x, 16.5, -3.5)
+  }
+  const cores = [0xef4444, 0x3b82f6, 0xfacc15, 0x22c55e]
+  for (let i = 0; i < 14; i++) balloon(-16 + i * 2.5, 4 + (i % 3) * 1.6, 3 + (i % 4), cores[i % 4])
+  trees(30, 30, 90, 30)
+}
+// protesto: o cenário normal do cargo, com cartazes, tambores em chamas e fumaça
+function protestOverlay() {
+  const sign = [0xffffff, 0xfde68a, 0xfca5a5, 0x93c5fd]
+  for (let i = 0; i < 26; i++) {
+    const x = -22 + (i % 13) * 3.6 + (i > 12 ? 1.5 : 0)
+    const z = 8 + (i > 12 ? 5 : 0)
+    cyl(0.07, 0.07, 3.2, 0x78350f, x, 1.6, z, 6)
+    box(2, 1.3, 0.1, sign[i % sign.length], x, 3.6, z)
+  }
+  for (const x of [-10, 10]) {
+    cyl(0.8, 0.8, 1.3, 0x374151, x, 0.65, 6, 12)
+    const f = add(new THREE.SphereGeometry(0.7, 10, 8), mat(0xf97316, { emissive: 0xea580c, emissiveIntensity: 1.4 }), x, 1.8, 6)
+    f.userData = { y0: 1.8, ph: Math.random() * 6.28 }
+    floaters.push(f)
+  }
+}
+const CENA_SET = { comicio: buildComicio, tribunal: buildTribunal, apuracao: buildApuracao }
 const SETS = [buildVereador, buildDeputado, buildGovernador, buildPresidente]
 const setFor = () => SET_BY_OFFICE[props.office] || SETS[props.stage] || buildDeputado
 
@@ -305,6 +406,7 @@ function clearGroup() {
   matCache.forEach((m) => m.dispose())
   matCache.clear()
   flags.length = 0
+  floaters.length = 0
   scene.remove(group)
 }
 
@@ -314,7 +416,8 @@ function buildSet() {
   scene.add(group)
   const g = add(new THREE.PlaneGeometry(500, 500), mat(theme().ground), 0, 0, 0)
   g.rotation.x = -Math.PI / 2
-  setFor()()
+  ;(CENA_SET[props.cena] || setFor())()
+  if (props.cena === 'protesto') protestOverlay()
   if (sun) sun.color.set(theme().sun)
   applyEco()
   sky.copy(targetSky)
@@ -464,6 +567,7 @@ onMounted(() => {
 
     if (!reduced()) {
       for (const f of flags) f.rotation.y = Math.sin(t * 2 + f.position.x) * 0.18
+      for (const b of floaters) b.position.y = b.userData.y0 + Math.sin(t * 1.4 + b.userData.ph) * 0.5
       for (const c of clouds.children) {
         c.position.x += 0.012
         if (c.position.x > 170) c.position.x = -170
@@ -508,7 +612,7 @@ onBeforeUnmount(() => {
 watch(() => props.pop, () => { if (people) paintPeople(); applyEco() })
 watch(() => props.eco, applyEco)
 watch(() => settings.quality, applyQuality)
-watch(() => [props.stage, props.office], () => scene && buildSet())
+watch(() => [props.stage, props.office, props.cena], () => scene && buildSet())
 </script>
 
 <template>
