@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import { billsOf } from '../../game/bills'
 import SecEducacao from './SecEducacao.vue'
-import { pesquisas, aprovacao, protesto, responderProtesto, consultaFeita, consultaChance, consultar, officeId, emCrise, articular, goalsNow, courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
+import SecDefesa from './SecDefesa.vue'
+import { pastasNow, pesquisas, aprovacao, protesto, responderProtesto, consultaFeita, consultaChance, consultar, officeId, emCrise, articular, goalsNow, courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
 
 const w = computed(() => game.world)
 const co = computed(() => coalition())
@@ -93,6 +94,7 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
     </ul>
 
     <SecEducacao />
+    <SecDefesa />
 
     <h3 class="sub">⚖️ {{ courtName() }}</h3>
     <p v-if="!acaoPendente() && !inquerito()" class="legend">Nada em julgamento. Leis polêmicas e decretos podem ser questionados pela oposição, e escândalos podem virar inquérito.</p>
@@ -115,10 +117,10 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
       <h3 class="sub">🏛️ Governo <small class="muted">· {{ exeLeft() }} ação(ões) nesta rodada</small></h3>
       <p v-if="msg" class="sumbox">{{ msg }}</p>
       <p class="legend">{{ cargoName() }}s: técnico rende na pasta, indicação política compra base e amigo é leal, mas é arriscado.</p>
-      <div v-for="pa in PASTAS" :key="pa.id" class="tema">
+      <div v-for="pa in pastasNow()" :key="pa.id" class="tema">
         <div><b>{{ pa.icon }} {{ pa.name }}</b> <small class="muted">{{ nomeadoDe(pa.id) && nomeadoDe(pa.id).stage === game.stage ? nomeadoDe(pa.id).nome + ' · ' + nomeadoDe(pa.id).perfil : 'vaga' }}</small></div>
         <div class="acts">
-          <button v-for="pf in PERFIS" :key="pf.id" type="button" :disabled="!exeCan('nomear:' + pa.id)" :title="pf.desc" @click="run(nomear, pa.id, pf.id)"><b>{{ pf.icon }} {{ pf.name }}</b><small>{{ pf.desc }}</small></button>
+          <button v-for="pf in PERFIS.filter((x) => !x.only || x.only === pa.id)" :key="pf.id" type="button" :disabled="!exeCan('nomear:' + pa.id)" :title="pf.desc" @click="run(nomear, pa.id, pf.id)"><b>{{ pf.icon }} {{ pf.name }}</b><small>{{ pf.desc }}</small></button>
         </div>
       </div>
       <h3 class="sub">💸 Emendas e decretos</h3>

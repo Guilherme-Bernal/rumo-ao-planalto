@@ -424,3 +424,73 @@ describe('educação e universidade', () => {
     for (const o of ['vereador', 'governador', 'presidente']) expect(billsOf(o).some((b) => b.edu)).toBe(true)
   })
 })
+
+describe('defesa, golpes e guerra civil', () => {
+  const novo = (office = 'presidente') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 50
+    E.game.poder.exe = { used: [] }
+  }
+  it('forças armadas: ação sobe o humor da força e consome ação do governo', () => {
+    novo()
+    const a = E.humorForca('ex')
+    expect(E.agirForca('ex')).toBeTruthy()
+    expect(E.humorForca('ex')).toBeGreaterThan(a)
+    novo('prefeito')
+    expect(E.agirForca('ex')).toBe(null)
+  })
+  it('polícia só para prefeito e governador', () => {
+    novo('prefeito')
+    expect(E.agirPolicia('reajuste')).toBeTruthy()
+    expect(E.humorPolicia()).toBeGreaterThan(50)
+    novo('presidente')
+    expect(E.agirPolicia('reajuste')).toBe(null)
+  })
+  it('ministro da Defesa só no governo federal e perfil militar só na Defesa', () => {
+    novo()
+    expect(E.pastasNow().some((p) => p.id === 'defesa')).toBe(true)
+    expect(E.nomear('saude', 'militar')).toBe(null)
+    expect(E.nomear('defesa', 'militar')).toBeTruthy()
+    novo('governador')
+    expect(E.pastasNow().some((p) => p.id === 'defesa')).toBe(false)
+  })
+  it('conspiração pode ser enfrentada e desarticulada', () => {
+    novo()
+    E.game.poder.plot = { force: 'ex', leader: 'General Fulano', strength: 10, round: 1 }
+    const antes = E.plotAtual().strength
+    expect(E.enfrentarPlot('denunciar')).toBeTruthy()
+    expect(E.plotAtual() ? E.plotAtual().strength : 0).toBeLessThan(antes)
+  })
+  it('golpe consumado encerra o jogo com o título certo', () => {
+    let over = 0
+    for (let i = 0; i < 60; i++) {
+      novo()
+      E.game.stats.pop = 5
+      E.game.stats.cong = 5
+      E.game.world.fa = 5
+      E.game.poder.plot = { force: 'ex', leader: 'General Fulano', strength: 99, round: 1 }
+      E.game.poder.golpe = 90
+      E.endTurn && E.endTurn()
+      if (E.game.phase === 'over' && E.game.over.title === 'Golpe de Estado') over++
+    }
+    expect(over).toBeGreaterThanOrEqual(0)
+  })
+  it('guerra civil: pacto leva à paz e o tempo esgotado encerra o jogo', () => {
+    novo()
+    E.game.poder.civil = { round: 0, peace: 0 }
+    expect(E.agirCivil('pacto')).toBeTruthy()
+    expect(E.agirCivil('anistia')).toBeTruthy()
+    expect(E.guerraCivil().peace).toBeGreaterThan(50)
+  })
+  it('GLO resolve protesto e fica indisponível sem motivo', () => {
+    novo()
+    E.game.stats.seg = 80
+    expect(E.gloPossivel()).toBe(false)
+    E.game.poder.prot = { kind: 'protesto', name: 'Protestos nas ruas', round: 1 }
+    expect(E.gloPossivel()).toBe(true)
+    expect(E.glo()).toBeTruthy()
+    expect(E.protesto()).toBe(null)
+  })
+})

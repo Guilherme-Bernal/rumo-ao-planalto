@@ -749,6 +749,7 @@ function beginTurn() {
   game.heat = Math.max(0, (game.heat || 0) * 0.85 - 2)
   tickWorld()
   roundPoder()
+  if (game.phase === 'over') return
   game.eventId = game.team && game.team.hot ? 'equipe_escandalo' : game.world.pending ? 'guerra_posicao' : game.heat >= 25 && R() < Math.min(0.65, game.heat / 110) ? 'operacao' : drawEvent()
   game.eventMonth = Math.floor(R() * monthsPer())
   driftField()
@@ -2794,8 +2795,11 @@ export const PASTAS = [
   { id: 'economia', icon: '📈', name: 'Fazenda e Economia', stat: 'eco' },
   { id: 'saude', icon: '🩺', name: 'Saúde e Educação', stat: 'soc' },
   { id: 'seguranca', icon: '🛡️', name: 'Segurança Pública', stat: 'seg' },
+  { id: 'defesa', icon: '🎖️', name: 'Defesa', stat: 'seg', only: ['presidente'] },
 ]
+export const pastasNow = () => PASTAS.filter((x) => !x.only || x.only.includes(officeId()))
 export const PERFIS = [
+  { id: 'militar', icon: '🎖️', name: 'Militar de confiança', desc: 'Só na Defesa: as forças ficam tranquilas, mas civis estranham.', pass: (st) => ({ [st]: 0.4 }), risk: 0.03, only: 'defesa' },
   { id: 'tecnico', icon: '🎓', name: 'Técnico(a) de carreira', desc: 'Entrega resultado e dá pouca confusão, mas não traz votos.', pass: (st) => ({ [st]: 0.5 }), risk: 0.02 },
   { id: 'politico', icon: '🗳️', name: 'Indicação política', desc: 'Compra apoio no Congresso. Rende menos na pasta e tem risco médio de escândalo.', pass: (st) => ({ [st]: 0.2, cong: 0.5 }), risk: 0.05 },
   { id: 'amigo', icon: '🍻', name: 'Amigo de confiança', desc: 'Lealdade total e base tranquila, mas é o que mais dá manchete ruim.', pass: (st) => ({ cong: 0.3, [st]: 0.1 }), risk: 0.09 },
@@ -2809,6 +2813,8 @@ export function nomear(pasta, perfil) {
   const pa = PASTAS.find((x) => x.id === pasta)
   const pf = PERFIS.find((x) => x.id === perfil)
   if (!pa || !pf || !exeCan('nomear:' + pasta)) return null
+  if (pf.only && pf.only !== pasta) return null
+  if (pa.only && !pa.only.includes(officeId())) return null
   ensurePoder()
   const prev = nomeadoDe(pasta)
   game.delta = {}
@@ -2820,6 +2826,7 @@ export function nomear(pasta, perfil) {
   timelineAdd(pa.icon, `${game.name} nomeia ${nome} para ${pa.name}`, 'up')
   toast(pa.icon, `${nome} assume ${pa.name}.`)
   cnt('nome')
+  if (pasta === 'defesa') ministroDefesa(perfil)
   log(`Nomeou ${nome} (${pf.name}).`)
   save()
   return { nome, pa, pf }
@@ -3076,6 +3083,7 @@ function roundMundo() {
   }
   eduAdd(-0.5)
   greveUniversitaria()
+  roundDefesa()
   checkGoals()
 }
 export function responderProtesto(how) {
@@ -3214,4 +3222,288 @@ function greveUniversitaria() {
     timelineAdd('✊', `Greve nas universidades contra ${game.name}`, 'down')
     pushTrend('#GreveUniversitaria', 70)
   }
+}
+
+/* ---------- Defesa, polícia, golpes e guerra civil ---------- */
+const FORCAS = [
+  { id: 'ex', icon: '🪖', name: 'Exército', rank: 'General' },
+  { id: 'ma', icon: '⚓', name: 'Marinha', rank: 'Almirante' },
+  { id: 'ae', icon: '✈️', name: 'Aeronáutica', rank: 'Brigadeiro' },
+]
+export const FORCAS_LISTA = FORCAS
+const isPres = () => officeId() === 'presidente'
+const hasPol = () => ['prefeito', 'governador'].includes(officeId())
+export const milDev = () => (game.poder && game.poder.mil) || { ex: 0, ma: 0, ae: 0 }
+export const humorForca = (id) => Math.round(clamp(((game.world && game.world.fa) || 50) + (milDev()[id] || 0)))
+export const humorPolicia = () => Math.round((game.poder && game.poder.pol != null ? game.poder.pol : 50))
+export const golpeTemp = () => Math.round((game.poder && game.poder.golpe) || 0)
+export const plotAtual = () => (game.poder && game.poder.plot) || null
+export const guerraCivil = () => (game.poder && game.poder.civil) || null
+function devAdd(id, v) {
+  ensurePoder()
+  const m = { ex: 0, ma: 0, ae: 0, ...(game.poder.mil || {}) }
+  m[id] = Math.max(-40, Math.min(40, m[id] + v))
+  game.poder.mil = m
+}
+function ministroDefesa(perfil) {
+  const w = game.world
+  if (perfil === 'militar') {
+    w.fa = clamp(w.fa + 8)
+    applyFx({ cong: -1, img: -1 }, true)
+    game.poder.golpe = Math.max(0, (game.poder.golpe || 0) - 6)
+  } else if (perfil === 'tecnico') {
+    w.fa = clamp(w.fa - 3)
+    applyFx({ img: 1 }, true)
+  }
+}
+export const DEF_FORCA = [
+  { id: 'ex', icon: '🪖', name: 'Operação de fronteira e Amazônia', desc: 'Exército nas fronteiras contra garimpo e tráfico.', fx: { cash: -2, seg: 1.5 }, dev: 10 },
+  { id: 'ma', icon: '⚓', name: 'Renovar a frota da Marinha', desc: 'Navios e proteção da Amazônia Azul.', fx: { cash: -3, eco: 0.5 }, dev: 10 },
+  { id: 'ae', icon: '✈️', name: 'Caças e satélites da Aeronáutica', desc: 'Com ciência em dia, o projeto sai mais barato.', fx: { cash: -3, seg: 1 }, dev: 10 },
+]
+export function agirForca(id) {
+  const a = DEF_FORCA.find((x) => x.id === id)
+  if (!a || !isPres() || !exeCan('forca:' + id)) return null
+  const fx = { ...a.fx }
+  if (id === 'ae' && cienNow() >= 2) fx.cash = -2
+  if (game.stats.cash + fx.cash < 0) return null
+  exeMark('forca:' + id)
+  game.delta = {}
+  applyFx(fx, true)
+  devAdd(id, a.dev)
+  timelineAdd(a.icon, `${game.name} reforça a ${FORCAS.find((x) => x.id === id).name}: ${a.name.toLowerCase()}`, 'up')
+  cnt('forca')
+  save()
+  return { a, mil: true }
+}
+export function industriaDefesa() {
+  if (!isPres() || !exeCan('industria')) return null
+  exeMark('industria')
+  game.delta = {}
+  const bonus = cienNow() >= 1 ? 1 : 0
+  applyFx({ cash: 3 + bonus, eco: 1, img: -1 }, true)
+  timelineAdd('🏭', `${game.name} fecha contrato de exportação de material de defesa`, 'flat')
+  save()
+  return { mil: true, ind: true }
+}
+export const poderPolicial = () => (hasPol() ? { nome: officeId() === 'prefeito' ? 'Guarda Municipal' : 'Polícia Militar e Civil' } : null)
+export function agirPolicia(tipo) {
+  if (!hasPol() || !exeCan('pol:' + tipo)) return null
+  const cur = humorPolicia()
+  game.delta = {}
+  if (tipo === 'reajuste') {
+    if (game.stats.cash < 2) return null
+    exeMark('pol:reajuste')
+    applyFx({ cash: -2 }, true)
+    game.poder.pol = clamp(cur + 12)
+  } else if (tipo === 'treino') {
+    if (game.stats.cash < 1) return null
+    exeMark('pol:treino')
+    applyFx({ cash: -1, seg: 0.5, img: 0.5 }, true)
+    game.poder.pol = clamp(cur + 6)
+  } else return null
+  save()
+  return { mil: true, pol: true }
+}
+export const gloPossivel = () => (isPres() || officeId() === 'governador') && (!!protesto() || game.stats.seg < 45)
+export function glo() {
+  if (!gloPossivel() || !exeCan('glo')) return null
+  exeMark('glo')
+  game.delta = {}
+  const excesso = R() < 0.2
+  game.poder.prot = null
+  applyFx(excesso ? { seg: 2, img: -6, pop: -2 } : { seg: 3, img: -2, pop: -1 }, true)
+  if (isPres()) game.world.fa = clamp(game.world.fa + 3)
+  if (excesso) {
+    game.heat = clamp(game.heat + 6)
+    game.poder.golpe = Math.min(100, (game.poder.golpe || 0) + 4)
+  }
+  timelineAdd('🪖', excesso ? `Operação de GLO termina com excessos e vira escândalo` : `${game.name} aciona as forças de segurança (GLO)`, excesso ? 'down' : 'flat')
+  toast('🪖', excesso ? 'A operação teve excessos.' : 'A operação restabeleceu a ordem.')
+  save()
+  return { mil: true, glo: true, excesso }
+}
+export function roundDefesa() {
+  const p = game.poder
+  const m = { ex: 0, ma: 0, ae: 0, ...(p.mil || {}) }
+  for (const k of ['ex', 'ma', 'ae']) m[k] *= 0.85
+  p.mil = m
+  if (hasPol()) {
+    const cur = p.pol != null ? p.pol : 50
+    p.pol = clamp(cur + (50 - cur) * 0.05 - (game.stats.cash < 25 ? 2 : 0))
+    if (p.pol < 30 && !p.prot && R() < 0.2) {
+      p.prot = { kind: 'greve', name: officeId() === 'prefeito' ? 'Greve da Guarda Municipal' : 'Greve da Polícia', round: game.total }
+      applyFx({ seg: -2 }, true)
+      toast('🚨', `${p.prot.name}: a segurança ficou desguarnecida.`)
+      timelineAdd('🚨', `${p.prot.name} contra ${game.name}`, 'down')
+    }
+  }
+  if (!isPres()) return
+  const s = game.stats
+  const fa = game.world.fa
+  const alvo = clamp((50 - fa) * 0.8 + (40 - s.pop) * 0.7 + (40 - s.cong) * 0.5 + (game.heat || 0) * 0.25 + (inquerito() ? 10 : 0))
+  p.golpe = Math.max(0, (p.golpe || 0) + (alvo - (p.golpe || 0)) * 0.3)
+  if (p.civil) return civilRound()
+  if (!p.plot && p.golpe >= 60 && R() < 0.35) {
+    const f = [...FORCAS].sort((a, b) => humorForca(a.id) - humorForca(b.id))[0]
+    p.plot = { force: f.id, leader: `${f.rank} ${candName(R)}`, strength: 25, round: game.total }
+    toast('🪖', `Rumores de conspiração no ${f.name}: ${p.plot.leader} articula contra o governo.`)
+    timelineAdd('🕵️', `Serviços de inteligência alertam para conspiração liderada por ${p.plot.leader}`, 'down')
+    pushTrend('#GolpeNão', 85)
+  } else if (p.plot) {
+    p.plot.strength += 8 + Math.max(0, (p.golpe - 60) / 6)
+    if (p.plot.strength >= 100) resolverGolpe()
+    else if (p.plot.strength <= 0) {
+      p.plot = null
+      cnt('plotok')
+      timelineAdd('🛡️', `A conspiração contra ${game.name} foi desarticulada`, 'up')
+      toast('🛡️', 'A conspiração foi desarticulada.')
+    }
+  }
+}
+function forceOver(title, text) {
+  game.over = { title, text }
+  game.phase = 'over'
+  finalize(false)
+  clearSave()
+}
+function resolverGolpe() {
+  const p = game.poder
+  const f = p.plot.force
+  const outros = FORCAS.filter((x) => x.id !== f)
+  const humor = outros.reduce((a, x) => a + humorForca(x.id), 0) / outros.length
+  const s = game.stats
+  const L = Math.max(0.05, Math.min(0.85, 0.35 + (humor - 50) / 150 + (s.pop - 50) / 200 + (s.cong - 50) / 300 + (s.img - 50) / 300))
+  const r = R()
+  const lider = p.plot.leader
+  p.plot = null
+  game.delta = {}
+  if (r < L) {
+    applyFx({ img: 4, pop: 3, cong: 2 }, true)
+    devAdd(f, -15)
+    p.golpe = 20
+    cnt('golpefail')
+    timelineAdd('🛡️', `Tentativa de golpe de ${lider} é frustrada; as instituições resistem`, 'up')
+    toast('🛡️', 'A tentativa de golpe foi frustrada!')
+  } else if (r < L + 0.35) {
+    p.golpe = 50
+    if (s.pop < 45) {
+      p.civil = { round: 0, peace: 0 }
+      timelineAdd('🔥', `Tentativa de golpe de ${lider} racha o país: começa uma guerra civil`, 'down')
+      toast('🔥', 'O país se dividiu. Começou um conflito armado.')
+      pushTrend('#GuerraCivil', 95)
+    } else {
+      applyFx({ cong: -5, cash: -3 }, true)
+      game.world.fa = clamp(game.world.fa + 8)
+      timelineAdd('⚠️', `Tentativa de golpe de ${lider} termina em crise e em concessões às forças`, 'down')
+      toast('⚠️', 'A crise terminou em concessões pesadas.')
+    }
+  } else {
+    forceOver('Golpe de Estado', `${lider} e as forças que o seguiram tomaram o poder. Você foi deposto(a) e o país entrou em um período de exceção.`)
+  }
+}
+export const PLOT_ACOES = [
+  { id: 'negociar', icon: '🤝', name: 'Negociar com os comandantes', desc: '-3 Caixa. Reduz a força da conspiração e acalma a corporação.' },
+  { id: 'afastar', icon: '🚪', name: 'Afastar o líder da conspiração', desc: 'Pode desmontar tudo (60%) ou acelerar o golpe.' },
+  { id: 'denunciar', icon: '⚖️', name: 'Denunciar ao STF', desc: 'Via institucional: reduz a conspiração e fortalece a imagem.' },
+  { id: 'povo', icon: '📣', name: 'Chamar o povo às ruas em defesa da democracia', desc: 'Funciona melhor com popularidade alta.' },
+]
+export function enfrentarPlot(id) {
+  const pl = plotAtual()
+  if (!pl || !exeCan('plot:' + id)) return null
+  const p = game.poder
+  game.delta = {}
+  let txt = ''
+  if (id === 'negociar') {
+    if (game.stats.cash < 3) return null
+    applyFx({ cash: -3 }, true)
+    pl.strength -= 15
+    devAdd(pl.force, 8)
+    txt = 'A conversa com os comandantes esfriou os ânimos.'
+  } else if (id === 'afastar') {
+    if (R() < 0.6) {
+      pl.strength -= 40
+      devAdd(pl.force, -6)
+      applyFx({ img: -1 }, true)
+      txt = 'O líder foi afastado e a conspiração perdeu o comando.'
+    } else {
+      pl.strength += 15
+      applyFx({ cong: -2 }, true)
+      game.heat = clamp(game.heat + 3)
+      txt = 'O afastamento irritou os quartéis e acelerou os planos.'
+    }
+  } else if (id === 'denunciar') {
+    pl.strength -= 25
+    applyFx({ img: 1, cong: -1 }, true)
+    txt = 'A denúncia ao tribunal expôs os articuladores.'
+  } else if (id === 'povo') {
+    if (game.stats.pop >= 50) {
+      pl.strength -= 20
+      applyFx({ pop: -1 }, true)
+      txt = 'Multidões saíram em defesa das instituições.'
+    } else {
+      pl.strength -= 8
+      applyFx({ img: -1 }, true)
+      txt = 'As ruas responderam, mas sem a força necessária.'
+    }
+  } else return null
+  exeMark('plot:' + id)
+  if (pl.strength <= 0) {
+    p.plot = null
+    cnt('plotok')
+    timelineAdd('🛡️', `A conspiração contra ${game.name} foi desarticulada`, 'up')
+    toast('🛡️', 'A conspiração foi desarticulada.')
+  }
+  save()
+  return { mil: true, txt }
+}
+function civilRound() {
+  const c = game.poder.civil
+  applyFx({ pop: -2, eco: -2, seg: -2, cash: -1 }, true)
+  c.round++
+  if (c.peace >= 100) {
+    game.poder.civil = null
+    game.poder.golpe = 25
+    applyFx({ img: 3, pop: 3 }, true)
+    cnt('paz')
+    timelineAdd('🕊️', `${game.name} conduz o país a um pacto de paz`, 'up')
+    toast('🕊️', 'O conflito terminou com um pacto de paz.')
+  } else if (c.round >= 5) {
+    forceOver('Guerra civil', 'O conflito se alastrou, o Estado perdeu o controle do território e o governo caiu. A história vai julgar.')
+  }
+}
+export const CIVIL_ACOES = [
+  { id: 'pacto', icon: '🕊️', name: 'Pacto nacional de paz', desc: '-3 Caixa. O caminho mais firme para encerrar o conflito.' },
+  { id: 'leais', icon: '🪖', name: 'Mobilizar as forças leais', desc: '-3 Caixa. Segurança sobe, mas há risco de excessos.' },
+  { id: 'apelo', icon: '🌍', name: 'Apelo à comunidade internacional', desc: 'Funciona melhor com boas relações externas.' },
+  { id: 'anistia', icon: '📜', name: 'Oferecer anistia', desc: 'Acelera a paz, mas custa imagem e base.' },
+]
+export function agirCivil(id) {
+  const c = guerraCivil()
+  if (!c || !exeCan('civil:' + id)) return null
+  game.delta = {}
+  let txt = ''
+  if (id === 'pacto') {
+    if (game.stats.cash < 3) return null
+    applyFx({ cash: -3 }, true)
+    c.peace += 35 + Math.round((game.stats.img - 50) / 5)
+    txt = 'As negociações avançaram.'
+  } else if (id === 'leais') {
+    if (game.stats.cash < 3) return null
+    const ex = R() < 0.25
+    applyFx(ex ? { cash: -3, seg: 2, img: -4 } : { cash: -3, seg: 3 }, true)
+    c.peace += ex ? 15 : 25
+    txt = ex ? 'A ofensiva teve excessos.' : 'As forças leais retomaram áreas.'
+  } else if (id === 'apelo') {
+    const rel = Object.values(game.world.rel).reduce((a, x) => a + x, 0) / 6
+    c.peace += Math.max(5, 15 + Math.round((rel - 50) / 3))
+    txt = 'A comunidade internacional pressionou por um acordo.'
+  } else if (id === 'anistia') {
+    applyFx({ img: -4, cong: -2 }, true)
+    c.peace += 30
+    txt = 'A anistia dividiu o país, mas reduziu o conflito.'
+  } else return null
+  exeMark('civil:' + id)
+  save()
+  return { mil: true, txt }
 }
