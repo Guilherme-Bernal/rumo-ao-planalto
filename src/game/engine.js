@@ -2547,6 +2547,7 @@ function roundPoder() {
   riscoNomeados()
   roundJudiciario()
   roundMundo()
+  if (game.phase === 'over') return
   if (p.pending) {
     // não decidiu na rodada: vira lei por decurso de prazo
     const b = billById(p.pending.billId)
@@ -3084,6 +3085,7 @@ function roundMundo() {
   eduAdd(-0.5)
   greveUniversitaria()
   roundDefesa()
+  if (game.phase === 'over') return
   checkGoals()
 }
 export function responderProtesto(how) {
@@ -3232,6 +3234,7 @@ const FORCAS = [
 ]
 export const FORCAS_LISTA = FORCAS
 const isPres = () => officeId() === 'presidente'
+export const fedLeg = () => ['dep_federal', 'senador'].includes(officeId())
 const hasPol = () => ['prefeito', 'governador'].includes(officeId())
 export const milDev = () => (game.poder && game.poder.mil) || { ex: 0, ma: 0, ae: 0 }
 export const humorForca = (id) => Math.round(clamp(((game.world && game.world.fa) || 50) + (milDev()[id] || 0)))
@@ -3338,20 +3341,20 @@ export function roundDefesa() {
       timelineAdd('🚨', `${p.prot.name} contra ${game.name}`, 'down')
     }
   }
-  if (!isPres()) return
+  if (!isPres() && !fedLeg()) return
   const s = game.stats
   const fa = game.world.fa
-  const alvo = clamp((50 - fa) * 0.8 + (40 - s.pop) * 0.7 + (40 - s.cong) * 0.5 + (game.heat || 0) * 0.25 + (inquerito() ? 10 : 0))
+  const alvo = clamp((50 - fa) * 1.1 + (48 - s.pop) * 1.0 + (48 - s.cong) * 0.6 + (game.heat || 0) * 0.35 + (inquerito() ? 10 : 0))
   p.golpe = Math.max(0, (p.golpe || 0) + (alvo - (p.golpe || 0)) * 0.3)
   if (p.civil) return civilRound()
-  if (!p.plot && p.golpe >= 60 && R() < 0.35) {
+  if (!p.plot && p.golpe >= 50 && R() < 0.4) {
     const f = [...FORCAS].sort((a, b) => humorForca(a.id) - humorForca(b.id))[0]
     p.plot = { force: f.id, leader: `${f.rank} ${candName(R)}`, strength: 25, round: game.total }
     toast('🪖', `Rumores de conspiração no ${f.name}: ${p.plot.leader} articula contra o governo.`)
     timelineAdd('🕵️', `Serviços de inteligência alertam para conspiração liderada por ${p.plot.leader}`, 'down')
     pushTrend('#GolpeNão', 85)
   } else if (p.plot) {
-    p.plot.strength += 8 + Math.max(0, (p.golpe - 60) / 6)
+    p.plot.strength += 8 + Math.max(0, (p.golpe - 50) / 6)
     if (p.plot.strength >= 100) resolverGolpe()
     else if (p.plot.strength <= 0) {
       p.plot = null
@@ -3387,7 +3390,7 @@ function resolverGolpe() {
     toast('🛡️', 'A tentativa de golpe foi frustrada!')
   } else if (r < L + 0.35) {
     p.golpe = 50
-    if (s.pop < 45) {
+    if (s.pop < 45 && isPres()) {
       p.civil = { round: 0, peace: 0 }
       timelineAdd('🔥', `Tentativa de golpe de ${lider} racha o país: começa uma guerra civil`, 'down')
       toast('🔥', 'O país se dividiu. Começou um conflito armado.')
@@ -3399,7 +3402,7 @@ function resolverGolpe() {
       toast('⚠️', 'A crise terminou em concessões pesadas.')
     }
   } else {
-    forceOver('Golpe de Estado', `${lider} e as forças que o seguiram tomaram o poder. Você foi deposto(a) e o país entrou em um período de exceção.`)
+    forceOver('Golpe de Estado', fedLeg() ? `${lider} e as forças que o seguiram tomaram o poder e fecharam o Congresso. Seu mandato acabou ali, e o país entrou em um período de exceção.` : `${lider} e as forças que o seguiram tomaram o poder. Você foi deposto(a) e o país entrou em um período de exceção.`)
   }
 }
 export const PLOT_ACOES = [
@@ -3495,7 +3498,7 @@ export function agirCivil(id) {
     c.peace += ex ? 15 : 25
     txt = ex ? 'A ofensiva teve excessos.' : 'As forças leais retomaram áreas.'
   } else if (id === 'apelo') {
-    const rel = Object.values(game.world.rel).reduce((a, x) => a + x, 0) / 6
+    const rel = (() => { const v = Object.values(game.world.rel); return v.reduce((a, x) => a + x, 0) / (v.length || 1) })()
     c.peace += Math.max(5, 15 + Math.round((rel - 50) / 3))
     txt = 'A comunidade internacional pressionou por um acordo.'
   } else if (id === 'anistia') {
@@ -3504,6 +3507,45 @@ export function agirCivil(id) {
     txt = 'A anistia dividiu o país, mas reduziu o conflito.'
   } else return null
   exeMark('civil:' + id)
+  save()
+  return { mil: true, txt }
+}
+
+export const LEG_GOLPE = [
+  { id: 'convocar', icon: '🎙️', name: 'Convocar os comandantes à Comissão de Defesa', desc: 'Expõe o plano. Reduz a conspiração, mas irrita a caserna.' },
+  { id: 'lei', icon: '📜', name: 'Projeto de defesa da democracia', desc: 'Baixa a temperatura institucional. Exige base mínima no Congresso.' },
+  { id: 'frente', icon: '🤝', name: 'Articular frente parlamentar', desc: 'Só com Congresso forte: derruba a força da conspiração.' },
+]
+export function agirLegGolpe(id) {
+  const pl = plotAtual()
+  if (!fedLeg() || !legCan('golpe:' + id)) return null
+  const p = game.poder
+  game.delta = {}
+  let txt = ''
+  if (id === 'convocar') {
+    if (!pl) return null
+    pl.strength -= 18
+    devAdd(pl.force, -4)
+    applyFx({ img: 1 }, true)
+    txt = 'A convocação expôs os articuladores diante do país.'
+  } else if (id === 'lei') {
+    if (game.stats.cong < 35) return null
+    p.golpe = Math.max(0, (p.golpe || 0) - 12)
+    applyFx({ cong: -1 }, true)
+    txt = 'O projeto avançou e esfriou o ambiente nos quartéis.'
+  } else if (id === 'frente') {
+    if (!pl || game.stats.cong < 50) return null
+    pl.strength -= 30
+    applyFx({ cash: -1 }, true)
+    txt = 'A frente parlamentar isolou os conspiradores.'
+  } else return null
+  legMark('golpe:' + id)
+  if (pl && pl.strength <= 0) {
+    p.plot = null
+    cnt('plotok')
+    timelineAdd('🛡️', 'A conspiração foi desarticulada com ajuda do Congresso', 'up')
+    toast('🛡️', 'A conspiração foi desarticulada.')
+  }
   save()
   return { mil: true, txt }
 }

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import {
   game, officeId, exeCan, golpeTemp, humorForca, humorPolicia, FORCAS_LISTA, DEF_FORCA, agirForca, industriaDefesa, poderPolicial, agirPolicia,
-  gloPossivel, glo, plotAtual, PLOT_ACOES, enfrentarPlot, guerraCivil, CIVIL_ACOES, agirCivil,
+  gloPossivel, glo, plotAtual, fedLeg, LEG_GOLPE, agirLegGolpe, legCan, PLOT_ACOES, enfrentarPlot, guerraCivil, CIVIL_ACOES, agirCivil,
 } from '../../game/engine'
 
 const msg = ref('')
@@ -12,9 +12,10 @@ const temp = computed(() => golpeTemp())
 const plot = computed(() => plotAtual())
 const civil = computed(() => guerraCivil())
 const tone = (v) => (v < 35 ? 'var(--bad)' : v < 60 ? 'var(--warn)' : 'var(--good)')
-const tempTone = computed(() => (temp.value >= 60 ? 'var(--bad)' : temp.value >= 35 ? 'var(--warn)' : 'var(--good)'))
-const tempLabel = computed(() => (temp.value >= 60 ? 'conspiração no ar' : temp.value >= 35 ? 'rumores nos quartéis' : 'estável'))
-const show = computed(() => pres.value || pol.value || officeId() === 'governador')
+const tempTone = computed(() => (temp.value >= 50 ? 'var(--bad)' : temp.value >= 35 ? 'var(--warn)' : 'var(--good)'))
+const tempLabel = computed(() => (temp.value >= 50 ? 'conspiração no ar' : temp.value >= 35 ? 'rumores nos quartéis' : 'estável'))
+const fl = computed(() => fedLeg())
+const show = computed(() => pres.value || pol.value || fl.value || officeId() === 'governador')
 function go(fn, ...a) {
   const r = fn(...a)
   if (!r) return
@@ -36,7 +37,7 @@ function go(fn, ...a) {
       </div>
     </template>
 
-    <template v-if="pres">
+    <template v-if="pres || fl">
       <p class="legend">Humor das Forças Armadas. A temperatura institucional sobe com Forças descontentes, povo e Congresso contra você e escândalos.</p>
       <div v-for="f in FORCAS_LISTA" :key="f.id" class="slider">
         <div class="row"><span>{{ f.icon }} {{ f.name }}</span><b>{{ humorForca(f.id) }}</b></div>
@@ -46,16 +47,20 @@ function go(fn, ...a) {
         <div class="row"><span>🌡️ Temperatura institucional <small class="muted">({{ tempLabel }})</small></span><b>{{ temp }}</b></div>
         <div class="bar"><i :style="{ width: temp + '%', background: tempTone }"></i></div>
       </div>
-      <div class="acts" style="margin-top: 8px">
+      <div v-if="pres" class="acts" style="margin-top: 8px">
         <button v-for="a in DEF_FORCA" :key="a.id" type="button" :disabled="!exeCan('forca:' + a.id)" :title="a.desc" @click="go(agirForca, a.id)"><b>{{ a.icon }} {{ a.name }}</b><small>{{ a.desc }}</small></button>
         <button type="button" :disabled="!exeCan('industria')" @click="go(industriaDefesa)"><b>🏭 Exportar material de defesa</b><small>+Caixa e emprego, mas polêmica</small></button>
       </div>
     </template>
 
-    <div v-if="pres && plot" class="sumbox" :style="{ marginTop: '8px', borderColor: 'var(--bad)' }">
+    <div v-if="fl" class="acts" style="margin-top: 8px">
+      <button v-for="a in LEG_GOLPE" :key="a.id" type="button" :disabled="!legCan('golpe:' + a.id) || (a.id !== 'lei' && !plot)" :title="a.desc" @click="go(agirLegGolpe, a.id)"><b>{{ a.icon }} {{ a.name }}</b><small>{{ a.desc }}</small></button>
+    </div>
+
+    <div v-if="(pres || fl) && plot" class="sumbox" :style="{ marginTop: '8px', borderColor: 'var(--bad)' }">
       🕵️ <b>Conspiração em curso</b>: {{ plot.leader }}. Força do plano: {{ Math.round(plot.strength) }}/100. Ao chegar a 100, tentam o golpe.
       <div class="bar" style="margin: 6px 0"><i :style="{ width: Math.min(100, plot.strength) + '%', background: 'var(--bad)' }"></i></div>
-      <div class="acts">
+      <div v-if="pres" class="acts">
         <button v-for="a in PLOT_ACOES" :key="a.id" type="button" :disabled="!exeCan('plot:' + a.id)" :title="a.desc" @click="go(enfrentarPlot, a.id)"><b>{{ a.icon }} {{ a.name }}</b><small>{{ a.desc }}</small></button>
       </div>
     </div>

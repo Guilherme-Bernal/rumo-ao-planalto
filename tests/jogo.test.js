@@ -463,19 +463,36 @@ describe('defesa, golpes e guerra civil', () => {
     expect(E.enfrentarPlot('denunciar')).toBeTruthy()
     expect(E.plotAtual() ? E.plotAtual().strength : 0).toBeLessThan(antes)
   })
-  it('golpe consumado encerra o jogo com o título certo', () => {
-    let over = 0
-    for (let i = 0; i < 60; i++) {
+  it('golpe consumado encerra o jogo e não recria o save', () => {
+    const fins = {}
+    for (let i = 0; i < 200; i++) {
       novo()
-      E.game.stats.pop = 5
-      E.game.stats.cong = 5
-      E.game.world.fa = 5
+      E.game.stats.pop = 20
+      E.game.stats.cong = 20
+      E.game.stats.img = 30
+      E.game.world.fa = 10
       E.game.poder.plot = { force: 'ex', leader: 'General Fulano', strength: 99, round: 1 }
       E.game.poder.golpe = 90
-      E.endTurn && E.endTurn()
-      if (E.game.phase === 'over' && E.game.over.title === 'Golpe de Estado') over++
+      E.roundDefesa()
+      const k = E.game.phase === 'over' ? E.game.over.title : E.game.poder.civil ? 'civil' : E.plotAtual() ? 'plot' : 'resolvido'
+      fins[k] = (fins[k] || 0) + 1
+      if (E.game.phase === 'over') expect(['Golpe de Estado', 'Guerra civil']).toContain(E.game.over.title)
     }
-    expect(over).toBeGreaterThanOrEqual(0)
+    expect(fins['Golpe de Estado']).toBeGreaterThan(0)
+    expect(Object.keys(fins).length).toBeGreaterThan(1)
+  })
+  it('guerra civil por tempo esgotado encerra o jogo', () => {
+    novo()
+    E.game.poder.civil = { round: 4, peace: 0 }
+    E.roundDefesa()
+    expect(E.game.phase).toBe('over')
+    expect(E.game.over.title).toBe('Guerra civil')
+  })
+  it('apelo internacional soma paz usando a média real das relações', () => {
+    novo()
+    E.game.poder.civil = { round: 0, peace: 0 }
+    expect(E.agirCivil('apelo')).toBeTruthy()
+    expect(E.guerraCivil().peace).toBeGreaterThanOrEqual(5)
   })
   it('guerra civil: pacto leva à paz e o tempo esgotado encerra o jogo', () => {
     novo()
@@ -492,5 +509,31 @@ describe('defesa, golpes e guerra civil', () => {
     expect(E.gloPossivel()).toBe(true)
     expect(E.glo()).toBeTruthy()
     expect(E.protesto()).toBe(null)
+  })
+  it('deputado federal enfrenta conspiração com ações de Legislativo', () => {
+    novo('dep_federal')
+    E.game.phase = 'actions'
+    E.game.poder.leg = { used: [] }
+    E.game.stats.cong = 60
+    E.game.poder.plot = { force: 'ex', leader: 'General Fulano', strength: 50, round: 1 }
+    expect(E.agirLegGolpe('convocar')).toBeTruthy()
+    expect(E.plotAtual().strength).toBeLessThan(50)
+    expect(E.agirLegGolpe('frente')).toBeTruthy()
+    expect(E.plotAtual() === null || E.plotAtual().strength < 20).toBe(true)
+    novo('presidente')
+    expect(E.agirLegGolpe('lei')).toBe(null)
+  })
+  it('golpe contra deputado fecha o Congresso', () => {
+    let achou = false
+    for (let i = 0; i < 200 && !achou; i++) {
+      novo('dep_federal')
+      E.game.stats.pop = 20
+      E.game.stats.cong = 20
+      E.game.world.fa = 10
+      E.game.poder.plot = { force: 'ex', leader: 'General Fulano', strength: 99, round: 1 }
+      E.roundDefesa()
+      if (E.game.phase === 'over') { achou = true; expect(E.game.over.text).toMatch(/Congresso/) }
+    }
+    expect(achou).toBe(true)
   })
 })
