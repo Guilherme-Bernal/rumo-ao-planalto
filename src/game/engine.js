@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { settings, difficultyOf } from './settings'
 import { countries } from './countries'
 import { modsFor } from './traits'
 import { affinity } from './countries/brasil-parties'
@@ -149,6 +150,7 @@ const blank = () => ({
   deals: [],
   powerRes: null,
   office: 'vereador',
+  difficulty: 'normal',
   clock: 0,
   team: { vice: null, supl: [], slots: {} },
   world: blankWorld(),
@@ -169,7 +171,8 @@ const KNOW_GAIN = (k) => (k === 'eco' ? 1 + 0.05 * kn('eco') : k === 'soc' ? 1 +
 const KNOW_LOSS = (k) => (k === 'img' ? Math.max(0.5, 1 - 0.04 * kn('com') - 0.03 * kn('dir')) : k === 'cash' ? Math.max(0.5, 1 - 0.03 * kn('ges')) : 1)
 const modV = (k, v) => {
   const m = mods()
-  return v > 0 ? v * (m.gain[k] || 1) * KNOW_GAIN(k) : v * (m.loss[k] || 1) * KNOW_LOSS(k)
+  const dif = difficultyOf(game.difficulty)
+  return v > 0 ? v * (m.gain[k] || 1) * KNOW_GAIN(k) * dif.gain : v * (m.loss[k] || 1) * KNOW_LOSS(k) * dif.loss
 }
 export const effectiveFx = (fx) => Object.fromEntries(Object.entries(fx).map(([k, v]) => [k, Math.round(modV(k, v) * 10) / 10]))
 export const partyObj = () => (game.party === 'own' ? game.myParty : game.party ? country().parties.find((p) => p.id === game.party) : null)
@@ -492,7 +495,7 @@ export function stateEstimates() {
 /* ---------- fluxo do jogo ---------- */
 
 export function startGame({ countryId = 'brasil', name, archetypeId, regionId, cityName, partyId = null, ownParty = null, plan, daily = false, traits = {}, look = null }) {
-  Object.assign(game, blank(), { countryId, daily, seed: daily ? todaySeed() : 0 })
+  Object.assign(game, blank(), { countryId, daily, seed: daily ? todaySeed() : 0, difficulty: daily ? 'normal' : settings.difficulty })
   setRng()
   const c = country()
   game.name = (name || '').trim() || 'Candidato(a)'

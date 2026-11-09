@@ -1,24 +1,52 @@
 <script setup>
-import { watch } from 'vue'
+import { watch, onMounted, onBeforeUnmount } from 'vue'
 import { game, country, stageInfo, resetGame, traitNames, partyObj, officeId } from './game/engine'
 import { OFFICES } from './game/offices'
 const LADDER = Object.values(OFFICES).sort((a, b) => a.rank - b.rank || a.tier - b.tier)
-import Scene3D from './components/Scene3D.vue'
-import StartScreen from './components/StartScreen.vue'
-import StatsPanel from './components/StatsPanel.vue'
-import Hub from './components/Hub.vue'
-import Sandbox from './components/Sandbox.vue'
-import Apoie from './components/Apoie.vue'
+import Scene3D from './components/scene/Scene3D.vue'
+import StartScreen from './components/screens/StartScreen.vue'
+import StatsPanel from './components/layout/StatsPanel.vue'
+import Hub from './components/layout/Hub.vue'
+import Sandbox from './components/layout/Sandbox.vue'
+import Apoie from './components/layout/Apoie.vue'
+import Settings from './components/layout/Settings.vue'
+import { unlock, sfx, setMood } from './game/audio'
 const showSandbox = import.meta.env.DEV || new URLSearchParams(location.search).has('sandbox')
-import EndScreen from './components/EndScreen.vue'
+import EndScreen from './components/screens/EndScreen.vue'
 import { downloadSave } from './game/savefile'
 
 watch(
   () => game.toasts.length,
   (n, o) => {
-    if (n > o) setTimeout(() => game.toasts.shift(), 3800)
+    if (n > o) {
+      setTimeout(() => game.toasts.shift(), 3800)
+      sfx('good')
+    }
   },
 )
+
+// som: o navegador só libera áudio depois do primeiro toque/tecla
+const onFirst = () => unlock()
+const onClick = (e) => {
+  const b = e.target.closest && e.target.closest('button')
+  if (b && !b.disabled) sfx('click')
+}
+onMounted(() => {
+  window.addEventListener('pointerdown', onFirst, { once: true })
+  window.addEventListener('keydown', onFirst, { once: true })
+  document.addEventListener('click', onClick)
+})
+onBeforeUnmount(() => document.removeEventListener('click', onClick))
+watch(
+  () => [game.stats.pop, game.phase === 'start' ? 1 : game.stage, game.world && game.phase !== 'start' ? game.world.wars.length : 0],
+  ([pop, stage, war]) => setMood({ pop, stage, war }),
+  { immediate: true },
+)
+watch(() => game.phase, (p) => {
+  if (p === 'recap') sfx('turn')
+  else if (p === 'end') sfx('win')
+  else if (p === 'over') sfx('lose')
+})
 
 function restart() {
   if (confirm('Abandonar a carreira atual e voltar ao início?')) resetGame()
@@ -26,12 +54,19 @@ function restart() {
 </script>
 
 <template>
-  <Scene3D :pop="game.stats.pop" :eco="game.stats.eco" :stage="game.phase === 'start' ? 1 : game.stage" />
+  <Scene3D
+    :pop="game.stats.pop"
+    :eco="game.stats.eco"
+    :stage="game.phase === 'start' ? 1 : game.stage"
+    :office="game.phase === 'start' ? '' : officeId()"
+    :war="game.phase === 'start' || !game.world ? 0 : game.world.wars.length"
+  />
 
   <div class="toasts">
     <div v-for="t in game.toasts" :key="t.id" class="toast">{{ t.msg ? `${t.icon} ${t.msg}` : `🏆 Conquista: ${t.icon} ${t.name}` }}</div>
   </div>
 
+  <Settings />
   <StartScreen v-if="game.phase === 'start'" />
   <EndScreen v-else-if="game.phase === 'over' || game.phase === 'end'" />
 
@@ -41,8 +76,8 @@ function restart() {
         <div class="who">{{ country().flag }} {{ game.name }} · {{ stageInfo().office }}
           <span v-if="partyObj()" class="chip" :style="{ background: partyObj().color + '55' }">{{ partyObj().sigla }}</span>
         </div>
-        <div class="meta">
-          {{ game.city?.name }} ({{ game.region.id }}) · {{ game.archetype.name }} · {{ traitNames() }} ·
+        <div class="meta" :title="`${game.archetype.name} · ${traitNames()}`">
+          {{ game.city?.name }} ({{ game.region.id }}) · {{ game.archetype.name }} ·
           Rodada {{ Math.min(game.turn + 1, stageInfo().turns) }}/{{ stageInfo().turns }}
           <template v-if="game.stage === 3"> · Mandato {{ game.term }}/2</template>
         </div>
@@ -51,8 +86,8 @@ function restart() {
         </div>
       </div>
       <div class="topbtns">
-        <button title="Baixar um arquivo com o seu progresso" @click="downloadSave">💾 Salvar</button>
-        <button @click="restart">Reiniciar</button>
+        <button title="Baixar um arquivo com o seu progresso" aria-label="Salvar" @click="downloadSave">💾<span class="btn-lbl"> Salvar</span></button>
+        <button aria-label="Reiniciar" @click="restart"><span class="ico-m">↺</span><span class="btn-lbl">Reiniciar</span></button>
       </div>
     </header>
     <StatsPanel class="stats panel" />

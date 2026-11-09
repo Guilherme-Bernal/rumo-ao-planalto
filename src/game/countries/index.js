@@ -10,6 +10,7 @@ import { regionalEvents } from './brasil-events-regional'
 import { healthEvents } from './brasil-events-health'
 import { teamEvents } from './brasil-events-team'
 import { worldEvents } from './brasil-events-world'
+import { vidaEvents } from './brasil-events-vida'
 import { EXTRA_CITIES } from './brasil-cities'
 
 // Para adicionar outro país: crie arquivos parecidos com brasil*.js e registre aqui.
@@ -21,7 +22,7 @@ brasil.parties = PARTIES
 brasil.promises = PROMISES
 brasil.maxPromises = MAX_PROMISES
 brasil.planNames = [PLAN_NAMES_A, PLAN_NAMES_B]
-brasil.events = [...brasil.events, ...extraEvents, ...moreEvents, ...dirtyEvents, ...regionalEvents, ...healthEvents, ...teamEvents, ...worldEvents]
+brasil.events = [...brasil.events, ...extraEvents, ...moreEvents, ...dirtyEvents, ...regionalEvents, ...healthEvents, ...teamEvents, ...worldEvents, ...vidaEvents]
 // Reais por ponto de caixa em cada cargo (vereador, deputado, governador, presidente)
 brasil.money = [30e3, 400e3, 120e6, 8e9]
 
