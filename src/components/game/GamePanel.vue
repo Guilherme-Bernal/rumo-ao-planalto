@@ -74,7 +74,7 @@ const place = (m) => {
   doAction(armed.value, m)
   armed.value = null
 }
-const miniDone = (a, b) => {
+const miniDone = (a, b, c) => {
   const k = mini.value
   mini.value = null
   if (k === 'comicio') {
@@ -83,8 +83,8 @@ const miniDone = (a, b) => {
     doSpecial('comicio', miniMonth.value, fx, `Comício: ${sc >= 0.7 ? 'multidão em êxtase' : sc >= 0.4 ? 'recepção morna' : 'comício esvaziado'}.`)
     armed.value = null
   } else if (k === 'plenario') {
-    const ok = finishPlenario(a, b)
-    miniMsg.value = ok ? '🏛️ Projeto aprovado! +Base, +Imagem.' : '🏛️ Projeto rejeitado. -Base.'
+    const ok = finishPlenario(a, b, c && c.bill, c ? c.concessions : 0)
+    miniMsg.value = ok ? `🏛️ “${c.bill.title}” aprovado! Veja o efeito no painel.` : `🏛️ “${c.bill.title}” rejeitado. -Base.`
   } else if (k === 'debate') {
     const tv = finishTv(a)
     miniMsg.value = `📺 Debate encerrado: ${tv > 0 ? '+' : ''}${tv} ponto(s) na eleição.`

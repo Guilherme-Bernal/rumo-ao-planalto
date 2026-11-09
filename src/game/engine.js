@@ -1,3 +1,4 @@
+import { billOutcome } from './bills'
 import { reactive } from 'vue'
 import { settings, difficultyOf } from './settings'
 import { countries } from './countries'
@@ -1355,15 +1356,15 @@ export function finishTv(score) {
   return e.tv
 }
 
-export function finishPlenario(votes, total) {
+export function finishPlenario(votes, total, bill = null, concessions = 0) {
   if (game.mini.plenario) return null
   game.mini.plenario = true
   const won = votes * 2 > total
   game.delta = {}
   curSphere = STAGE_SPHERE[game.stage] === 'mun' ? 'mun' : 'fed'
-  applyFx(won ? { cong: 4, img: 2, pop: 1 } : { cong: -3, img: -1 }, true)
+  applyFx(bill ? billOutcome(bill, won, concessions) : won ? { cong: 4, img: 2, pop: 1 } : { cong: -3, img: -1 }, true)
   curSphere = null
-  log(`Votação: ${votes}/${total} (${won ? 'aprovada' : 'rejeitada'}).`)
+  log(`Votação${bill ? ` do projeto “${bill.title}”` : ''}: ${votes}/${total} (${won ? 'aprovada' : 'rejeitada'}).`)
   pushPosts(2, won ? 'up' : 'down', 'Votacao')
   save()
   return won

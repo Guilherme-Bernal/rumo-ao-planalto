@@ -126,7 +126,7 @@
 .hm-cinfo { min-width: 0; display: grid; gap: 2px; }
 .hm-st.sim { color: #4ade80; } .hm-st.nao { color: #f87171; } .hm-st.ind { color: #cbd5e1; }
 .hm-hint { text-align: center; padding: 14px 0; }
-.hm-args { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.hm-args { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
 .hm-args button { display: grid; gap: 2px; justify-items: center; padding: 8px 4px; font-size: .78rem; text-align: center; }
 .hm-args button span { font-size: 1.3rem; }
 .hm-log { display: grid; gap: 3px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); font-size: .82rem; color: #cbd5e1; }
@@ -218,3 +218,13 @@
 .hm-res { display: grid; justify-items: center; gap: 4px; }
 .hm-cinfo .chip { justify-self: start; }
 
+
+.hm-bill { display: flex; gap: 12px; padding: 10px 12px; margin: 6px 0 8px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; background: rgba(255,255,255,.04); }
+.hm-bico { font-size: 1.8rem; }
+.hm-bill > div { display: grid; gap: 3px; min-width: 0; }
+.hm-bill b { font-size: 1.02rem; }
+.hm-bill p { margin: 0; font-size: .86rem; color: #cbd5e1; }
+.hm-sides { display: grid; gap: 1px; font-size: .78rem; color: #94a3b8; }
+.hm-fx { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: .78rem; justify-content: center; }
+.hm-bill .hm-fx { justify-content: flex-start; }
+.hm-neg small { font-size: .62rem; color: var(--muted); }

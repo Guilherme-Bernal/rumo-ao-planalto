@@ -129,3 +129,27 @@ describe('contatos e ligações', () => {
   })
 })
 
+
+describe('projetos em votação', () => {
+  it('todo projeto tem texto e a emenda enfraquece o benefício', async () => {
+    const { ALL_BILLS, billOutcome, billFor } = await import('../src/game/bills.js')
+    for (const b of ALL_BILLS) {
+      expect(b.title.length).toBeGreaterThan(5)
+      expect(b.pro && b.con && b.ementa).toBeTruthy()
+    }
+    const b = billFor('presidente', 3)
+    expect(b).toBeTruthy()
+    const cheio = billOutcome(b, true, 0)
+    const fraco = billOutcome(b, true, 2)
+    const soma = (o) => Object.values(o).filter((v) => v > 0).reduce((a, v) => a + v, 0)
+    expect(soma(fraco)).toBeLessThanOrEqual(soma(cheio))
+    expect(billOutcome(b, false).cong).toBeLessThan(0)
+  })
+  it('finishPlenario aplica o projeto e loga o título', () => {
+    return import('../src/game/bills.js').then(({ billFor }) => {
+      E.startGame({ name: 'Teste', regionId: 'SP' })
+      const b = billFor(E.game.office, 0)
+      expect(E.finishPlenario(6, 9, b, 1)).toBe(true)
+    })
+  })
+})

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onBeforeUnmount } from 'vue'
-import { game, coalition } from '../../game/engine'
+import { game, coalition, STATS } from '../../game/engine'
+import { billFor, billOutcome } from '../../game/bills'
 import { candName } from '../../game/social'
 import { sfx } from '../../game/audio'
 
@@ -47,6 +48,12 @@ const SEATS = (() => {
   return out.sort((p, q) => q.a - p.a)
 })()
 
+const bill = billFor(game.office, game.total)
+const concessions = ref(0)
+const short = Object.fromEntries(STATS.map((x) => [x.k, x.short]))
+const fxChips = (fx) => Object.entries(fx).filter(([, v]) => v).map(([k, v]) => ({ t: `${v > 0 ? '+' : ''}${v} ${short[k]}`, good: v > 0 }))
+const ifPass = computed(() => fxChips(billOutcome(bill, true, concessions.value)))
+const ifFail = computed(() => fxChips(billOutcome(bill, false)))
 const moves = ref(3)
 const sel = ref(null)
 const result = ref(null)
@@ -63,6 +70,25 @@ const cur = computed(() => (sel.value === null ? null : members.value[sel.value]
 const office = computed(() => ({ vereador: 'na Câmara Municipal', prefeito: 'na Câmara Municipal', dep_estadual: 'na Assembleia Legislativa', dep_federal: 'na Câmara dos Deputados', senador: 'no Senado Federal', governador: 'na Assembleia Legislativa', presidente: 'no Congresso Nacional' })[game.office] || 'no plenário')
 const hue = (m) => SIGCOL[m.sig] ?? 200
 const state = (m) => m.shown || m.vote
+
+// negociar: o parlamentar aceita votar com você em troca de uma emenda que enfraquece o projeto
+function negotiate() {
+  if (sel.value === null || moves.value <= 0 || busy.value) return
+  const m = members.value[sel.value]
+  let t
+  if (m.vote === 'sim') t = '“Já voto com você. Não precisa de emenda.”'
+  else if (concessions.value >= 3) t = '“Já mexeram demais nesse projeto. Não dá mais.”'
+  else if (Math.random() < (m.vote === 'ind' ? 0.85 : 0.55)) {
+    m.vote = 'sim'
+    concessions.value++
+    t = '🤝 “Fechado, se entrar a minha emenda. Voto sim.”'
+    sfx('good')
+  } else t = '❌ “Nem com emenda. Meu voto é contra.”'
+  m.note = t
+  log.value.unshift({ who: m.first, t })
+  moves.value--
+  sel.value = null
+}
 
 function argue(p) {
   if (sel.value === null || moves.value <= 0 || busy.value) return
@@ -117,6 +143,18 @@ async function vote() {
   <div class="minimodal">
     <div class="plen hm">
       <h3>🏛️ Votação {{ office }}</h3>
+      <div class="hm-bill">
+        <span class="hm-bico">{{ bill.icon }}</span>
+        <div>
+          <small class="muted">Projeto em votação</small>
+          <b>{{ bill.title }}</b>
+          <p>{{ bill.ementa }}</p>
+          <div class="hm-sides"><span>👍 {{ bill.pro }}</span><span>👎 {{ bill.con }}</span></div>
+          <div class="hm-fx"><span class="muted">Se passar:</span><span v-for="(c, i) in ifPass" :key="'p' + i" class="chip" :class="c.good ? 'up' : 'down'">{{ c.t }}</span>
+            <span class="muted">Se cair:</span><span v-for="(c, i) in ifFail" :key="'f' + i" class="chip" :class="c.good ? 'up' : 'down'">{{ c.t }}</span></div>
+          <small v-if="concessions" class="muted">🤝 {{ concessions }} emenda{{ concessions > 1 ? 's' : '' }} negociada{{ concessions > 1 ? 's' : '' }}: o projeto passa mais fraco.</small>
+        </div>
+      </div>
       <p class="muted">Precisa de <b>{{ need }}</b> votos de {{ total }}. Escolha um parlamentar, depois um argumento. Você tem <b>{{ moves }}</b> conversa{{ moves === 1 ? '' : 's' }}.</p>
 
       <div class="hm-hemi" :style="{ aspectRatio: 1 / ASPECT }">
@@ -160,6 +198,9 @@ async function vote() {
           <button v-for="(p, k) in PREF" :key="k" :disabled="cur === null || moves <= 0 || busy" @click="argue(k)">
             <span>{{ p.ico }}</span>{{ p.label }}
           </button>
+          <button class="hm-neg" :disabled="cur === null || moves <= 0 || busy" @click="negotiate">
+            <span>🤝</span>Negociar emenda<small>passa, mas mais fraco</small>
+          </button>
         </div>
 
         <div v-if="log.length" class="hm-log">
@@ -174,9 +215,10 @@ async function vote() {
 
       <div v-else class="plen-res hm-res" :class="result.ok ? 'ok' : 'no'">
         <div class="big">{{ result.s }} x {{ total - result.s }}</div>
-        <p>{{ result.ok ? '🎉 Projeto aprovado!' : '😕 Projeto rejeitado.' }}</p>
+        <p>{{ result.ok ? '🎉' : '😕' }} “{{ bill.title }}” {{ result.ok ? 'aprovado!' : 'rejeitado.' }}</p>
+        <div class="hm-fx"><span v-for="(c, i) in (result.ok ? ifPass : ifFail)" :key="i" class="chip" :class="c.good ? 'up' : 'down'">{{ c.t }}</span></div>
         <small class="muted">{{ result.s }} a favor · {{ nao }} contra · {{ ind }} abstenç{{ ind === 1 ? 'ão' : 'ões' }}</small>
-        <button class="primary" style="margin-top: 10px" @click="emit('done', result.s, total)">Continuar</button>
+        <button class="primary" style="margin-top: 10px" @click="emit('done', result.s, total, { bill, concessions })">Continuar</button>
       </div>
     </div>
   </div>
