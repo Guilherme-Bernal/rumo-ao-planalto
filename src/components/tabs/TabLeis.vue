@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
+import { billsOf } from '../../game/bills'
+import { pesquisas, aprovacao, protesto, responderProtesto, consultaFeita, consultaChance, consultar, officeId, emCrise, articular, goalsNow, courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
 
 const w = computed(() => game.world)
 const co = computed(() => coalition())
@@ -13,12 +14,20 @@ const col = (p) => (p < 30 ? 'var(--bad)' : p < 55 ? 'var(--warn)' : 'var(--good
 const stat = computed(() => statutesActive())
 const leg = computed(() => isLeg())
 const exe = computed(() => isExec())
+const polls = computed(() => pesquisas())
+const spark = computed(() => polls.value.map((x) => '▁▂▃▄▅▆▇█'[Math.min(7, Math.floor(x.v / 12.6))]).join(''))
+const lastPoll = computed(() => (polls.value.length ? polls.value[polls.value.length - 1].v : aprovacao()))
+const trend = computed(() => (polls.value.length > 1 ? lastPoll.value - polls.value[polls.value.length - 2].v : 0))
+const goals = computed(() => goalsNow())
+const consBills = computed(() => billsOf(officeId()))
 const com = computed(() => comissaoAtiva())
 const msg = ref('')
 const run = (fn, ...a) => {
   const r = fn(...a)
   if (r && r.text) msg.value = r.text
   else if (r && r.ok !== undefined) msg.value = r.ok ? 'A CPI deu resultado: você virou referência no assunto.' : 'A CPI não vingou e a base ficou irritada.'
+  else if (r && r.how) msg.value = r.how === 'dialogar' ? 'A negociação acalmou os ânimos.' : r.how === 'reprimir' ? 'A repressão contém a rua, mas a imagem sofre.' : 'Você se alinhou à rua e ganhou simpatia.'
+  else if (r && r.b) msg.value = r.ok ? `O povo aprovou “${r.b.title}” na consulta.` : `O povo rejeitou “${r.b.title}” na consulta.`
   else if (r && r.pa) msg.value = `${r.nome} assume ${r.pa.name}.`
   else if (r && r.d) msg.value = 'Decreto editado. O Legislativo pode tentar sustá-lo na próxima rodada.'
   else if (r && r.secreto !== undefined) msg.value = r.caught ? 'O orçamento paralelo vazou e virou escândalo.' : r.secreto ? 'Verba negociada por fora. Ninguém viu, por enquanto.' : 'Emendas liberadas. Sua base vota com você.'
@@ -55,6 +64,32 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
         </button>
       </div>
     </div>
+
+    <h3 class="sub">📊 Pesquisa de aprovação</h3>
+    <p class="legend"><b>{{ lastPoll }}%</b> <span :class="trend >= 0 ? 't-up' : 't-down'">{{ trend >= 0 ? '▲' : '▼' }} {{ Math.abs(trend) }}</span> · margem de erro 3 pontos · <span style="letter-spacing: 2px">{{ spark || '—' }}</span></p>
+    <p v-if="emCrise()" class="sumbox" :style="{ borderColor: 'var(--bad)' }">
+      🚨 Crise de poderes: sem povo e sem base, o processo contra você pode andar.
+      <button type="button" :disabled="game.phase !== 'actions' || game.stats.cash < 3" @click="articular()"><b>🤝 Articular com a base</b><small>-3 Caixa, +4 Base</small></button>
+    </p>
+    <div v-if="protesto()" class="sumbox" :style="{ marginTop: '8px', borderColor: 'var(--bad)' }">
+      ✊ <b>{{ protesto().name }}</b>. Se ignorar, a situação piora na próxima rodada.
+      <div class="acts" style="margin-top: 6px">
+        <button type="button" :disabled="game.stats.cash < 2" @click="run(responderProtesto, 'dialogar')"><b>🤝 Negociar</b><small>-2 Caixa, acalma</small></button>
+        <button v-if="exe" type="button" @click="run(responderProtesto, 'reprimir')"><b>🚔 Reprimir</b><small>Contém, mas custa Imagem</small></button>
+        <button v-else type="button" @click="run(responderProtesto, 'apoiar')"><b>📣 Apoiar</b><small>+Pop, -Base</small></button>
+      </div>
+    </div>
+
+    <h3 class="sub">🗳️ Consulta popular <small class="muted">· uma por mandato · -3 Caixa</small></h3>
+    <p class="legend">{{ consultaFeita() ? 'Você já convocou a consulta deste mandato.' : 'Leve um projeto direto ao voto do povo. Se aprovado, vira lei na hora.' }}</p>
+    <div v-if="!consultaFeita()" class="acts">
+      <button v-for="b in consBills" :key="b.id" type="button" :disabled="game.phase !== 'actions' || game.stats.cash < 3" @click="run(consultar, b.id)"><b>{{ b.icon }} {{ b.title }}</b><small>{{ Math.round(consultaChance(b) * 100) }}% de aprovação popular</small></button>
+    </div>
+
+    <h3 class="sub">🎯 Metas do mandato</h3>
+    <ul class="laws">
+      <li v-for="g in goals" :key="g.id">{{ g.done ? '✅' : g.icon }} {{ g.text }} <small class="muted">· {{ Math.min(g.v, g.need) }}/{{ g.need }}{{ g.done ? ' · concluída' : '' }}</small></li>
+    </ul>
 
     <h3 class="sub">⚖️ {{ courtName() }}</h3>
     <p v-if="!acaoPendente() && !inquerito()" class="legend">Nada em julgamento. Leis polêmicas e decretos podem ser questionados pela oposição, e escândalos podem virar inquérito.</p>

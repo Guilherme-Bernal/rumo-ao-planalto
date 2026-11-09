@@ -2535,6 +2535,7 @@ function roundPoder() {
   julgarDecretos()
   riscoNomeados()
   roundJudiciario()
+  roundMundo()
   if (p.pending) {
     // não decidiu na rodada: vira lei por decurso de prazo
     const b = billById(p.pending.billId)
@@ -2645,6 +2646,7 @@ export function fiscalizar(id) {
   timelineAdd(v.icon, text, found ? 'up' : 'flat')
   toast(v.icon, found ? 'Você encontrou problemas e a denúncia repercutiu.' : 'Visita feita. Bom registro.')
   pushPosts(2, found ? 'up' : 'flat', 'Fiscalizacao')
+  cnt('fisc')
   log(`Fiscalizou: ${v.name}.`)
   save()
   return { found, text: found ? v.ok : v.fine, fx, v }
@@ -2693,6 +2695,7 @@ export function relatar() {
   } else {
     timelineAdd(c.icon, `${game.name} relata projetos na ${c.name}`, 'flat')
   }
+  cnt('relat')
   log(`Relatoria na ${c.name}.`)
   save()
   return { fx, bill: enacted ? b : null, c }
@@ -2725,6 +2728,7 @@ export function abrirCPI(id) {
   toast(k.icon, ok ? 'A CPI deu resultado!' : 'A CPI não saiu do papel.')
   pushPosts(3, ok ? 'up' : 'down', 'CPI')
   pushTrend('#CPI' + slug(k.name).slice(0, 10), 80)
+  if (ok) cnt('cpiok')
   log(`CPI: ${k.name} (${ok ? 'sucesso' : 'fracasso'}).`)
   save()
   return { ok, k, fx }
@@ -2805,6 +2809,7 @@ export function nomear(pasta, perfil) {
   applyFx({ cong: perfil === 'politico' ? 2 : perfil === 'amigo' ? 1 : 0, img: perfil === 'tecnico' ? 1 : 0 }, true)
   timelineAdd(pa.icon, `${game.name} nomeia ${nome} para ${pa.name}`, 'up')
   toast(pa.icon, `${nome} assume ${pa.name}.`)
+  cnt('nome')
   log(`Nomeou ${nome} (${pf.name}).`)
   save()
   return { nome, pa, pf }
@@ -2874,6 +2879,7 @@ export function decretar(id) {
   }
   pressLaw('decreto', d)
   game.poder.sus = Math.min(6, (game.poder.sus || 0) + 1)
+  cnt('decreto')
   log(`Decreto: ${d.title}.`)
   save()
   return { fx, d }
@@ -2948,6 +2954,7 @@ function roundJudiciario() {
       game.heat = clamp(game.heat - 15)
       if (ok) {
         applyFx({ img: 3, pop: 1 }, true)
+        cnt('arq')
         timelineAdd('✅', `${courtShort()} arquiva o inquérito contra ${game.name}`, 'up')
         toast('✅', 'Inquérito arquivado.')
       } else {
@@ -2998,6 +3005,112 @@ export function defesaInquerito(tipo) {
     applyFx({ img: -2 }, true)
     game.heat = clamp(game.heat - 10)
   } else return false
+  save()
+  return true
+}
+
+/* ---------- Mundo: pesquisas, protestos, consulta popular, objetivos, crise ---------- */
+export function cnt(k, n = 1) {
+  ensurePoder()
+  if (!game.poder.cnt) game.poder.cnt = {}
+  const key = game.stage + ':' + k
+  game.poder.cnt[key] = (game.poder.cnt[key] || 0) + n
+}
+export const cntOf = (k) => (game.poder && game.poder.cnt && game.poder.cnt[game.stage + ':' + k]) || 0
+export const cntAll = (k) => Object.entries((game.poder && game.poder.cnt) || {}).filter(([x]) => x.endsWith(':' + k)).reduce((a, [, v]) => a + v, 0)
+export const pesquisas = () => (game.poder && game.poder.polls) || []
+export const aprovacao = () => {
+  const s = game.stats
+  return Math.round(Math.max(0, Math.min(100, 0.6 * s.pop + 0.2 * s.img + 0.2 * s.cong)))
+}
+export const GOALS = [
+  { id: 'fisc', kind: 'leg', icon: '🔎', text: 'Fiscalizar 3 vezes', need: 3, val: () => cntOf('fisc') },
+  { id: 'leis', kind: 'all', icon: '📜', text: 'Ter 2 leis ou decretos ativos', need: 2, val: () => statutesActive().length },
+  { id: 'cpi', kind: 'leg', icon: '🕵️', text: 'Fazer uma CPI dar resultado', need: 1, val: () => cntOf('cpiok') },
+  { id: 'nome', kind: 'exec', icon: '🎓', text: 'Preencher as 3 pastas do governo', need: 3, val: () => nomeados().length },
+  { id: 'aprov', kind: 'exec', icon: '📊', text: 'Chegar a 55% de aprovação', need: 55, val: () => aprovacao() },
+  { id: 'pop', kind: 'all', icon: '❤️', text: 'Manter popularidade acima de 60', need: 60, val: () => Math.round(game.stats.pop) },
+]
+export const goalsNow = () => GOALS.filter((g) => g.kind === 'all' || (g.kind === 'exec') === isExec()).map((g) => ({ ...g, v: g.val(), done: !!(game.poder.goalsDone || []).includes(game.stage + ':' + g.id) }))
+function checkGoals() {
+  ensurePoder()
+  if (!game.poder.goalsDone) game.poder.goalsDone = []
+  for (const g of goalsNow()) {
+    if (g.done || g.v < g.need) continue
+    game.poder.goalsDone.push(game.stage + ':' + g.id)
+    applyFx({ img: 2, pop: 2 }, true)
+    timelineAdd('🎯', `Meta cumprida: ${g.text.toLowerCase()}`, 'up')
+    toast('🎯', `Meta do mandato: ${g.text}.`)
+  }
+}
+export const protesto = () => (game.poder && game.poder.prot) || null
+export const consultaFeita = () => !!(game.poder && game.poder.cons === game.stage)
+export const emCrise = () => isExec() && game.stats.pop <= 30 && game.stats.cong <= 30
+function roundMundo() {
+  const p = game.poder
+  if (!p.polls) p.polls = []
+  p.polls.push({ r: game.total, v: Math.max(0, Math.min(100, aprovacao() + Math.round((R() - 0.5) * 5))) })
+  p.polls = p.polls.slice(-8)
+  if (p.prot) {
+    applyFx({ pop: -3, cong: -1 }, true)
+    timelineAdd('✊', `${p.prot.name} cresce sem resposta de ${game.name}`, 'down')
+    p.prot = null
+  }
+  const low = Math.min(game.stats.pop, game.stats.soc, game.stats.eco)
+  if (low < 40 && R() < 0.1 + (40 - low) / 120) {
+    const greve = game.stats.soc < game.stats.pop
+    p.prot = { kind: greve ? 'greve' : 'protesto', name: greve ? 'Greve dos servidores' : 'Protestos nas ruas', round: game.total }
+    toast('✊', `${p.prot.name}: o país cobra uma resposta.`)
+    timelineAdd('✊', `${p.prot.name} contra ${game.name}`, 'down')
+    pushTrend('#' + (greve ? 'Greve' : 'Protesto'), 75)
+  }
+  checkGoals()
+}
+export function responderProtesto(how) {
+  const pr = protesto()
+  if (!pr || game.phase !== 'actions') return null
+  game.delta = {}
+  let fx
+  if (how === 'dialogar') {
+    if (game.stats.cash < 2) return null
+    fx = { cash: -2, pop: 1, img: 1 }
+  } else if (how === 'reprimir' && isExec()) {
+    fx = game.stats.seg >= 50 ? { pop: -1, img: -3 } : { pop: -3, img: -5 }
+    game.heat = clamp(game.heat + 4)
+  } else if (how === 'apoiar' && !isExec()) fx = { pop: 2, cong: -1, img: -1 }
+  else return null
+  applyFx(fx, true)
+  game.poder.prot = null
+  timelineAdd(how === 'dialogar' ? '🤝' : how === 'reprimir' ? '🚔' : '📣', `${game.name} ${how === 'dialogar' ? 'abre negociação com' : how === 'reprimir' ? 'reprime' : 'apoia'} ${pr.name.toLowerCase()}`, how === 'dialogar' || how === 'apoiar' ? 'up' : 'down')
+  save()
+  return { how, fx }
+}
+export function consultaChance(bill) {
+  return Math.max(0.1, Math.min(0.9, (billSupport(bill, game.total) + (game.stats.pop - 50) / 4) / 100))
+}
+export function consultar(billId) {
+  const b = billById(billId)
+  if (!b || consultaFeita() || game.phase !== 'actions' || game.stats.cash < 3) return null
+  ensurePoder()
+  game.poder.cons = game.stage
+  game.delta = {}
+  const ok = R() < consultaChance(b)
+  applyFx(ok ? { cash: -3, pop: 3, img: 1 } : { cash: -3, pop: -3, cong: -1 }, true)
+  if (ok) {
+    enactStatute(b, 'plenario', 1)
+    cnt('consulta')
+  }
+  timelineAdd('🗳️', ok ? `Consulta popular aprova “${b.title}”` : `Consulta popular rejeita “${b.title}”`, ok ? 'up' : 'down')
+  toast('🗳️', ok ? 'O povo aprovou na consulta.' : 'O povo rejeitou na consulta.')
+  save()
+  return { ok, b }
+}
+export function articular() {
+  if (!emCrise() || game.phase !== 'actions' || game.stats.cash < 3 || (game.poder.art === game.total)) return false
+  game.poder.art = game.total
+  game.delta = {}
+  applyFx({ cash: -3, cong: 4, img: -1 }, true)
+  timelineAdd('🤝', `${game.name} articula com a base para evitar o pior`, 'flat')
   save()
   return true
 }

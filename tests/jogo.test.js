@@ -322,3 +322,52 @@ describe('judiciário', () => {
     expect(E.inquerito().def && E.inquerito().col).toBe(true)
   })
 })
+
+describe('mundo: pesquisas, protestos, consulta, metas', () => {
+  const novo = (office = 'presidente') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 50
+  }
+  it('aprovação fica entre 0 e 100', () => {
+    novo()
+    expect(E.aprovacao()).toBeGreaterThanOrEqual(0)
+    expect(E.aprovacao()).toBeLessThanOrEqual(100)
+  })
+  it('protesto pode ser negociado; reprimir só vale para executivo', () => {
+    novo()
+    E.game.poder.prot = { kind: 'greve', name: 'Greve dos servidores', round: 1 }
+    expect(E.responderProtesto('apoiar')).toBe(null)
+    expect(E.responderProtesto('dialogar')).toBeTruthy()
+    expect(E.protesto()).toBe(null)
+    novo('dep_federal')
+    E.game.poder.prot = { kind: 'protesto', name: 'Protestos nas ruas', round: 1 }
+    expect(E.responderProtesto('reprimir')).toBe(null)
+    expect(E.responderProtesto('apoiar')).toBeTruthy()
+  })
+  it('consulta popular só uma vez por mandato', () => {
+    novo()
+    const b = billsOf('presidente')[0]
+    const r = E.consultar(b.id)
+    expect(typeof r.ok).toBe('boolean')
+    expect(E.consultaFeita()).toBe(true)
+    expect(E.consultar(b.id)).toBe(null)
+  })
+  it('crise de poderes aparece só com povo e base muito baixos', () => {
+    novo()
+    E.game.stats.pop = 20
+    E.game.stats.cong = 20
+    expect(E.emCrise()).toBe(true)
+    expect(E.articular()).toBe(true)
+    E.game.stats.pop = 60
+    expect(E.emCrise()).toBe(false)
+  })
+  it('metas listam as do cargo', () => {
+    novo()
+    expect(E.goalsNow().some((g) => g.id === 'nome')).toBe(true)
+    novo('vereador')
+    expect(E.goalsNow().some((g) => g.id === 'fisc')).toBe(true)
+    expect(E.goalsNow().some((g) => g.id === 'nome')).toBe(false)
+  })
+})
