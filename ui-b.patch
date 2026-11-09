@@ -1,0 +1,316 @@
+diff --git a/src/components/Scene3D.vue b/src/components/Scene3D.vue
+index 13198cd..c9ff26b 100644
+--- a/src/components/Scene3D.vue
++++ b/src/components/Scene3D.vue
+@@ -6,11 +6,19 @@ const props = defineProps({
+   pop: { type: Number, default: 50 },
+   eco: { type: Number, default: 50 },
+   stage: { type: Number, default: 1 },
++  office: { type: String, default: '' },
++  war: { type: Number, default: 0 },
+ })
+ 
+ const root = ref(null)
+ const COUNT = 220
+-let renderer, scene, camera, sun, people, raf, ro, group, hemi
++let renderer, scene, camera, sun, people, raf, ro, group, hemi, clouds, smoke, cloudMat
++const flags = []
++// qualidade: ?q=low | ?q=high | automático (aparelho fraco = modo leve)
++const qParam = new URLSearchParams(location.search).get('q')
++const isMobile = typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches
++const LOW = qParam === 'low' || (qParam !== 'high' && isMobile && (navigator.deviceMemory || 4) <= 3)
++const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+ const rand = []
+ const home = []
+ const dummy = new THREE.Object3D()
+@@ -24,13 +32,30 @@ const THEMES = [
+   { sky: 0xe9c6ff, ground: 0x3f6b46, sun: 0xffe2b8, cam: { r: 58, h: 18, look: [0, 8, 8] } }, // governador: palácio ao entardecer
+   { sky: 0x8fd0ff, ground: 0x2c5a3c, sun: 0xffffff, cam: { r: 64, h: 20, look: [0, 7, 6] } }, // presidente: Planalto
+ ]
+-const theme = () => THEMES[props.stage] || THEMES[1]
++// ajustes de céu por cargo (quando o cargo tem cara própria)
++const THEME_OV = {
++  prefeito: { sky: 0xbfe0ff, sun: 0xffffff },
++  dep_estadual: { sky: 0xcfe3ff },
++  senador: { sky: 0xffd9b8, sun: 0xffe2b8 },
++}
++const theme = () => ({ ...(THEMES[props.stage] || THEMES[1]), ...(THEME_OV[props.office] || {}) })
+ const skyFor = (eco) => new THREE.Color(0x1a2233).lerp(new THREE.Color(theme().sky), Math.min(1, Math.max(0, eco / 100)))
+-const mat = (c, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, ...extra })
++const matCache = new Map()
++const mat = (c, extra = {}) => {
++  const key = c + JSON.stringify(extra)
++  let m = matCache.get(key)
++  if (!m) {
++    m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, ...extra })
++    matCache.set(key, m)
++  }
++  return m
++}
+ 
+ function add(geo, material, x, y, z) {
+   const m = new THREE.Mesh(geo, material)
+   m.position.set(x, y, z)
++  m.castShadow = !LOW
++  m.receiveShadow = !LOW
+   group.add(m)
+   return m
+ }
+@@ -56,10 +81,17 @@ function trees(n, zMin, zRange, xMin) {
+ 
+ function flag(x, z, h = 16) {
+   cyl(0.12, 0.12, h, 0xdddddd, x, h / 2, z, 8)
+-  box(4.2, 2.8, 0.1, 0x1b8a3c, x + 2.2, h - 1.6, z)
+-  const d = add(new THREE.BoxGeometry(2, 2, 0.12), mat(0xffd21f), x + 2.2, h - 1.6, z + 0.02)
++  const cloth = new THREE.Group()
++  cloth.position.set(x, h - 1.6, z)
++  const pano = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.8, 0.1), mat(0x1b8a3c))
++  pano.position.x = 2.1
++  const d = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.12), mat(0xffd21f))
++  d.position.set(2.1, 0, 0.02)
+   d.rotation.z = Math.PI / 4
+   d.scale.set(0.75, 0.75, 1)
++  cloth.add(pano, d)
++  group.add(cloth)
++  flags.push(cloth)
+ }
+ 
+ // ---------- cenários ----------
+@@ -182,14 +214,91 @@ function buildPresidente() {
+   trees(40, 20, 120, 42)
+ }
+ 
++function car(x, z, c, ry = 0) {
++  const g = new THREE.Group()
++  const body = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.9, 1.7), mat(c))
++  body.position.y = 0.7
++  const top = new THREE.Mesh(new THREE.BoxGeometry(2, 0.7, 1.5), mat(0x1f2937))
++  top.position.set(-0.2, 1.4, 0)
++  g.add(body, top)
++  g.position.set(x, 0, z)
++  g.rotation.y = ry
++  g.traverse((o) => { o.castShadow = !LOW })
++  group.add(g)
++}
++
++function buildPrefeito() {
++  // praça + Paço Municipal com torre do relógio, bandeiras e carros oficiais
++  buildVereador()
++  box(5, 20, 5, 0xf3e6c8, 19, 10, 0)
++  box(6, 1, 6, 0xb91c1c, 19, 20.5, 0)
++  const spire = add(new THREE.ConeGeometry(3.4, 4.5, 4), mat(0xb91c1c), 19, 23.2, 0)
++  spire.rotation.y = Math.PI / 4
++  cyl(1.7, 1.7, 0.3, 0xffffff, 19, 16, 2.6, 24).rotation.x = Math.PI / 2
++  flag(-22, 8, 15)
++  flag(-30, 8, 15)
++  car(-8, 27, 0x111827)
++  car(8, 28, 0xe5e7eb, Math.PI)
++}
++
++function buildAssembleia() {
++  // Assembleia Legislativa: rotunda com cúpula, alas laterais, escadaria e avenida
++  const road = add(new THREE.PlaneGeometry(14, 200), mat(0x4b5563), 0, 0.03, 110)
++  road.rotation.x = -Math.PI / 2
++  const lawn = add(new THREE.PlaneGeometry(64, 30), mat(0x4f9a53), 0, 0.04, 16)
++  lawn.rotation.x = -Math.PI / 2
++  box(18, 1, 12, 0xd6d3d1, 0, 0.5, 4)
++  cyl(9, 9, 9, 0xeee8d8, 0, 5, -4, 36)
++  const dome = add(new THREE.SphereGeometry(9, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xaab9c4, { roughness: 0.35 }), 0, 9.5, -4)
++  dome.scale.y = 0.85
++  cyl(1.2, 1.5, 3, 0xeee8d8, 0, 17.4, -4, 16)
++  box(18, 6.5, 9, 0xe7dfc9, -17, 3.7, -4)
++  box(18, 6.5, 9, 0xe7dfc9, 17, 3.7, -4)
++  for (let i = 0; i < 9; i++) {
++    const a = -1.25 + (i * 2.5) / 8
++    cyl(0.5, 0.5, 8, 0xffffff, Math.sin(a) * 9.8, 5, -4 + Math.cos(a) * 9.8, 10)
++  }
++  box(14, 0.5, 4, 0xe7e5e4, 0, 0.7, 6.5)
++  flag(-14, 9, 15)
++  flag(14, 9, 15)
++  cyl(3.4, 3.6, 0.7, 0xd6d3d1, 0, 0.5, 20, 24)
++  cyl(2.8, 2.8, 0.8, 0x3b82c4, 0, 0.6, 20, 24)
++  for (let i = 0; i < 12; i++) {
++    const side = i % 2 ? 1 : -1
++    const h = 7 + ((i * 29) % 15)
++    box(7, h, 7, [0x94a3b8, 0xcbd5e1, 0xe2e8f0][i % 3], side * (38 + (i % 3) * 5), h / 2, 34 + Math.floor(i / 2) * 11)
++  }
++  car(-4, 60, 0x111827, Math.PI / 2)
++  trees(45, 26, 110, 26)
++}
++
++function buildSenado() {
++  // Congresso Nacional com a cúpula do Senado em destaque e bandeiras
++  buildDeputado()
++  flag(-19, 9, 18)
++  flag(19, 9, 18)
++}
++
++const SET_BY_OFFICE = {
++  vereador: buildVereador,
++  prefeito: buildPrefeito,
++  dep_estadual: buildAssembleia,
++  dep_federal: buildDeputado,
++  senador: buildSenado,
++  governador: buildGovernador,
++  presidente: buildPresidente,
++}
+ const SETS = [buildVereador, buildDeputado, buildGovernador, buildPresidente]
++const setFor = () => SET_BY_OFFICE[props.office] || SETS[props.stage] || buildDeputado
+ 
+ function clearGroup() {
+   if (!group) return
+   group.traverse((o) => {
+     if (o.geometry) o.geometry.dispose()
+-    if (o.material) o.material.dispose()
+   })
++  matCache.forEach((m) => m.dispose())
++  matCache.clear()
++  flags.length = 0
+   scene.remove(group)
+ }
+ 
+@@ -199,7 +308,7 @@ function buildSet() {
+   scene.add(group)
+   const g = add(new THREE.PlaneGeometry(500, 500), mat(theme().ground), 0, 0, 0)
+   g.rotation.x = -Math.PI / 2
+-  ;(SETS[props.stage] || buildDeputado)()
++  setFor()()
+   if (sun) sun.color.set(theme().sun)
+   applyEco()
+   sky.copy(targetSky)
+@@ -217,8 +326,12 @@ function paintPeople() {
+ }
+ 
+ function applyEco() {
+-  targetSky.copy(skyFor(props.eco))
+-  if (sun) sun.intensity = 0.5 + (props.eco / 100) * 0.9
++  // economia clareia o céu; popularidade baixa deixa tudo mais cinzento
++  const gloom = Math.max(0, 1 - props.pop / 60)
++  targetSky.copy(skyFor(props.eco)).lerp(new THREE.Color(0x4a5160), gloom * 0.35)
++  if (sun) sun.intensity = (0.5 + (props.eco / 100) * 0.9) * (1 - gloom * 0.25)
++  if (hemi) hemi.intensity = 0.75 - gloom * 0.2
++  if (cloudMat) cloudMat.color.set(0xffffff).lerp(new THREE.Color(0x8b93a1), Math.max(0, 1 - props.eco / 70) * 0.8)
+ }
+ 
+ function build() {
+@@ -229,9 +342,45 @@ function build() {
+   scene.add(hemi)
+   sun = new THREE.DirectionalLight(0xffffff, 1.1)
+   sun.position.set(30, 50, 30)
++  if (!LOW) {
++    sun.castShadow = true
++    sun.shadow.mapSize.set(isMobile ? 1024 : 2048, isMobile ? 1024 : 2048)
++    const sc = sun.shadow.camera
++    sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70; sc.near = 5; sc.far = 160
++    sun.shadow.bias = -0.0005
++    sun.shadow.normalBias = 0.05
++  }
+   scene.add(sun)
+ 
+-  people = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.28, 0.7, 4, 8), mat(0xffffff), COUNT)
++  // nuvens que passam devagar
++  cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, fog: false })
++  clouds = new THREE.Group()
++  for (let i = 0; i < 9; i++) {
++    const c = new THREE.Group()
++    for (let k = 0; k < 4; k++) {
++      const part = new THREE.Mesh(new THREE.SphereGeometry(4 + Math.random() * 3, 10, 8), cloudMat)
++      part.position.set(k * 5 - 8, Math.random() * 2, Math.random() * 3)
++      part.scale.y = 0.55
++      c.add(part)
++    }
++    c.position.set(-150 + i * 38, 62 + (i % 3) * 10, -110 - (i % 4) * 25)
++    clouds.add(c)
++  }
++  scene.add(clouds)
++
++  // fumaça de guerra no horizonte
++  smoke = new THREE.Group()
++  const smokeMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 1, transparent: true, opacity: 0.6 })
++  for (let i = 0; i < 9; i++) {
++    const puff = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), smokeMat.clone())
++    puff.userData = { ph: Math.random() * 30, x: -70 + (i % 3) * 70 + Math.random() * 10, z: -75 - Math.random() * 15 }
++    smoke.add(puff)
++  }
++  smoke.visible = false
++  scene.add(smoke)
++
++  people = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.28, 0.7, 4, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), COUNT)
++  people.castShadow = !LOW
+   for (let i = 0; i < COUNT; i++) {
+     rand.push(Math.random())
+     home.push({ x: (Math.random() - 0.5) * 20, z: 9 + Math.random() * 22, ph: Math.random() * 6.28 })
+@@ -247,12 +396,23 @@ function resize() {
+   const h = root.value.clientHeight
+   renderer.setSize(w, h)
+   camera.aspect = w / h
++  // no desktop, desloca o enquadramento para o centro da área livre entre os painéis
++  if (w > 900) {
++    const rw = Math.min(560, Math.max(420, w * 0.39))
++    camera.setViewOffset(w, h, Math.round((rw - 280) / 2), 0, w, h)
++  } else {
++    camera.clearViewOffset()
++  }
+   camera.updateProjectionMatrix()
+ }
+ 
+ onMounted(() => {
+-  renderer = new THREE.WebGLRenderer({ antialias: true })
+-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
++  renderer = new THREE.WebGLRenderer({ antialias: !LOW })
++  renderer.setPixelRatio(Math.min(window.devicePixelRatio, LOW ? 1 : 2))
++  if (!LOW) {
++    renderer.shadowMap.enabled = true
++    renderer.shadowMap.type = THREE.PCFSoftShadowMap
++  }
+   root.value.appendChild(renderer.domElement)
+   camera = new THREE.PerspectiveCamera(50, 1, 0.1, 600)
+   build()
+@@ -265,14 +425,33 @@ onMounted(() => {
+     raf = requestAnimationFrame(loop)
+     const t = clock.getElapsedTime()
+     const cam = theme().cam
+-    const a = Math.sin(t * 0.12) * 0.45
+-    camera.position.set(Math.sin(a) * cam.r, cam.h + Math.sin(t * 0.2) * 1.5, Math.cos(a) * cam.r + 16)
++    const a = REDUCED ? 0 : Math.sin(t * 0.12) * 0.45
++    camera.position.set(Math.sin(a) * cam.r, cam.h + (REDUCED ? 0 : Math.sin(t * 0.2) * 1.5), Math.cos(a) * cam.r + 16)
+     camera.lookAt(...cam.look)
+ 
+     sky.lerp(targetSky, 0.03)
+     scene.background.copy(sky)
+     scene.fog.color.copy(sky)
+ 
++    if (!REDUCED) {
++      for (const f of flags) f.rotation.y = Math.sin(t * 2 + f.position.x) * 0.18
++      for (const c of clouds.children) {
++        c.position.x += 0.012
++        if (c.position.x > 170) c.position.x = -170
++      }
++    }
++    smoke.visible = props.war > 0
++    if (smoke.visible) {
++      const n = Math.min(smoke.children.length, 3 + props.war * 3)
++      smoke.children.forEach((p, i) => {
++        p.visible = i < n
++        const k = ((t * 1.5 + p.userData.ph) % 30) / 30
++        p.position.set(p.userData.x + k * 6, 2 + k * 28, p.userData.z)
++        p.scale.setScalar(1 + k * 2.2)
++        p.material.opacity = 0.6 * (1 - k)
++      })
++    }
++
+     const happy = props.pop / 100
+     for (let i = 0; i < COUNT; i++) {
+       const p = home[i]
+@@ -297,9 +476,9 @@ onBeforeUnmount(() => {
+   }
+ })
+ 
+-watch(() => props.pop, () => people && paintPeople())
++watch(() => props.pop, () => { if (people) paintPeople(); applyEco() })
+ watch(() => props.eco, applyEco)
+-watch(() => props.stage, () => scene && buildSet())
++watch(() => [props.stage, props.office], () => scene && buildSet())
+ </script>
+ 
+ <template>
