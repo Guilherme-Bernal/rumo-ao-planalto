@@ -8,6 +8,7 @@ import StartScreen from './components/StartScreen.vue'
 import StatsPanel from './components/StatsPanel.vue'
 import Hub from './components/Hub.vue'
 import Sandbox from './components/Sandbox.vue'
+import Apoie from './components/Apoie.vue'
 const showSandbox = import.meta.env.DEV || new URLSearchParams(location.search).has('sandbox')
 import EndScreen from './components/EndScreen.vue'
 import { downloadSave } from './game/savefile'
@@ -57,5 +58,6 @@ function restart() {
     <StatsPanel class="stats panel" />
     <Hub class="main panel" />
     <Sandbox v-if="showSandbox" />
+    <Apoie />
   </div>
 </template>
