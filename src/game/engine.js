@@ -1194,7 +1194,8 @@ function buildRecap(before) {
   pushPosts(2, t > 1 ? 'up' : t < -1 ? 'down' : 'flat', 'Governo')
   const g = GENERIC_TAGS[Math.floor(R() * GENERIC_TAGS.length)]
   pushTrend(g[0], 40 + g[1] * 50)
-  return { months, diff, from: start, to: start + mp - 1 }
+  const bastidores = ((game.poder && game.poder.timeline) || []).filter((x) => x.r === game.total).slice(0, 8)
+  return { months, diff, from: start, to: start + mp - 1, bastidores }
 }
 
 const viceNote = () => {

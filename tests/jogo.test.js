@@ -536,4 +536,13 @@ describe('defesa, golpes e guerra civil', () => {
     }
     expect(achou).toBe(true)
   })
+  it('recap lista os fatos de bastidores da rodada', () => {
+    novo()
+    E.game.phase = 'actions'
+    E.game.poder.plot = { force: 'ex', leader: 'General Fulano', strength: 50, round: 1 }
+    E.enfrentarPlot('denunciar')
+    E.endTurn()
+    expect(E.game.phase === 'recap' || E.game.phase === 'over').toBe(true)
+    if (E.game.phase === 'recap') expect(Array.isArray(E.game.recap.bastidores)).toBe(true)
+  })
 })

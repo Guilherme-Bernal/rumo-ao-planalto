@@ -54,6 +54,8 @@ const cena = computed(() => {
   if (game.phase === 'result' || game.phase === 'runoff') return 'apuracao'
   if (game.phase === 'campaign') return 'comicio'
   const p = game.poder
+  if (p && p.civil) return 'guerra'
+  if (p && p.plot) return 'crise'
   if (p && (p.acao || (p.inq && p.inq.stage === game.stage))) return 'tribunal'
   if (p && p.prot) return 'protesto'
   return ''

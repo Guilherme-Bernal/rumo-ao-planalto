@@ -51,6 +51,8 @@ const CENA_OV = {
   comicio: { sky: 0xffb86b, sun: 0xffe0b0, ground: 0x5b7f3a, cam: { r: 46, h: 12, look: [0, 6, 8] } },
   tribunal: { sky: 0xcfd8e8, sun: 0xffffff, ground: 0x6b7a63, cam: { r: 56, h: 16, look: [0, 8, 0] } },
   protesto: { sky: 0xb7a99a, sun: 0xffd9b0 },
+  crise: { sky: 0x6b5a5a, sun: 0xffb199 },
+  guerra: { sky: 0x3a2f2f, sun: 0xff8a4d, ground: 0x4a3f33 },
   apuracao: { sky: 0x1b2347, sun: 0x8fa2d6, ground: 0x1f2c25, cam: { r: 46, h: 12, look: [0, 7, 6] } },
 }
 const theme = () => ({ ...(THEMES[props.stage] || THEMES[1]), ...(THEME_OV[props.office] || {}), ...(CENA_OV[props.cena] || {}) })
@@ -394,6 +396,46 @@ function protestOverlay() {
     floaters.push(f)
   }
 }
+// crise/guerra: o cenário do cargo, com blindados, barricadas, fogo e colunas de fumaça
+function tank(x, z, ry) {
+  const t = new THREE.Group()
+  group.add(t)
+  const part = (geo, c, px, py, pz) => {
+    const m = new THREE.Mesh(geo, mat(c))
+    m.position.set(px, py, pz)
+    m.castShadow = !isLow()
+    t.add(m)
+    return m
+  }
+  part(new THREE.BoxGeometry(4.4, 1.1, 2.6), 0x3f4a2f, 0, 0.9, 0)
+  part(new THREE.BoxGeometry(5, 0.7, 0.9), 0x1f2937, 0, 0.35, 1.35)
+  part(new THREE.BoxGeometry(5, 0.7, 0.9), 0x1f2937, 0, 0.35, -1.35)
+  part(new THREE.BoxGeometry(2.2, 0.9, 1.8), 0x4b5a38, -0.2, 1.85, 0)
+  const barrel = part(new THREE.CylinderGeometry(0.15, 0.15, 3.4, 8), 0x2b3320, 2, 1.9, 0)
+  barrel.rotation.z = Math.PI / 2
+  t.position.set(x, 0, z)
+  t.rotation.y = ry
+}
+function crisisOverlay(war) {
+  for (const [x, z, r] of [[-10, 14, 0.2], [0, 17, 0], [10, 14, -0.2]]) tank(x, z, r)
+  for (let i = 0; i < 12; i++) {
+    const x = -22 + i * 4
+    box(3, 1.1, 1.1, i % 2 ? 0x6b7280 : 0x57534e, x, 0.55, 22 + (i % 2))
+  }
+  const n = war ? 7 : 2
+  for (let i = 0; i < n; i++) {
+    const x = -24 + i * (48 / Math.max(1, n - 1))
+    const z = 4 + (i % 3) * 4
+    cyl(0.9, 1.1, 1.2, 0x292524, x, 0.6, z, 10)
+    const f = add(new THREE.SphereGeometry(0.8, 10, 8), mat(0xf97316, { emissive: 0xea580c, emissiveIntensity: 1.6 }), x, 1.8, z)
+    f.userData = { y0: 1.8, ph: Math.random() * 6.28 }
+    floaters.push(f)
+    if (war) {
+      const smoke = add(new THREE.CylinderGeometry(1.2, 2.4, 14, 8), mat(0x44403c, { transparent: true, opacity: 0.55 }), x, 8.5, z)
+      smoke.castShadow = false
+    }
+  }
+}
 const CENA_SET = { comicio: buildComicio, tribunal: buildTribunal, apuracao: buildApuracao }
 const SETS = [buildVereador, buildDeputado, buildGovernador, buildPresidente]
 const setFor = () => SET_BY_OFFICE[props.office] || SETS[props.stage] || buildDeputado
@@ -418,6 +460,7 @@ function buildSet() {
   g.rotation.x = -Math.PI / 2
   ;(CENA_SET[props.cena] || setFor())()
   if (props.cena === 'protesto') protestOverlay()
+  if (props.cena === 'crise' || props.cena === 'guerra') crisisOverlay(props.cena === 'guerra')
   if (sun) sun.color.set(theme().sun)
   applyEco()
   sky.copy(targetSky)

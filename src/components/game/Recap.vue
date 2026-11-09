@@ -17,6 +17,12 @@ const lab = Object.fromEntries(STATS.map((s) => [s.k, s]))
         </div>
       </li>
     </ol>
+    <div v-if="game.recap.bastidores && game.recap.bastidores.length" class="sumbox" style="margin-bottom: 8px">
+      <b>📋 O que aconteceu nos bastidores</b>
+      <ul class="bastidores">
+        <li v-for="(b, i) in game.recap.bastidores" :key="i" :class="b.tone"><span>{{ b.icon }}</span> {{ b.text }}</li>
+      </ul>
+    </div>
     <div class="sumbox">
       <b>Balanço do período</b>
       <div style="margin-top: 6px">
@@ -27,3 +33,9 @@ const lab = Object.fromEntries(STATS.map((s) => [s.k, s]))
     <button class="primary" style="width: 100%; margin-top: 12px" @click="continueRecap">Seguir em frente</button>
   </div>
 </template>
+
+<style scoped>
+.bastidores { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 0.9em; }
+.bastidores li.up { color: var(--good); }
+.bastidores li.down { color: var(--bad); }
+</style>
