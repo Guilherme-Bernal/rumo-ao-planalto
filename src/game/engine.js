@@ -2012,6 +2012,7 @@ export function lawChance(temaId, ousId) {
   const peer = fedDefs().find((d) => d.dir === 'peer')
   let p = 0.3 + (game.stats.cong - 50) / 130 + co.votes * 0.05 - (co.angry ? 0.12 : 0) - (ousId - 1) * 0.13
   if (peer) p += ((game.world.fed[peer.id] ?? 50) - 50) / 250
+  p += comissaoBonus(temaId)
   return Math.min(0.92, Math.max(0.06, p))
 }
 export function lawsActive() {
@@ -2022,7 +2023,8 @@ export function proposeLaw(temaId, ousId) {
   const t = TEMAS.find((x) => x.id === temaId)
   const o = OUSADIA.find((x) => x.id === ousId)
   if (game.phase !== 'actions' || w.lawUsed || !t || !o || lawHas(temaId, ousId) || game.stats.cash < o.cost) return false
-  w.lawUsed = true
+  w.lawN = (w.lawN || 0) + 1
+  if (w.lawN >= lawCap()) w.lawUsed = true
   game.delta = {}
   const name = lawName(temaId, ousId)
   if (R() < lawChance(temaId, ousId)) {
@@ -2057,6 +2059,7 @@ function tickWorld() {
   const pres = officeId() === 'presidente'
   w.pts = 2
   w.lawUsed = false
+  w.lawN = 0
   w.last = null
   for (const k in w.rel) w.rel[k] = clamp(w.rel[k] + (50 - w.rel[k]) * 0.04)
   for (const k in w.fed) w.fed[k] = clamp(w.fed[k] + (50 - w.fed[k]) * 0.06)
@@ -2184,6 +2187,7 @@ export function devWorld(what) {
   } else if (what === 'pts') {
     w.pts = 9
     w.lawUsed = false
+    w.lawN = 0
   }
   save()
 }
@@ -2449,6 +2453,8 @@ export const statutesActive = () => ((game.poder && game.poder.statutes) || []).
 function statutePassive() {
   const fx = {}
   for (const st of statutesActive()) for (const k in st.fx) fx[k] = Math.max(-1.2, Math.min(1.2, (fx[k] || 0) + st.fx[k]))
+  const c = comissaoAtiva()
+  if (c) fx[c.stat] = Math.min(1.2, (fx[c.stat] || 0) + 0.4)
   return fx
 }
 function tickStatutes() {
@@ -2464,6 +2470,7 @@ const PRESS = {
   passou: ['📜', (w, b) => `“${b}” passa, apesar da oposição de ${w}`, 'down'],
   barrada: ['🚧', (w, b) => `Plenário barra “${b}” com a ajuda de ${w}`, 'up'],
   rejeitada: ['📉', (w, b) => `“${b}” é rejeitado e ${w} perde a votação`, 'down'],
+  adiada: ['⏸️', (w, b) => `Pedido de vista de ${w} adia a votação de “${b}”`, 'up'],
   prazo: ['⏳', (w, b) => `“${b}” vira lei por decurso de prazo; ${w} não decidiu`, 'flat'],
 }
 function pressLaw(kind, bill) {
@@ -2505,17 +2512,22 @@ function plenaryAftermath(bill, won, concessions, stance) {
   } else if (won) {
     pressLaw('barrada', bill)
     betray(1, `Barrou “${bill.title}” com você`)
+  } else if (game.poder.obstr && R() < 0.5) {
+    pressLaw('adiada', bill)
+    betray(0, `Obstruiu “${bill.title}”`)
   } else {
     enactStatute(bill, 'plenario', k * 0.5)
     pressLaw('passou', bill)
     betray(-1, `Perdeu a briga contra “${bill.title}”`)
   }
+  game.poder.obstr = false
 }
 
 // Executivo: um projeto do Legislativo chega para sanção ou veto
 function roundPoder() {
   ensurePoder()
   const p = game.poder
+  p.leg = { used: [] }
   if (p.pending) {
     // não decidiu na rodada: vira lei por decurso de prazo
     const b = billById(p.pending.billId)
@@ -2585,4 +2597,163 @@ export function decideBill(choice) {
   log(`${choice === 'sancionar' ? 'Sancionou' : choice === 'parcial' ? 'Vetou parcialmente' : 'Vetou'} “${bill.title}”${overridden ? ' (veto derrubado)' : ''}.`)
   save()
   return { choice, bill, fx, overridden, passed }
+}
+
+/* ---------- Legislativo: fiscalização, comissões, CPI, emendas, obstrução ---------- */
+export const isLeg = () => !isExec()
+export const lawCap = () => (isLeg() ? 3 : 1)
+const SCOPE = {
+  vereador: { k: 'mun', name: 'da cidade', m: 1 },
+  dep_estadual: { k: 'est', name: 'do estado', m: 1.25 },
+  dep_federal: { k: 'fed', name: 'do país', m: 1.5 },
+  senador: { k: 'fed', name: 'do país', m: 1.5 },
+}
+export const legScope = () => SCOPE[officeId()] || SCOPE.vereador
+export const VISITS = [
+  { id: 'hospital', icon: '🏥', name: 'Hospitais e postos de saúde', stat: 'soc', ok: 'Filas, falta de remédio e macas no corredor. Você grava tudo e cobra o Executivo.', fine: 'O hospital está em ordem e a equipe agradece a visita.' },
+  { id: 'delegacia', icon: '🚓', name: 'Delegacias e batalhões', stat: 'seg', ok: 'Viaturas paradas e efetivo no limite. A denúncia vira pauta.', fine: 'A polícia mostra resultados e recebe você bem.' },
+  { id: 'escola', icon: '🏫', name: 'Escolas públicas', stat: 'soc', ok: 'Telhado caindo e merenda faltando. Os pais te acompanham nas redes.', fine: 'Escola funcionando e alunos felizes na foto.' },
+  { id: 'obra', icon: '🚧', name: 'Obras e contratos', stat: 'eco', ok: 'Obra parada e contrato com preço inflado. O Tribunal de Contas é acionado.', fine: 'A obra está no prazo e você ganha um bom registro.' },
+]
+const legUsed = (id) => !!(game.poder && game.poder.leg && game.poder.leg.used.includes(id))
+export const legLeft = () => 2 - ((game.poder && game.poder.leg && game.poder.leg.used.length) || 0)
+export const legCan = (id) => isLeg() && game.phase === 'actions' && !legUsed(id) && legLeft() > 0
+function legMark(id) {
+  ensurePoder()
+  if (!game.poder.leg) game.poder.leg = { used: [] }
+  game.poder.leg.used.push(id)
+}
+export function fiscalizar(id) {
+  const v = VISITS.find((x) => x.id === id)
+  if (!v || !legCan('visita:' + id)) return null
+  legMark('visita:' + id)
+  const m = legScope().m
+  const found = R() < 0.55 + (game.stats.img - 50) / 300
+  game.delta = {}
+  curSphere = legScope().k
+  const fx = found ? { pop: Math.round(2 * m * 10) / 10, img: 1, cong: -1, [v.stat]: 1 } : { img: 1.5, pop: Math.round(1 * m * 10) / 10 }
+  applyFx(fx, true)
+  curSphere = null
+  const text = found ? `${game.name} fiscaliza ${v.name.toLowerCase()} ${legScope().name} e denuncia problemas` : `${game.name} visita ${v.name.toLowerCase()} ${legScope().name}`
+  timelineAdd(v.icon, text, found ? 'up' : 'flat')
+  toast(v.icon, found ? 'Você encontrou problemas e a denúncia repercutiu.' : 'Visita feita. Bom registro.')
+  pushPosts(2, found ? 'up' : 'flat', 'Fiscalizacao')
+  log(`Fiscalizou: ${v.name}.`)
+  save()
+  return { found, text: found ? v.ok : v.fine, fx, v }
+}
+export const COMISSOES = [
+  { id: 'saude', icon: '🩺', name: 'Comissão de Saúde', stat: 'soc' },
+  { id: 'seguranca', icon: '🛡️', name: 'Comissão de Segurança', stat: 'seg' },
+  { id: 'economia', icon: '📈', name: 'Comissão de Finanças e Economia', stat: 'eco' },
+  { id: 'educacao', icon: '📚', name: 'Comissão de Educação', stat: 'soc' },
+]
+export const comissaoAtiva = () => {
+  const c = game.poder && game.poder.com
+  if (!c || c.stage !== game.stage || !isLeg()) return null
+  return COMISSOES.find((x) => x.id === c.id) || null
+}
+function comissaoBonus(temaId) {
+  const c = comissaoAtiva()
+  const t = TEMAS.find((x) => x.id === temaId)
+  return c && t && t.stat === c.stat ? 0.08 : 0
+}
+export function escolherComissao(id) {
+  ensurePoder()
+  const c = COMISSOES.find((x) => x.id === id)
+  if (!c || !isLeg() || comissaoAtiva()) return false
+  game.poder.com = { id, stage: game.stage }
+  timelineAdd(c.icon, `${game.name} assume lugar na ${c.name}`, 'up')
+  toast(c.icon, `Você entrou na ${c.name}.`)
+  applyFx({ cong: 2 }, true)
+  save()
+  return true
+}
+export function relatar() {
+  const c = comissaoAtiva()
+  if (!c || !legCan('relatar')) return null
+  legMark('relatar')
+  game.delta = {}
+  const pool = billsOf(officeId()).filter((b) => statuteFx(b, 1)[c.stat])
+  const b = pool.length ? pool[Math.floor(R() * pool.length)] : null
+  const fx = { cong: 1.5, img: 0.5, [c.stat]: 1 }
+  applyFx(fx, true)
+  let enacted = false
+  if (b && R() < 0.25 + (game.stats.cong - 50) / 200) {
+    enactStatute(b, 'plenario', 0.8)
+    pressLaw('aprovada', b)
+    enacted = true
+  } else {
+    timelineAdd(c.icon, `${game.name} relata projetos na ${c.name}`, 'flat')
+  }
+  log(`Relatoria na ${c.name}.`)
+  save()
+  return { fx, bill: enacted ? b : null, c }
+}
+export const cpiDone = () => !!(game.poder && game.poder.cpi === game.stage)
+export const CPIS = [
+  { id: 'exec', icon: '🏛️', name: 'Gestão do Executivo', hard: 0.12 },
+  { id: 'setor', icon: '🏭', name: 'Contratos com empresas', hard: 0 },
+  { id: 'crime', icon: '🕵️', name: 'Crime organizado', hard: 0.08 },
+]
+export function cpiChance(id) {
+  const k = CPIS.find((x) => x.id === id)
+  const c = comissaoAtiva()
+  return Math.max(0.1, Math.min(0.85, 0.4 + (game.stats.cong - 50) / 150 + (game.stats.img - 50) / 250 - (k ? k.hard : 0) + (c ? 0.05 : 0)))
+}
+export function abrirCPI(id) {
+  const k = CPIS.find((x) => x.id === id)
+  if (!k || !isLeg() || cpiDone() || game.phase !== 'actions' || game.stats.cash < 2) return null
+  ensurePoder()
+  game.poder.cpi = game.stage
+  game.delta = {}
+  curSphere = legScope().k
+  const ok = R() < cpiChance(id)
+  const fx = ok ? { img: 4, pop: 3, cong: -2, cash: -2 } : { cong: -4, img: -2, cash: -2 }
+  applyFx(fx, true)
+  curSphere = null
+  game.heat = clamp(game.heat + (ok ? 3 : 1))
+  const text = ok ? `CPI sobre ${k.name.toLowerCase()} encontra irregularidades; ${game.name} é o autor` : `CPI sobre ${k.name.toLowerCase()} naufraga e ${game.name} sai enfraquecido`
+  timelineAdd(k.icon, text, ok ? 'up' : 'down')
+  toast(k.icon, ok ? 'A CPI deu resultado!' : 'A CPI não saiu do papel.')
+  pushPosts(3, ok ? 'up' : 'down', 'CPI')
+  pushTrend('#CPI' + slug(k.name).slice(0, 10), 80)
+  log(`CPI: ${k.name} (${ok ? 'sucesso' : 'fracasso'}).`)
+  save()
+  return { ok, k, fx }
+}
+export const EMENDAS = [
+  { id: 'saude', icon: '🏥', name: 'Reforma de hospital', stat: 'soc' },
+  { id: 'seguranca', icon: '🚓', name: 'Viaturas e equipamentos', stat: 'seg' },
+  { id: 'obra', icon: '🛣️', name: 'Obra de infraestrutura', stat: 'eco' },
+]
+export function emendar(id) {
+  const e = EMENDAS.find((x) => x.id === id)
+  if (!e || !legCan('emenda')) return null
+  legMark('emenda')
+  game.delta = {}
+  curSphere = legScope().k
+  const m = legScope().m
+  const fx = { [e.stat]: Math.round(2 * m * 10) / 10, pop: Math.round(1.5 * m * 10) / 10, cong: -1 }
+  applyFx(fx, true)
+  curSphere = null
+  betray(1, `Emenda sua para ${e.name.toLowerCase()}`)
+  timelineAdd(e.icon, `${game.name} destina emenda parlamentar: ${e.name.toLowerCase()}`, 'up')
+  toast(e.icon, 'Emenda parlamentar destinada.')
+  log(`Emenda: ${e.name}.`)
+  save()
+  return { fx, e }
+}
+export const obstrucaoAtiva = () => !!(game.poder && game.poder.obstr)
+export function obstruir() {
+  if (!legCan('obstrucao') || obstrucaoAtiva()) return false
+  legMark('obstrucao')
+  ensurePoder()
+  game.poder.obstr = true
+  game.delta = {}
+  applyFx({ img: -1, cong: 1 }, true)
+  toast('⏸️', 'Obstrução armada: se perder a próxima votação contra um projeto, pode pedir vista.')
+  log('Armou obstrução.')
+  save()
+  return true
 }

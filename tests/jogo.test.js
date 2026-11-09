@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { billsOf } from '../src/game/bills'
 import { describe, it, expect, beforeAll } from 'vitest'
 
 // localStorage de mentira para rodar o motor sem navegador
@@ -190,5 +191,59 @@ describe('sanção, veto e leis em vigor', () => {
       expect(p).toBeGreaterThanOrEqual(0.05)
       expect(p).toBeLessThanOrEqual(0.9)
     }
+  })
+})
+
+describe('mandato legislativo', () => {
+  const novo = (office = 'dep_federal') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 50
+    E.game.poder.leg = { used: [] }
+  }
+  it('fiscalização gasta uma das 2 ações da rodada e registra na linha do tempo', () => {
+    novo()
+    const r = E.fiscalizar('hospital')
+    expect(r).toBeTruthy()
+    expect(E.legLeft()).toBe(1)
+    expect(E.fiscalizar('hospital')).toBe(null)
+    expect(E.game.poder.timeline.length).toBeGreaterThan(0)
+  })
+  it('executivo não tem ações legislativas', () => {
+    novo('prefeito')
+    expect(E.fiscalizar('hospital')).toBe(null)
+    expect(E.lawCap()).toBe(1)
+  })
+  it('comissão reforça o atributo e só pode ser escolhida uma vez', () => {
+    novo()
+    expect(E.escolherComissao('saude')).toBe(true)
+    expect(E.escolherComissao('economia')).toBe(false)
+    expect(E.comissaoAtiva().stat).toBe('soc')
+    expect(E.relatar()).toBeTruthy()
+  })
+  it('CPI só uma vez por mandato e nunca quebra os atributos', () => {
+    novo('senador')
+    const r = E.abrirCPI('exec')
+    expect(typeof r.ok).toBe('boolean')
+    expect(E.cpiDone()).toBe(true)
+    expect(E.abrirCPI('setor')).toBe(null)
+    for (const k of Object.keys(E.game.stats)) expect(E.game.stats[k]).toBeGreaterThanOrEqual(0)
+  })
+  it('emenda e obstrução funcionam e a obstrução é consumida na votação', () => {
+    novo('dep_estadual')
+    expect(E.emendar('saude')).toBeTruthy()
+    expect(E.obstruir()).toBe(true)
+    expect(E.obstrucaoAtiva()).toBe(true)
+    const b = billsOf('dep_estadual')[0]
+    E.finishPlenario(6, 9, b, 0, 'con')
+    expect(E.obstrucaoAtiva()).toBe(false)
+  })
+  it('legislador pode propor até 3 leis por rodada', () => {
+    novo()
+    const t = E.worldTemas()
+    let n = 0
+    for (const x of t) if (E.proposeLaw(x.id, 1)) n++
+    expect(n).toBe(3)
   })
 })

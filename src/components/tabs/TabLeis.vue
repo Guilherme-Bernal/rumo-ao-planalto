@@ -1,6 +1,6 @@
 <script setup>
-import { computed } from 'vue'
-import { game, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
+import { computed, ref } from 'vue'
+import { game, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
 
 const w = computed(() => game.world)
 const co = computed(() => coalition())
@@ -11,6 +11,16 @@ const why = computed(() => (game.phase !== 'actions' ? 'Disponível na fase de a
 const pct = (t, o) => Math.round(lawChance(t, o) * 100)
 const col = (p) => (p < 30 ? 'var(--bad)' : p < 55 ? 'var(--warn)' : 'var(--good)')
 const stat = computed(() => statutesActive())
+const leg = computed(() => isLeg())
+const com = computed(() => comissaoAtiva())
+const msg = ref('')
+const run = (fn, ...a) => {
+  const r = fn(...a)
+  if (r && r.text) msg.value = r.text
+  else if (r && r.ok !== undefined) msg.value = r.ok ? 'A CPI deu resultado: você virou referência no assunto.' : 'A CPI não vingou e a base ficou irritada.'
+  else if (r && r.e) msg.value = 'Emenda destinada. A população percebe o benefício.'
+  else if (r && r.c) msg.value = r.bill ? `Relatoria concluída e o projeto “${r.bill.title}” foi aprovado.` : 'Relatoria concluída. Você ganhou crédito na comissão.'
+}
 const HOW = { plenario: 'aprovada no plenário', sancao: 'sancionada', parcial: 'sancionada com veto parcial', derrubado: 'veto derrubado', prazo: 'por decurso de prazo' }
 const fxTxt = (fx) => Object.entries(fx).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${statName[k] || k}`).join(' · ')
 const tl = computed(() => (game.poder && game.poder.timeline) || [])
@@ -41,6 +51,36 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
         </button>
       </div>
     </div>
+
+    <template v-if="leg">
+      <h3 class="sub">🔎 Mandato legislativo <small class="muted">· {{ legLeft() }} ação(ões) nesta rodada · escopo {{ legScope().name }}</small></h3>
+      <p v-if="msg" class="sumbox">{{ msg }}</p>
+      <p class="legend">Você pode apresentar até 3 projetos por rodada e fazer até 2 ações abaixo.</p>
+      <div class="acts">
+        <button v-for="v in VISITS" :key="v.id" type="button" :disabled="!legCan('visita:' + v.id)" @click="run(fiscalizar, v.id)">
+          <b>{{ v.icon }} {{ v.name }}</b><small>Visitar e fiscalizar</small>
+        </button>
+      </div>
+      <div class="acts" style="margin-top: 8px">
+        <button v-for="e in EMENDAS" :key="e.id" type="button" :disabled="!legCan('emenda')" @click="run(emendar, e.id)">
+          <b>{{ e.icon }} {{ e.name }}</b><small>Emenda parlamentar</small>
+        </button>
+        <button type="button" :disabled="!legCan('obstrucao') || obstrucaoAtiva()" @click="obstruir()">
+          <b>⏸️ Obstrução</b><small>{{ obstrucaoAtiva() ? 'Armada para a próxima votação' : 'Pedir vista se perder a próxima' }}</small>
+        </button>
+      </div>
+      <h3 class="sub">🧑‍⚖️ Comissões e CPI</h3>
+      <p v-if="com" class="legend">{{ com.icon }} Você integra a <b>{{ com.name }}</b>: reforço contínuo e mais chance nas leis do tema.</p>
+      <div class="acts">
+        <template v-if="!com"><button v-for="c in COMISSOES" :key="c.id" type="button" @click="escolherComissao(c.id)"><b>{{ c.icon }} {{ c.name }}</b><small>Entrar nesta comissão</small></button></template>
+        <button v-else type="button" :disabled="!legCan('relatar')" @click="run(relatar)"><b>📝 Relatar projeto</b><small>Ganha base e pode aprovar uma lei</small></button>
+      </div>
+      <div class="acts" style="margin-top: 8px">
+        <button v-for="k in CPIS" :key="k.id" type="button" :disabled="cpiDone() || game.phase !== 'actions'" @click="run(abrirCPI, k.id)">
+          <b>{{ k.icon }} CPI: {{ k.name }}</b><small>{{ cpiDone() ? 'Já aberta neste mandato' : Math.round(cpiChance(k.id) * 100) + '% de dar resultado · -2 Caixa' }}</small>
+        </button>
+      </div>
+    </template>
 
     <h3 class="sub">📜 Leis do seu mandato ({{ stat.length }})</h3>
     <p v-if="!stat.length" class="legend">Projetos aprovados no plenário ou sancionados por você aparecem aqui e continuam rendendo por algumas rodadas.</p>
