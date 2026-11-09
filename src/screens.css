@@ -228,3 +228,6 @@
 .hm-fx { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: .78rem; justify-content: center; }
 .hm-bill .hm-fx { justify-content: flex-start; }
 .hm-neg small { font-size: .62rem; color: var(--muted); }
+.hm-stance p { margin: 6px 0; font-size: .9rem; }
+.hm-stance .hm-args small { font-size: .66rem; color: var(--muted); }
+.hm-mine { font-size: .82rem; }

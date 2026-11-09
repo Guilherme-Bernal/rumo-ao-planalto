@@ -144,12 +144,15 @@ describe('projetos em votação', () => {
     const soma = (o) => Object.values(o).filter((v) => v > 0).reduce((a, v) => a + v, 0)
     expect(soma(fraco)).toBeLessThanOrEqual(soma(cheio))
     expect(billOutcome(b, false).cong).toBeLessThan(0)
+    // combater e derrubar: ganha base; combater e perder: perde base
+    expect(billOutcome(b, false, 0, 'con').cong).toBeGreaterThan(0)
+    expect(billOutcome(b, true, 0, 'con').cong).toBeLessThan(0)
   })
   it('finishPlenario aplica o projeto e loga o título', () => {
     return import('../src/game/bills.js').then(({ billFor }) => {
       E.startGame({ name: 'Teste', regionId: 'SP' })
       const b = billFor(E.game.office, 0)
-      expect(E.finishPlenario(6, 9, b, 1)).toBe(true)
+      expect(E.finishPlenario(6, 9, b, 1, 'con')).toBe(true)
     })
   })
 })

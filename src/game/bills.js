@@ -30,11 +30,23 @@ export const billFor = (office, round = 0) => {
   return list[Math.abs(round) % list.length]
 }
 export const ALL_BILLS = Object.values(T).flat()
-// Efeito final: cada concessão negociada (emenda) tira 25% do benefício do projeto.
+// Efeito final. stance 'pro' = você defende o projeto; 'con' = você tenta derrubar.
+// passed = o projeto foi aprovado. Cada emenda negociada tira 25% do benefício do projeto.
 const scale = (fx, k) => Object.fromEntries(Object.entries(fx).map(([s, v]) => [s, v > 0 ? Math.round(v * k) : v]).filter(([, v]) => v))
-export const billOutcome = (bill, won, concessions = 0) => {
+export const billOutcome = (bill, passed, concessions = 0, stance = 'pro') => {
   const k = Math.max(0.25, 1 - 0.25 * concessions)
-  const out = won ? { cong: 3, img: 1 } : { cong: -3, img: -1 }
-  for (const [st, v] of Object.entries(won ? scale(bill.win, k) : bill.lose)) out[st] = (out[st] || 0) + v
+  const out = {}
+  const add = (fx) => { for (const [st, v] of Object.entries(fx)) if (v) out[st] = (out[st] || 0) + v }
+  if (stance === 'pro') {
+    if (passed) { add({ cong: 3, img: 1 }); add(scale(bill.win, k)) } else { add({ cong: -3, img: -1 }); add(bill.lose) }
+  } else if (passed) {
+    // você combateu e perdeu: o projeto passa mesmo assim, com metade do benefício para você
+    add({ cong: -2, img: -1 }); add(scale(bill.win, k * 0.5))
+  } else {
+    // você derrubou: economiza o custo do projeto, mas perde a simpatia de quem queria
+    add({ cong: 3 })
+    for (const [st, v] of Object.entries(bill.win)) if (v < 0) add({ [st]: Math.ceil(-v / 2) })
+    if (bill.win.pop > 0) add({ pop: -1 })
+  }
   return out
 }

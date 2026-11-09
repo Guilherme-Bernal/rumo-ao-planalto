@@ -83,8 +83,9 @@ const miniDone = (a, b, c) => {
     doSpecial('comicio', miniMonth.value, fx, `Comício: ${sc >= 0.7 ? 'multidão em êxtase' : sc >= 0.4 ? 'recepção morna' : 'comício esvaziado'}.`)
     armed.value = null
   } else if (k === 'plenario') {
-    const ok = finishPlenario(a, b, c && c.bill, c ? c.concessions : 0)
-    miniMsg.value = ok ? `🏛️ “${c.bill.title}” aprovado! Veja o efeito no painel.` : `🏛️ “${c.bill.title}” rejeitado. -Base.`
+    const ok = finishPlenario(a, b, c && c.bill, c ? c.concessions : 0, c ? c.stance : 'pro')
+    const passed = c.stance === 'pro' ? ok : !ok
+    miniMsg.value = `🏛️ “${c.bill.title}” ${passed ? 'aprovado' : 'rejeitado'}. ${ok ? 'Você venceu a votação.' : 'Você perdeu a votação.'}`
   } else if (k === 'debate') {
     const tv = finishTv(a)
     miniMsg.value = `📺 Debate encerrado: ${tv > 0 ? '+' : ''}${tv} ponto(s) na eleição.`
