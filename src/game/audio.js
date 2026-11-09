@@ -126,6 +126,8 @@ const SFX = {
   good: (t) => [523, 659, 784].forEach((f, i) => tone(f, t + i * 0.09, 0.25, { type: 'triangle', gain: 0.25, release: 0.2, dest: sfxBus })),
   bad: (t) => [233, 196].forEach((f, i) => tone(f, t + i * 0.14, 0.3, { type: 'sawtooth', gain: 0.12, release: 0.25, dest: sfxBus })),
   win: (t) => [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.14, 0.5, { type: 'triangle', gain: 0.25, release: 0.4, dest: sfxBus })),
+  ring: (t) => [0, 0.16, 0.5, 0.66].forEach((d, i) => tone(i % 2 ? 880 : 740, t + d, 0.12, { type: 'sine', gain: 0.2, release: 0.08, dest: sfxBus })),
+  vote: (t) => tone(300, t, 0.12, { type: 'square', gain: 0.1, release: 0.1, dest: sfxBus }),
   lose: (t) => [392, 330, 262, 196].forEach((f, i) => tone(f, t + i * 0.2, 0.55, { type: 'triangle', gain: 0.22, release: 0.45, dest: sfxBus })),
 }
 

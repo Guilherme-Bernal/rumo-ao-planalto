@@ -13,6 +13,11 @@ export const ROLES = {
   adversario: { icon: '🗡️', name: 'Bastidores da oposição', hi: { img: 0.3 }, lo: { cong: -0.4 }, hiText: '+0,3 imagem por rodada (trégua)', loText: '−0,4 base por rodada' },
 }
 export const KIND = { call: { icon: '📞', verb: 'Ligação de' }, msg: { icon: '💬', verb: 'Mensagem de' }, street: { icon: '🚶', verb: 'Abordagem de' } }
+// como a pessoa te recebe depende da proximidade
+export const greeting = (rel) =>
+  rel >= 75 ? 'Fala, parceiro(a)! Que bom que atendeu.' : rel >= 55 ? 'Oi! Tudo bem por aí?' : rel >= 30 ? 'Olá, tudo bem? Tem um minutinho?' : rel >= 15 ? 'Olá. Vou direto ao ponto.' : 'Sou eu de novo. E precisamos conversar.'
+// em qual faixa de relação a pessoa te ajuda (70+) ou atrapalha (15−)
+export const relTier = (v) => (v >= 70 ? 'ajuda' : v <= 15 ? 'atrapalha' : 'neutro')
 export const relLabel = (v) => (v >= 75 ? 'Aliado' : v >= 55 ? 'Próximo' : v >= 30 ? 'Neutro' : v >= 15 ? 'Distante' : 'Hostil')
 
 // Elenco inicial: nomes sorteados. rival = nome do adversário principal (para o assessor)

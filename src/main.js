@@ -3,6 +3,7 @@ import App from './App.vue'
 import './style.css'
 import './extras.css'
 import './ui.css'
+import './screens.css'
 
 createApp(App).mount('#app')
 

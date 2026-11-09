@@ -89,3 +89,43 @@ describe('epílogo e cartão de resultado', () => {
     for (const l of out) expect(l.length).toBeGreaterThan(10)
   })
 })
+
+describe('contatos e ligações', () => {
+  it('conversa recebida muda a relação e fica no histórico do contato', async () => {
+    const { SCRIPTS } = await import('../src/game/contacts.js')
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    const sc = SCRIPTS.find((x) => x.id === 'tio')
+    E.game.approach = { sid: sc.id, cid: sc.role, done: false }
+    const c = E.game.contacts.find((x) => x.id === sc.role)
+    const antes = c.rel
+    E.talkChoice(sc.ch[2])
+    expect(c.rel).not.toBe(antes)
+    expect(c.rel).toBeGreaterThanOrEqual(0)
+    expect(c.rel).toBeLessThanOrEqual(100)
+    expect(c.hist.length).toBe(1)
+    expect(E.game.approach.done).toBe(true)
+  })
+
+  it('ignorar uma ligação custa relação e também fica no histórico', () => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.approach = { sid: 'doacao', cid: 'empresario', done: false }
+    const c = E.game.contacts.find((x) => x.id === 'empresario')
+    const antes = c.rel
+    E.ignoreApproach()
+    expect(c.rel).toBe(antes - 3)
+    expect(c.hist[0].t).toMatch(/não atendeu/i)
+  })
+
+  it('todo pedido de ligação tem texto de sucesso e de falha', async () => {
+    const { ASKS } = await import('../src/game/contacts.js')
+    for (const [role, list] of Object.entries(ASKS)) {
+      for (const a of list) {
+        expect(a.ok, `${role}/${a.id} sem ok`).toBeTruthy()
+        expect(a.fail, `${role}/${a.id} sem fail`).toBeTruthy()
+        expect(a.base).toBeGreaterThan(0)
+        expect(a.base).toBeLessThan(1)
+      }
+    }
+  })
+})
+

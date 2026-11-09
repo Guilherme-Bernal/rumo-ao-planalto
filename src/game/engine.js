@@ -840,6 +840,10 @@ export const freeMonth = () => {
 
 const clampRel = (v) => Math.max(0, Math.min(100, v))
 const contactOf = (id) => (game.contacts || []).find((c) => c.id === id)
+// memória de cada contato: as últimas conversas aparecem na aba Contatos e no telefone
+const remember = (c, t, d) => {
+  c.hist = [{ t, d: Math.round(d || 0), r: game.total }, ...(c.hist || [])].slice(0, 4)
+}
 export const findAction = (id) => [...allActions(), COMICIO, LIGAR, ESTUDAR, ACORDO].find((x) => x.id === id)
 
 function pickApproach() {
@@ -873,6 +877,7 @@ export function talkChoice(ch) {
   curSphere = STAGE_SPHERE[game.stage]
   if (ch.fx && Object.keys(ch.fx).length) applyFx(ch.fx, true)
   curSphere = null
+  const rel0 = c.rel
   c.rel = clampRel(c.rel + (ch.rel || 0))
   if (ch.dirty) {
     game.dirty++
@@ -880,6 +885,7 @@ export function talkChoice(ch) {
   }
   if (ch.heat) game.heat = clamp(game.heat + ch.heat)
   if (!ch.next) {
+    remember(c, ch.l, c.rel - rel0)
     a.done = true
     log(`Conversa com ${c.name}: ${ch.l}.`)
     pushPosts(1, tone(ch.fx || {}), 'Bastidores')
@@ -893,6 +899,7 @@ export function ignoreApproach() {
   if (!c) return
   a.done = true
   c.rel = clampRel(c.rel - 3)
+  remember(c, 'Você não atendeu', -3)
   log(`Ignorou o contato de ${c.name}.`)
   save()
 }
@@ -917,7 +924,9 @@ export function callAsk(cid, askId, month) {
   }
   if (ask.heat) game.heat = clamp(game.heat + (ask.heat < 0 ? (ok ? ask.heat : 0) : ok ? ask.heat : Math.ceil(ask.heat / 2)))
   if (ask.rival && ok) game.rivalMod = (game.rivalMod || 0) + ask.rival
+  const rel0 = c.rel
   c.rel = clampRel(c.rel + (ask === CHAT ? ask.gain : ok ? -ask.cost : -2))
+  remember(c, ask === CHAT ? 'Bateu um papo' : `${ask.label}: ${ok ? 'deu certo' : 'não deu certo'}`, c.rel - rel0)
   game.ap--
   game.used.push('ligar')
   log(`Ligou para ${c.name}: ${ok ? ask.label : 'não deu certo'}.`)
