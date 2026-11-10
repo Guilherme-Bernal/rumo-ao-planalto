@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import Calendar from './Calendar.vue'
 import Recap from './Recap.vue'
-import MiniDebate from '../minigames/MiniDebate.vue'
+import Eleicao27 from './Eleicao27.vue'
+import Debate27 from './Debate27.vue'
 import MiniPlenario from '../minigames/MiniPlenario.vue'
 import MiniComicio from '../minigames/MiniComicio.vue'
 import MiniContato from '../minigames/MiniContato.vue'
@@ -211,10 +212,7 @@ const planIds = ref([])
       </div>
       <BrazilMap :home="game.region.mapId" :colors="colors" />
       <p class="legend">Estimativa por estado (verde forte, vermelho fraco).</p>
-      <div class="sumbox minirow">
-        <button :disabled="game.election.tvDone" @click="mini = 'debate'">📺 Participar do debate na TV <small>(opcional, 1 vez)</small></button>
-        <span v-if="game.election.tvDone" class="muted">Efeito do debate: {{ game.election.tv > 0 ? '+' : '' }}{{ game.election.tv }} ponto(s)</span>
-      </div>
+      <Eleicao27 />
       <div class="choices">
         <button v-for="c in CAMPAIGNS" :key="c.id" class="act" :disabled="game.stats.cash < campaignCost(c) || (needsTicket() && !game.election.ticketDone)" @click="chooseCampaign(c.id)">
           <b>{{ c.name }} <span v-if="campaignCost(c)" class="chip">custa {{ campaignCost(c) }} de caixa ({{ money(campaignCost(c)) }})</span></b>
@@ -240,10 +238,7 @@ const planIds = ref([])
         <div v-for="s in game.election.support" :key="s.id" class="muted">{{ s.v > 0 ? '✅ +1 ponto' : '⚠️ −1 ponto' }}: {{ s.label }}</div>
       </div>
       <BrazilMap :home="game.region.mapId" :colors="colors" />
-      <div class="sumbox minirow">
-        <button :disabled="game.election.tvDone" @click="mini = 'debate'">📺 Debate decisivo na TV <small>(opcional, 1 vez)</small></button>
-        <span v-if="game.election.tvDone" class="muted">Efeito do debate: {{ game.election.tv > 0 ? '+' : '' }}{{ game.election.tv }} ponto(s)</span>
-      </div>
+      <Eleicao27 />
       <div class="choices">
         <button v-for="o in RUNOFF" :key="o.id" class="act" :disabled="game.stats.cash < o.cost" @click="chooseRunoff(o.id)">
           <b>{{ o.name }}
@@ -277,7 +272,7 @@ const planIds = ref([])
       <button class="primary" style="width: 100%; margin-top: 12px" @click="confirmPlan(planName, planIds)">Começar o mandato</button>
     </template>
     <Teleport to="body">
-      <MiniDebate v-if="mini === 'debate'" @done="miniDone" />
+      <Debate27 />
       <MiniPlenario v-if="mini === 'plenario'" @done="miniDone" />
       <MiniComicio v-if="mini === 'comicio'" @done="miniDone" />
       <MiniVeto v-if="mini === 'veto'" @close="(r) => { mini = null; if (r) miniMsg = `📜 “${r.bill.title}”: ${r.choice === 'sancionar' ? 'sancionado' : r.overridden ? 'veto derrubado' : 'veto mantido'}.` }" />

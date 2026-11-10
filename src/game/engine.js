@@ -18,6 +18,7 @@ import { CRISES, CRISE_RESP, EMB, VIAGEM, SANCAO, ESPIO_ACOES } from './mundo24'
 import { SETORES, SETOR_ACOES, MOVIMENTOS, MOV_RESP, VEICULOS, LINHAS, MIDIA_ACOES, CATASTROFES, CATAST_RESP } from './sociedade'
 import { INIMIGOS, AMEACAS, GUERRA_ACOES } from './ameacas'
 import { FIGURAS, EVENTOS } from './vida'
+import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook } from './look'
 import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS, CADEIAS } from './reunioes'
@@ -1309,7 +1310,7 @@ export function baseScore() {
   const sphere = clamp((game.fame[electionSphere()] - s.pop) * 0.12, -3, 3)
   const ideas = (game.ideas.force - 50) * 0.025
   const ticket = game.election?.ticketBonus || 0
-  return ticket + tv + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
+  return ticket + tv + focoBonus() - boatosDano() + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
 }
 
 const toShare = (score, rival) => clamp(50 + (score - rival) * 0.9, 30, 70)
@@ -1524,6 +1525,9 @@ export function chooseCampaign(id) {
     e.pollNoise = rnd(-2, 2)
     e.tvDone = false
     e.tv = 0
+    e.debate = null
+    e.pesq = null
+    e.boatos = [...(e.boatos || []), ...gerarBoatos(1)]
     e.support = contactSupport()
     log(`1º turno (${targetOffice()}): ${mine.toFixed(1)}% x ${theirs.toFixed(1)}%. Vai ao segundo turno.`)
     pushPosts(3, 'up', 'SegundoTurno')
@@ -1648,6 +1652,8 @@ export function chooseRumo(id) {
   e.ticket = null
   e.ticketDone = !needsTicket()
   e.ticketBonus = 0
+  e.boatos = gerarBoatos(2)
+  e.foco = { g: {}, est: {} }
   log(op.same ? `Decidiu disputar a reeleição para ${o.name}.` : `Decidiu disputar ${o.name}.`)
   game.phase = 'campaign'
   save()
@@ -4467,7 +4473,7 @@ export function responderAmeaca(idx, respId) {
   let p = r.p + (r.pFa ? (w.fa - 50) * r.pFa : 0)
   for (const [k, v] of Object.entries(r.pRel || {})) p += (w.rel[k] - 50) * v
   for (const [k, v] of Object.entries(r.pTech || {})) if (w.tech.done.includes(k)) p += v
-  p = Math.max(0.1, Math.min(0.95, p))
+  p = Math.max(0.1, Math.min(r.p >= 1 ? 1 : 0.95, p))
   const ok = R() < p
   const o = ok ? r.ok : r.bad || r.ok
   spendWorld({ ...o.fx, cash: (o.fx.cash || 0) - (r.cash || 0) }, `${r.name}: ${o.t}`, o.t, 'ptsM')
@@ -5344,5 +5350,197 @@ export function sucConcluir() {
   const s = sucessaoNow()
   if (!s || !s.fim) return false
   retireCareer()
+  return true
+}
+
+/* ---------- BLOCO 27: eleição (debate, pesquisas segmentadas, boatos) ---------- */
+const eleOn = () => !!game.election && ['campaign', 'runoff'].includes(game.phase)
+export const gruposDef = () => GRUPOS
+export const debateAbordagens = () => DEB_ABORDAGENS
+export const boatoAcoes = () => BOATO_ACOES
+
+function focoBonus() {
+  const f = game.election && game.election.foco
+  if (!f) return 0
+  let b = 0
+  for (const g of GRUPOS) b += (f.g[g.id] || 0) * g.peso * 0.055
+  b += Object.values(f.est || {}).reduce((a, v) => a + v * 0.6, 0)
+  return b
+}
+function boatosDano() {
+  const bs = game.election && game.election.boatos
+  return bs ? bs.reduce((a, b) => a + (b.dano || 0), 0) : 0
+}
+export const boatosNow = () => (game.election && game.election.boatos) || []
+export const boatosDanoNow = () => Math.round(boatosDano() * 10) / 10
+
+function gerarBoatos(n) {
+  const nome = game.name
+  const out = []
+  const quebradas = ((game.election && game.election.promises) || []).filter((p) => !p.kept)
+  for (let i = 0; i < n; i++) {
+    const real = R() < (0.25 + (game.heat || 0) / 120 + (quebradas.length ? 0.1 : 0))
+    let texto
+    if (real) {
+      const pool = BOATOS_REAIS.filter((x) => x.cond === 'any' || (x.cond === 'heat' && (game.heat || 0) > 8) || (x.cond === 'promessa' && quebradas.length))
+      const t = pool[Math.floor(R() * pool.length)]
+      texto = t.texto.replace('{n}', nome).replace('{p}', quebradas.length ? quebradas[0].name : '')
+    } else texto = BOATOS_FALSOS[Math.floor(R() * BOATOS_FALSOS.length)].replace('{n}', nome)
+    out.push({ id: 'b' + game.total + '_' + i + '_' + Math.floor(R() * 1000), texto, real, dano: Math.round((0.8 + R() * 1.4) * 10) / 10, estado: 'solto', revelado: false })
+  }
+  return out
+}
+export function boatoMotivo(id, acao) {
+  const b = boatosNow().find((x) => x.id === id)
+  const a = BOATO_ACOES.find((x) => x.id === acao)
+  if (!b || !a || !eleOn()) return 'Indisponível.'
+  if (acao === 'checar' && b.revelado) return 'Já checado.'
+  if (acao !== 'checar' && b.estado !== 'solto') return 'Já tratado.'
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function boatoAgir(id, acao) {
+  if (boatoMotivo(id, acao)) return null
+  const b = boatosNow().find((x) => x.id === id)
+  const a = BOATO_ACOES.find((x) => x.id === acao)
+  if (a.cash) applyFx({ cash: -a.cash }, true)
+  let txt = ''
+  if (acao === 'checar') {
+    b.revelado = true
+    txt = b.real ? 'A checagem concluiu que a notícia é verdadeira. Cuidado com a resposta.' : 'A checagem confirmou que é falso.'
+  } else if (acao === 'desmentir') {
+    b.estado = 'desmentido'
+    if (!b.real) {
+      if (R() < 0.75) { b.dano = 0; applyFx({ img: 0.5 }, true); txt = 'O desmentido pegou e o boato perdeu força.' } else { b.dano = Math.round(b.dano * 5) / 10; txt = 'O desmentido chegou tarde. O boato perdeu metade da força.' }
+    } else { b.dano = Math.round(b.dano * 15) / 10; applyFx({ img: -2 }, true); txt = 'Você desmentiu uma coisa verdadeira. A imprensa mostrou os fatos e o dano aumentou.' }
+  } else if (acao === 'explicar') {
+    b.estado = 'explicado'
+    if (b.real) { b.dano = Math.round(b.dano * 5) / 10; applyFx({ img: 0.5 }, true); txt = 'A explicação transparente reduziu o estrago.' } else { b.dano = Math.round(b.dano * 8) / 10; txt = 'Você explicou o que nem precisava. O boato perdeu pouco.' }
+  } else if (acao === 'processar') {
+    b.estado = 'processado'
+    if (!b.real) {
+      if (R() < 0.5) { b.dano = 0; applyFx({ img: 1 }, true); txt = 'O autor foi identificado e o boato caiu.' } else { b.dano = Math.round(b.dano * 7) / 10; txt = 'O processo é lento. O boato perdeu um pouco de força.' }
+    } else { applyFx({ img: -3 }, true); txt = 'Processar por algo verdadeiro virou notícia: parece censura.' }
+  } else { b.estado = 'ignorado'; txt = 'Você ignorou. O dano continua.' }
+  cnt(b.real ? 'boatoreal' : 'boatofalso')
+  if (!b.real && b.dano === 0) cnt('boatook')
+  save()
+  return { txt }
+}
+
+// pesquisas segmentadas
+function grupoDelta(id) {
+  const s = game.stats
+  const w = game.world || {}
+  const tech = ((w.tech && w.tech.done) || []).length
+  const setores = (game.poder && game.poder.soc && game.poder.soc.setores) ? Object.values(game.poder.soc.setores) : []
+  const mSet = setores.length ? setores.reduce((a, v) => a + v, 0) / setores.length : 50
+  const rel = (game.contacts.find((c) => c.id === 'religioso') || { rel: 40 }).rel
+  if (id === 'jovens') return (s.soc - 50) * 0.08 + tech * 0.5 + (s.eco - 50) * 0.03
+  if (id === 'evangelicos') return (rel - 40) * 0.1 + (s.img - 50) * 0.05
+  if (id === 'empresarios') return (s.eco - 50) * 0.1 + (mSet - 50) * 0.06
+  if (id === 'idosos') return (s.soc - 50) * 0.1 + (s.seg - 50) * 0.05
+  return (s.eco - 50) * 0.06 + (s.pop - 50) * 0.06
+}
+export const pesqSegMotivo = () => {
+  if (!eleOn() || game.election.target == null) return 'Disponível durante a campanha.'
+  if (game.election.pesq && game.election.pesq.round === (game.election.round || 1)) return 'A pesquisa deste turno já foi encomendada.'
+  if (game.stats.cash < 1) return 'Sem caixa (1).'
+  return ''
+}
+export function pesqSegEncomendar() {
+  if (pesqSegMotivo()) return null
+  const e = game.election
+  applyFx({ cash: -1 }, true)
+  const base = pollShare()
+  e.gnoise = e.gnoise || {}
+  const grupos = GRUPOS.map((g) => {
+    if (e.gnoise[g.id] == null) e.gnoise[g.id] = rnd(-3, 3)
+    return { id: g.id, share: Math.round(clamp(base + grupoDelta(g.id) * 1.4 + e.gnoise[g.id], 15, 85) * 10) / 10 }
+  })
+  const est = stateEstimates()
+  const estados = country().regions.map((r) => ({ id: r.id, name: r.name, share: Math.round((est[r.mapId || r.id.toLowerCase()] || 50) * 10) / 10 }))
+  e.pesq = { round: e.round || 1, grupos, estados }
+  save()
+  return e.pesq
+}
+export const pesqSegNow = () => (game.election && game.election.pesq) || null
+export const focoNow = () => (game.election && game.election.foco) || { g: {}, est: {} }
+export function focoMotivo(kind, id) {
+  if (!eleOn() || game.election.target == null) return 'Disponível durante a campanha.'
+  const f = focoNow()
+  if (kind === 'g') {
+    if ((f.g[id] || 0) >= 2) return 'Foco máximo neste grupo.'
+  } else {
+    if (!['presidente', 'governador'].includes(game.election.target)) return 'Só em eleições majoritárias de estado e país.'
+    if (f.est[id]) return 'Estado já em foco.'
+    if (Object.keys(f.est).length >= 3) return 'No máximo 3 estados em foco.'
+  }
+  if (game.stats.cash < 1) return 'Sem caixa (1).'
+  return ''
+}
+export function focar(kind, id) {
+  if (focoMotivo(kind, id)) return null
+  const e = game.election
+  e.foco = e.foco || { g: {}, est: {} }
+  applyFx({ cash: -1 }, true)
+  if (kind === 'g') e.foco.g[id] = (e.foco.g[id] || 0) + 1
+  else e.foco.est[id] = 1
+  save()
+  return true
+}
+
+// debate com réplica e tréplica
+export const debateNow = () => (game.election && game.election.debate) || null
+const TRAIT_KEYS = ['pragmatico', 'idealista', 'ganancioso', 'orgulhoso', 'cauteloso']
+export function debateMotivo() {
+  if (!eleOn()) return 'Disponível durante a campanha.'
+  if (game.election.tvDone) return 'O debate já aconteceu.'
+  if (game.election.debate) return 'O debate está em andamento.'
+  return ''
+}
+export function debateAbrir() {
+  if (debateMotivo()) return false
+  const e = game.election
+  if (!e.rivalTrait) e.rivalTrait = TRAIT_KEYS[Math.floor(R() * TRAIT_KEYS.length)]
+  const t = TEMAS_DEBATE[Math.floor(R() * TEMAS_DEBATE.length)]
+  e.debate = { step: 1, tema: t, aud: 50, riv: 60, ultimo: null, falas: [], reveal: false, res: null }
+  save()
+  return true
+}
+export function debateAbordar(id) {
+  const d = debateNow()
+  const ab = DEB_ABORDAGENS.find((x) => x.id === id)
+  if (!d || !ab || d.res) return null
+  const trait = game.election.rivalTrait
+  const mult = [0, 1, 1.3, 1.6][d.step]
+  let [a, r] = ab.eff[trait]
+  a = a * mult + kn('com') * 0.4
+  r = r * mult
+  if (d.ultimo === id) a -= 3
+  const punch = Math.max(0, Math.min(6, 2 + (game.election.rival - baseScore()) / 10))
+  d.aud = Math.max(0, Math.min(100, d.aud + a - (d.riv < 35 ? punch / 2 : punch)))
+  d.riv = Math.max(0, Math.min(100, d.riv - r))
+  const forte = a <= 2 * mult && r <= 2 * mult
+  const arr = DEB_FALAS[trait][forte ? 'forte' : 'fraco']
+  const fala = arr[Math.floor(R() * arr.length)].replace('{t}', d.tema.tema)
+  d.falas.push({ passo: d.step, eu: ab.name, rival: fala, a: Math.round(a * 10) / 10, r: Math.round(r * 10) / 10 })
+  d.ultimo = id
+  d.reveal = true
+  d.step++
+  if (d.step > 3) {
+    const score = Math.max(0, Math.min(1, (d.aud + (d.riv < 40 ? 8 : 0)) / 100))
+    const tv = finishTv(score)
+    d.res = { tv, aud: Math.round(d.aud), riv: Math.round(d.riv) }
+    cnt('debate')
+  }
+  save()
+  return { ok: true }
+}
+export function debateFechar() {
+  const d = debateNow()
+  if (!d || !d.res) return false
+  game.election.debate = null
+  save()
   return true
 }

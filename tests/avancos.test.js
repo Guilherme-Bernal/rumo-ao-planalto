@@ -651,3 +651,98 @@ describe('Pessoas: visual, família, biografia e sucessão', () => {
     expect(E.sucessaoNow()).toBe(null)
   })
 })
+
+describe('Eleição: debate, pesquisas segmentadas e boatos', () => {
+  const eleicao = (target = 'presidente') => {
+    novo()
+    E.game.phase = 'campaign'
+    E.game.election = { rival: 55, target, rivalName: 'Rival Teste', pollNoise: 0, result: null, promises: [], planBonus: 0, round: 1, tvDone: false, tv: 0, ticketBonus: 0, foco: { g: {}, est: {} }, boatos: [] }
+  }
+  it('debate em três passos termina com efeito e não repete', () => {
+    eleicao()
+    expect(E.debateMotivo()).toBe('')
+    expect(E.debateAbrir()).toBe(true)
+    expect(E.debateNow().step).toBe(1)
+    E.debateAbordar('dados')
+    expect(E.debateNow().reveal).toBe(true)
+    E.debateAbordar('proposta')
+    E.debateAbordar('calma')
+    const d = E.debateNow()
+    expect(d.res).toBeTruthy()
+    expect(E.game.election.tvDone).toBe(true)
+    expect(E.debateFechar()).toBe(true)
+    expect(E.debateMotivo()).toMatch(/já aconteceu/)
+  })
+  it('temperamento do rival muda o resultado da mesma abordagem', () => {
+    eleicao()
+    E.debateAbrir()
+    E.game.election.rivalTrait = 'orgulhoso'
+    E.debateAbordar('ironia')
+    const a = E.debateNow().falas[0]
+    eleicao()
+    E.debateAbrir()
+    E.game.election.rivalTrait = 'idealista'
+    E.debateAbordar('ironia')
+    const b = E.debateNow().falas[0]
+    expect(a.r).toBeGreaterThan(b.r)
+    expect(a.a).toBeGreaterThan(b.a)
+  })
+  it('pesquisa segmentada custa Caixa, mostra grupos e estados, e o foco dá bônus', () => {
+    eleicao()
+    const cash = E.game.stats.cash
+    expect(E.pesqSegMotivo()).toBe('')
+    const p = E.pesqSegEncomendar()
+    expect(p.grupos.length).toBe(5)
+    expect(p.estados.length).toBeGreaterThan(5)
+    expect(E.game.stats.cash).toBeLessThan(cash)
+    expect(E.pesqSegMotivo()).toMatch(/já foi/)
+    const antes = E.baseScore()
+    expect(E.focar('g', 'jovens')).toBe(true)
+    expect(E.baseScore()).toBeGreaterThan(antes)
+    E.focar('g', 'jovens')
+    expect(E.focoMotivo('g', 'jovens')).toMatch(/máximo/)
+    expect(E.focar('est', p.estados[0].id)).toBe(true)
+  })
+  it('foco em estado só em eleição majoritária', () => {
+    eleicao('vereador')
+    expect(E.focoMotivo('est', 'SP')).toMatch(/majoritárias/)
+  })
+  it('boatos: desmentir falso funciona, desmentir verdadeiro custa caro, checagem revela', () => {
+    eleicao()
+    E.game.election.boatos = [
+      { id: 'f1', texto: 'falso', real: false, dano: 2, estado: 'solto', revelado: false },
+      { id: 'r1', texto: 'real', real: true, dano: 2, estado: 'solto', revelado: false },
+    ]
+    const s0 = E.baseScore()
+    expect(E.boatoAgir('f1', 'checar').txt).toMatch(/falso/)
+    expect(E.boatosNow()[0].revelado).toBe(true)
+    let ok = false
+    for (let i = 0; i < 30 && !ok; i++) {
+      E.game.election.boatos[0] = { id: 'f1', texto: 'falso', real: false, dano: 2, estado: 'solto', revelado: false }
+      E.game.stats.cash = 60
+      E.boatoAgir('f1', 'desmentir')
+      ok = E.boatosNow()[0].dano === 0
+    }
+    expect(ok).toBe(true)
+    expect(E.baseScore()).toBeGreaterThan(s0)
+    const img = E.game.stats.img
+    E.boatoAgir('r1', 'desmentir')
+    expect(E.boatosNow()[1].dano).toBeGreaterThan(2)
+    expect(E.game.stats.img).toBeLessThan(img)
+    expect(E.boatoMotivo('r1', 'explicar')).toMatch(/Já tratado/)
+  })
+  it('explicar boato verdadeiro reduz o dano', () => {
+    eleicao()
+    E.game.election.boatos = [{ id: 'r2', texto: 'real', real: true, dano: 2, estado: 'solto', revelado: false }]
+    E.boatoAgir('r2', 'explicar')
+    expect(E.boatosNow()[0].dano).toBe(1)
+  })
+  it('boatos nascem junto com a escolha de rumo e não quebram a eleição', () => {
+    novo()
+    E.game.phase = 'rumo'
+    E.game.election = { rival: 0, target: null, rivalName: 'X', pollNoise: 0, result: null, promises: [], planBonus: 0 }
+    E.chooseRumo('presidente')
+    expect(E.boatosNow().length).toBe(2)
+    expect(Number.isFinite(E.pollShare())).toBe(true)
+  })
+})
