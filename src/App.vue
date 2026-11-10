@@ -48,11 +48,6 @@ onMounted(() => {
   document.addEventListener('click', onClick)
 })
 onBeforeUnmount(() => document.removeEventListener('click', onClick))
-watch(
-  () => [game.stats.pop, game.phase === 'start' ? 1 : game.stage, game.world && game.phase !== 'start' ? game.world.wars.length : 0],
-  ([pop, stage, war]) => setMood({ pop, stage, war }),
-  { immediate: true },
-)
 watch(() => game.phase, (p) => {
   if (p === 'recap') sfx('turn')
   else if (p === 'end') sfx('win')
@@ -71,6 +66,28 @@ const cena = computed(() => {
   if (p && p.cst && p.cst.estado) return 'crise'
   if (p && p.prot) return 'protesto'
   return ''
+})
+
+const tema = computed(() => {
+  if (game.phase === 'start') return 'menu'
+  if (game.phase === 'end') return 'vitoria'
+  if (game.phase === 'over') return 'derrota'
+  if (game.phase === 'campaign' || game.phase === 'runoff') return 'campanha'
+  if (game.phase === 'result') return 'apuracao'
+  const c = cena.value
+  if (c === 'guerra') return 'guerra'
+  if (c === 'crise' || c === 'protesto') return 'crise'
+  if (c === 'tribunal') return 'tribunal'
+  return 'gov'
+})
+watch(
+  () => [game.stats.pop, game.phase === 'start' ? 1 : game.stage, game.world && game.phase !== 'start' ? game.world.wars.length : 0, tema.value],
+  ([pop, stage, war, theme]) => setMood({ pop, stage, war, theme }),
+  { immediate: true },
+)
+watch(tema, (t, o) => {
+  if (t === 'tribunal') sfx('gavel')
+  else if ((t === 'crise' || t === 'guerra') && o === 'gov') sfx('alert')
 })
 
 function restart() {
