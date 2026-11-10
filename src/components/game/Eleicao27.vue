@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import {
   game, gruposDef, pesqSegMotivo, pesqSegEncomendar, pesqSegNow, focoNow, focoMotivo, focar, boatosNow, boatosDanoNow,
-  boatoAcoes, boatoMotivo, boatoAgir, debateMotivo, debateAbrir, country,
+  boatoAcoes, boatoMotivo, boatoAgir, debateMotivo, debateAbrir, country, coalNow, aliancasNow, aliancaMotivo, aliancaCusto, aliar, agendaDe,
 } from '../../game/engine'
 
 const e = computed(() => game.election)
@@ -10,6 +10,10 @@ const pesq = computed(() => pesqSegNow())
 const foco = computed(() => focoNow())
 const boatos = computed(() => boatosNow())
 const msg = ref('')
+const coal = computed(() => coalNow())
+const aliancas = computed(() => aliancasNow())
+const msgA = ref('')
+const aliar2 = (id) => { const r = aliar(id); msgA.value = r ? r.txt : '' }
 const aberto = ref(false)
 const gShare = (id) => (pesq.value ? pesq.value.grupos.find((g) => g.id === id) : null)
 const cor = (v) => (v < 45 ? 'var(--bad)' : v < 50 ? 'var(--warn)' : 'var(--good)')
@@ -26,6 +30,15 @@ const statusTxt = (b) => ({ solto: 'circulando', desmentido: 'desmentido', expli
     <div class="sumbox minirow">
       <button type="button" :disabled="!!debateMotivo()" :title="debateMotivo()" @click="debateAbrir">📺 Debate na TV com réplica e tréplica <small>(opcional, 1 vez)</small></button>
       <span v-if="e.tvDone" class="muted">Efeito do debate: {{ e.tv > 0 ? '+' : '' }}{{ e.tv }} ponto(s)</span>
+    </div>
+
+    <div v-if="coal && game.phase === 'campaign'" class="sumbox">
+      <b>🤝 Alianças de campanha</b> <small class="muted">(até 2; cada uma rende tempo de TV e uma agenda a cumprir)</small>
+      <p v-if="aliancas.length" class="muted">Fechadas: {{ aliancas.map((a) => a.sigla + ' (+' + a.bonus + ')').join(', ') }}</p>
+      <p v-if="msgA" class="sumbox" role="status">{{ msgA }}</p>
+      <div class="acts">
+        <button v-for="x in coal.partidos.filter((y) => !y.own)" :key="x.id" type="button" class="mini" :disabled="!!aliancaMotivo(x.id)" :title="aliancaMotivo(x.id) || agendaDe(x.agenda).nome" @click="aliar2(x.id)">{{ x.sigla }} ({{ x.cad }}%) · {{ aliancaCusto(x) }} 💰</button>
+      </div>
     </div>
 
     <details class="sumbox" :open="aberto" @toggle="aberto = $event.target.open">

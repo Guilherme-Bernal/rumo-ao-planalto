@@ -23,6 +23,7 @@ import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOE
 import { randomLook } from './look'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
 import { finalOf, saveFinal } from './finais'
+import { AGENDAS, STATUS, COAL_ACOES, COAL_EVENTOS, LEGADO_EVENTOS } from './coalizao33'
 import { MIS_INTRO, MIS_PISTAS, MIS_PEND, MIS_ACOES, MIS_FIM, HIST_EVENTOS } from './misterio32'
 import { MIN_BASE, MIN_AGENDAS, MIN_EVENTOS, MIN_SAIDA, PAUTAS, ONDAS, ONDA_RESP, MISSOES } from './bastidores'
 import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS, CADEIAS } from './reunioes'
@@ -1342,7 +1343,7 @@ export function baseScore() {
   const sphere = clamp((game.fame[electionSphere()] - s.pop) * 0.12, -3, 3)
   const ideas = (game.ideas.force - 50) * 0.025
   const ticket = game.election?.ticketBonus || 0
-  return ticket + tv + focoBonus() - boatosDano() + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
+  return coalVoto() + aliancaBonus() + ticket + tv + focoBonus() - boatosDano() + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
 }
 
 const toShare = (score, rival) => clamp(50 + (score - rival) * 0.9, 30, 70)
@@ -1640,6 +1641,8 @@ export function continueAfterResult() {
     game.team.vice = null
     game.team.supl = []
   }
+  coalPosEleicao()
+  legadoRegistrar()
   autoTeam()
   resetFed()
   game.plan = { name: randomPlanName(R), ids: [] }
@@ -1692,6 +1695,8 @@ export function chooseRumo(id) {
   e.ticketBonus = 0
   e.boatos = gerarBoatos(2)
   e.foco = { g: {}, est: {} }
+  e.aliancas = []
+  coalEnsure()
   log(op.same ? `Decidiu disputar a reeleição para ${o.name}.` : `Decidiu disputar ${o.name}.`)
   game.phase = 'campaign'
   save()
@@ -4198,6 +4203,8 @@ export function roundAvancos() {
   roundMissao()
   roundMisterio()
   roundHist()
+  roundCoalizao()
+  roundLegado()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -6390,4 +6397,289 @@ function roundHist() {
   h.seen.push(e.id)
   h.last = game.total
   toast(e.icon, e.nome)
+}
+
+/* ---------- BLOCO 33: coalizão partidária ---------- */
+export const coalAcoes = () => COAL_ACOES
+export const agendaDe = (id) => AGENDAS[id]
+export const statusDe = (id) => STATUS[id]
+export const coalNow = () => (game.poder && game.poder.coal) || null
+function coalEnsure() {
+  ensurePoder()
+  const p = game.poder
+  if (p.coal && p.coal.partidos) return p.coal
+  const all = partiesNow().filter((x) => x.id !== game.party)
+  const emb = []
+  const pool = [...all]
+  while (emb.length < 6 && pool.length) emb.push(pool.splice(Math.floor(R() * pool.length), 1)[0])
+  const meu = partyObj()
+  const lista = [...(meu ? [meu] : []), ...emb]
+  const pesos = lista.map(() => 8 + R() * 22)
+  const tot = pesos.reduce((a, x) => a + x, 0)
+  let acc = 0
+  const ag = Object.keys(AGENDAS)
+  const ideo = ideology()
+  const partidos = lista.map((x, i) => {
+    const cad = i === lista.length - 1 ? 100 - acc : Math.round((pesos[i] / tot) * 100)
+    acc += cad
+    const aff = x.ideo ? affinity(ideo, x) : 1
+    const own = !!meu && x.id === meu.id
+    return { id: x.id, sigla: x.sigla, nome: x.name, cor: x.color, ideo: x.ideo || 'centro', cad: Math.max(3, cad), agenda: ag[Math.floor(R() * ag.length)], own, status: own || aff === 2 ? 'base' : aff === 0 ? 'oposicao' : 'neutro', humor: own ? 66 : aff === 0 ? 28 : aff === 2 ? 58 : 46, acao: {}, aliado: false }
+  })
+  // todo governo começa com uma base mínima: os partidos neutros maiores topam apoiar no início
+  const pesoP = (x) => x.cad * (x.own ? 1.5 : 1)
+  const totP = partidos.reduce((a, x) => a + pesoP(x), 0) || 1
+  const basePct = () => (partidos.filter((x) => x.status === 'base').reduce((a, x) => a + pesoP(x), 0) / totP) * 100
+  for (const x of [...partidos].filter((y) => y.status === 'neutro').sort((a, b) => b.cad - a.cad)) {
+    if (basePct() >= 42) break
+    x.status = 'base'
+    x.humor = 55
+  }
+  p.coal = { partidos, pend: null, last: game.total, afins: [] }
+  return p.coal
+}
+export function coalBasePct() {
+  const c = coalNow()
+  if (!c) return 0
+  const raw = c.partidos.reduce((a, x) => a + (x.status === 'base' ? x.cad * (x.own ? 1.5 : 1) : 0), 0)
+  const tot = c.partidos.reduce((a, x) => a + x.cad * (x.own ? 1.5 : 1), 0) || 1
+  return Math.round((raw / tot) * 100)
+}
+export const coalMaioria = () => coalBasePct() >= 50
+function coalVoto() {
+  const c = coalNow()
+  return c ? clamp((coalBasePct() - 35) * 0.03, -2, 2) : 0
+}
+function aliancaBonus() {
+  const e = game.election
+  return e && e.aliancas ? e.aliancas.reduce((a, x) => a + x.bonus, 0) : 0
+}
+export const aliancasNow = () => (game.election && game.election.aliancas) || []
+export function aliancaMotivo(pid) {
+  const e = game.election
+  if (!e || !['campaign'].includes(game.phase) || e.target == null) return 'Disponível durante a campanha.'
+  const c = coalNow()
+  if (!c) return 'Ainda não há mapa de partidos.'
+  const x = c.partidos.find((y) => y.id === pid)
+  if (!x) return 'Partido inválido.'
+  if ((e.aliancas || []).some((a) => a.id === pid)) return 'Aliança já fechada.'
+  if ((e.aliancas || []).length >= 2) return 'No máximo 2 alianças por campanha.'
+  if (x.own) return 'É o seu próprio partido.'
+  if (x.humor < 35) return 'O partido não quer conversa com você agora.'
+  if (game.stats.cash < aliancaCusto(x)) return `Sem caixa (${aliancaCusto(x)}).`
+  return ''
+}
+export const aliancaCusto = (x) => (x.cad >= 20 ? 4 : 2)
+export function aliar(pid) {
+  if (aliancaMotivo(pid)) return null
+  const e = game.election
+  const c = coalNow()
+  const x = c.partidos.find((y) => y.id === pid)
+  game.delta = {}
+  applyFx({ cash: -aliancaCusto(x) }, true)
+  const bonus = Math.round(x.cad * 0.09 * 10) / 10
+  e.aliancas = [...(e.aliancas || []), { id: x.id, sigla: x.sigla, bonus, agenda: x.agenda }]
+  x.humor = clamp(x.humor + 10)
+  log(`Aliança de campanha com o ${x.sigla} (+${bonus} de voto-ponto).`)
+  cnt('alianca')
+  save()
+  return { txt: `Aliança com o ${x.sigla}: +${bonus} de voto-ponto. Eles esperam a agenda de ${AGENDAS[x.agenda].nome.toLowerCase()}.` }
+}
+function coalPosEleicao() {
+  const e = game.election
+  const c = coalNow()
+  if (!c) return
+  for (const x of c.partidos) {
+    if (e && e.aliancas && e.aliancas.some((a) => a.id === x.id)) {
+      x.status = 'base'
+      x.humor = clamp(x.humor + 12)
+      x.aliado = true
+    }
+    // nova legislatura: o mapa é refeito com leve oscilação
+    x.cad = Math.max(3, Math.round(x.cad * (0.85 + R() * 0.3)))
+  }
+}
+function coalPend() {
+  const c = coalNow()
+  if (!c || !c.pend) return null
+  const x = c.partidos.find((y) => y.id === c.pend.pid)
+  const e = COAL_EVENTOS[c.pend.tipo]
+  return x && e ? { x, e, left: c.pend.left } : null
+}
+export const coalPendNow = () => {
+  const pn = coalPend()
+  return pn ? { ...pn, titulo: pn.e.titulo(pn.x), texto: pn.e.texto(pn.x, AGENDAS[pn.x.agenda]) } : null
+}
+export function coalPendMotivo(opId) {
+  const pn = coalPend()
+  if (!pn) return 'Nada pendente.'
+  const o = pn.e.ops.find((y) => y.id === opId)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function coalAplicar(c, opId, auto) {
+  const pn = coalPend()
+  const o = pn.e.ops.find((y) => y.id === opId) || pn.e.ops.find((y) => y.id === pn.e.padrao)
+  const fx = { ...(o.fx || {}) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  if (o.risco && R() < o.risco.p) for (const k in o.risco.fx) fx[k] = (fx[k] || 0) + o.risco.fx[k]
+  applyFx(fx, true)
+  const x = pn.x
+  x.humor = clamp(x.humor + (o.humor || 0))
+  if (o.status) x.status = o.status
+  if (o.rigido) x.rigido = true
+  if (c.pend.tipo === 'sair' && o.status === 'neutro' && x.own) {
+    // o seu partido não sai da base sem custo: racha na cúpula
+    applyFx({ img: -2.5, cong: -2 }, true)
+  }
+  c.pend = null
+  c.last = game.total
+  timelineAdd(pn.e.icon, `${pn.e.titulo(x)}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, o.status === 'neutro' ? 'down' : 'flat')
+  cnt('coalizao')
+  return o
+}
+export function coalPendEscolher(opId) {
+  if (coalPendMotivo(opId)) return null
+  const pn = coalPendNow()
+  const o = coalAplicar(game.poder.coal, opId, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+export function coalAcaoMotivo(aid, pid) {
+  const c = coalNow()
+  const a = COAL_ACOES.find((x) => x.id === aid)
+  const x = c && c.partidos.find((y) => y.id === pid)
+  if (!c || !a || !x) return 'Indisponível.'
+  if (game.total - (x.acao[aid] ?? -9) < a.cd) return 'Espere algumas rodadas.'
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function coalAcao(aid, pid) {
+  if (coalAcaoMotivo(aid, pid)) return null
+  const c = coalNow()
+  const a = COAL_ACOES.find((x) => x.id === aid)
+  const x = c.partidos.find((y) => y.id === pid)
+  game.delta = {}
+  const fx = {}
+  if (a.cash) fx.cash = -a.cash
+  if (a.img) fx.img = a.img
+  if (Object.keys(fx).length) applyFx(fx, true)
+  x.humor = clamp(x.humor + a.humor)
+  x.acao[aid] = game.total
+  cnt('coalizao')
+  save()
+  return { txt: `${a.name}: o ${x.sigla} ficou mais disposto a colaborar.` }
+}
+function roundCoalizao() {
+  if (!game.world) return
+  const c = coalEnsure()
+  for (const x of c.partidos) {
+    const ag = AGENDAS[x.agenda]
+    const v = game.stats[ag.stat]
+    const peso = x.rigido ? 1.5 : 1
+    const sat = (v >= 55 ? 1.2 : v < 40 ? -1.5 : 0) * peso * (x.own ? 1.3 : 1)
+    const alvo = x.status === 'base' ? 55 : x.status === 'oposicao' ? 30 : 48
+    x.humor = clamp(x.humor + sat + (alvo - x.humor) * 0.05)
+    if (x.status === 'oposicao' && x.humor >= 52) x.status = 'neutro'
+  }
+  const pct = coalBasePct()
+  const own = c.partidos.find((x) => x.own)
+  applyFx({ cong: (pct - 38) * 0.02 + (own && own.humor < 30 ? -0.4 : 0) }, true)
+  if (c.pend) {
+    if (--c.pend.left < 0) coalAplicar(c, COAL_EVENTOS[c.pend.tipo].padrao, true)
+    return
+  }
+  if (game.total < 4 || game.total - c.last < 4 || R() > 0.14) return
+  const base = c.partidos.filter((x) => x.status === 'base')
+  let alvoP = null
+  let tipo = null
+  if (own && own.status === 'base' && own.humor <= 26) [alvoP, tipo] = [own, 'debandada']
+  else {
+    const sair = base.filter((x) => !x.own && x.humor <= 28)
+    const entrar = c.partidos.filter((x) => x.status === 'neutro' && x.humor >= 66)
+    if (sair.length) [alvoP, tipo] = [sair[0], 'sair']
+    else if (entrar.length) [alvoP, tipo] = [entrar[0], 'entrar']
+    else if (base.length && R() < 0.35) [alvoP, tipo] = [base[Math.floor(R() * base.length)], 'exigencia']
+  }
+  if (!alvoP) return
+  c.pend = { pid: alvoP.id, tipo, left: 2 }
+  c.last = game.total
+  toast(COAL_EVENTOS[tipo].icon, COAL_EVENTOS[tipo].titulo(alvoP))
+}
+
+/* ---------- BLOCO 33: legado entre mandatos ---------- */
+export const legadoNow = () => (game.poder && game.poder.legado) || { itens: [], seen: [], pend: null, last: -9 }
+function legadoRegistrar() {
+  ensurePoder()
+  const p = game.poder
+  const l = p.legado || (p.legado = { itens: [], seen: [], pend: null, last: -9 })
+  const rv = p.rv
+  const ms = p.mist
+  l.itens.push({ r: game.total, cargo: officeId(), pop: Math.round(game.stats.pop), img: Math.round(game.stats.img), sujo: game.dirty || 0, leis: (p.statutes || []).length, rv: rv ? rv.estagio : null, mist: ms ? (ms.fim ? ms.fim.tipo : 'ativa') : null })
+  l.itens = l.itens.slice(-4)
+  const u = l.itens[l.itens.length - 1]
+  // o mandato novo herda um pouco do que foi construído (ou queimado)
+  const bonus = clamp((u.pop - 50) * 0.08 + (u.img - 50) * 0.08, -4, 4)
+  if (bonus) applyFx({ pop: bonus / 2, cong: bonus })
+}
+export const legadoResumo = () => {
+  const l = legadoNow()
+  return l.itens[l.itens.length - 1] || null
+}
+export function legadoPendNow() {
+  const l = legadoNow()
+  if (!l.pend) return null
+  const e = LEGADO_EVENTOS[l.pend.id]
+  const u = legadoResumo()
+  return e && u ? { e, left: l.pend.left, titulo: e.titulo(u), texto: e.texto(u) } : null
+}
+export function legadoMotivo(opId) {
+  const pn = legadoPendNow()
+  if (!pn) return 'Nada pendente.'
+  const o = pn.e.ops.find((x) => x.id === opId)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function legadoAplicar(l, opId, auto) {
+  const e = LEGADO_EVENTOS[l.pend.id]
+  const o = e.ops.find((x) => x.id === opId) || e.ops.find((x) => x.id === e.padrao)
+  const fx = { ...(o.fx || {}) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  if (o.risco) {
+    const bad = R() < o.risco.p
+    const extra = bad ? o.risco.fx : o.ganho || {}
+    for (const k in extra) fx[k] = (fx[k] || 0) + extra[k]
+  }
+  applyFx(fx, true)
+  timelineAdd(e.icon, `${e.titulo(legadoResumo())}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, 'flat')
+  l.pend = null
+  cnt('legado')
+  return o
+}
+export function legadoEscolher(opId) {
+  if (legadoMotivo(opId)) return null
+  const pn = legadoPendNow()
+  const o = legadoAplicar(game.poder.legado, opId, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+function roundLegado() {
+  const l = game.poder && game.poder.legado
+  if (!l || !l.itens.length) return
+  if (l.pend) {
+    if (--l.pend.left < 0) legadoAplicar(l, 'x', true)
+    return
+  }
+  const u = legadoResumo()
+  if (game.total - u.r < 2 || game.total - l.last < 5 || R() > 0.12) return
+  const pool = Object.keys(LEGADO_EVENTOS).filter((id) => !l.seen.includes(id) && LEGADO_EVENTOS[id].cond(u))
+  if (!pool.length) return
+  const id = pool[Math.floor(R() * pool.length)]
+  l.pend = { id, left: 2 }
+  l.seen.push(id)
+  if (l.seen.length >= 5) l.seen = []
+  l.last = game.total
+  toast(LEGADO_EVENTOS[id].icon, LEGADO_EVENTOS[id].titulo(u))
 }

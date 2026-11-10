@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { game, country, partiesNow, partyObj, partyChanceNow, askJoin, declineInvite, foundParty, foundReasons, ideology } from '../../game/engine'
 import { AFF_TEXT, affinity } from '../../game/countries/brasil-parties'
 import { perkChips } from '../../game/ideas'
+import SecCoalizao from './SecCoalizao.vue'
 import PartyFounder from '../character/PartyFounder.vue'
 
 const msg = ref('')
@@ -27,6 +28,7 @@ function found(p) {
   <div>
     <h2>🎗️ Partido</h2>
     <p v-if="msg" class="notice">{{ msg }}</p>
+    <SecCoalizao />
 
     <div v-if="me()" class="pc sel" :style="{ '--pc': me().color }">
       <div class="pc-head">

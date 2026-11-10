@@ -387,6 +387,8 @@ describe('Economia e sociedade', () => {
     novo()
     E.setorAgir('industria', 'regular')
     E.socNow().setores.industria = 10
+    // coalizão neutra (38% na base) para isolar o efeito do setor
+    E.game.poder.coal = { partidos: [{ id: 'a', sigla: 'A', nome: 'A', cor: '#fff', ideo: 'centro', cad: 38, agenda: 'fiscal', own: false, status: 'base', humor: 55, acao: {}, aliado: false }, { id: 'b', sigla: 'B', nome: 'B', cor: '#000', ideo: 'centro', cad: 62, agenda: 'fiscal', own: false, status: 'oposicao', humor: 30, acao: {}, aliado: false }], pend: null, last: 99, afins: [] }
     const cong = E.game.stats.cong
     E.roundAvancos()
     expect(E.game.stats.cong).toBeLessThan(cong)
@@ -1157,5 +1159,99 @@ describe('BLOCO 32 — conspiração, história de fundo e mais gente', () => {
       for (const pid of R.CADEIAS[id].passos) expect(R.REUNIOES.find((d) => d.id === pid)).toBeTruthy()
     }
     expect(R.REUNIOES.length).toBeGreaterThanOrEqual(40)
+  })
+})
+
+describe('BLOCO 33 — coalizão, alianças e legado', () => {
+  it('a coalizão nasce com 100% das cadeiras, partido próprio na base e maioria calculável', () => {
+    novo('presidente')
+    E.game.total = 6
+    E.roundAvancos()
+    const c = E.coalNow()
+    expect(c.partidos.reduce((a, x) => a + x.cad, 0)).toBeGreaterThanOrEqual(95)
+    expect(c.partidos.length).toBeGreaterThanOrEqual(5)
+    const pct = E.coalBasePct()
+    expect(pct).toBeGreaterThanOrEqual(0)
+    expect(pct).toBeLessThanOrEqual(100)
+    c.partidos.forEach((x) => (x.status = 'base'))
+    expect(E.coalMaioria()).toBe(true)
+    c.partidos.forEach((x) => (x.status = 'oposicao'))
+    expect(E.coalMaioria()).toBe(false)
+  })
+  it('agradar sobe o humor, respeita intervalo e custa caixa', () => {
+    novo('presidente')
+    E.game.total = 6
+    E.roundAvancos()
+    const x = E.coalNow().partidos.find((p) => !p.own)
+    x.humor = 40
+    E.game.stats.cash = 10
+    expect(E.coalAcao('agradar', x.id)).toBeTruthy()
+    expect(x.humor).toBeGreaterThan(40)
+    expect(E.coalAcaoMotivo('agradar', x.id)).toMatch(/Espere/)
+    expect(E.game.stats.cash).toBeLessThan(10)
+  })
+  it('partido da base insatisfeito pede para sair e sem resposta ele sai', () => {
+    novo('presidente')
+    E.game.total = 8
+    E.roundAvancos()
+    const c = E.coalNow()
+    const x = c.partidos.find((p) => !p.own)
+    x.status = 'base'
+    x.humor = 20
+    c.pend = { pid: x.id, tipo: 'sair', left: 0 }
+    E.roundAvancos()
+    expect(c.pend).toBeNull()
+    expect(x.status).toBe('neutro')
+  })
+  it('o seu partido não sai de graça: debandada tem decisão própria', () => {
+    novo('presidente')
+    E.game.total = 8
+    E.roundAvancos()
+    const c = E.coalNow()
+    const own = c.partidos.find((p) => p.own)
+    if (!own) return
+    c.pend = { pid: own.id, tipo: 'debandada', left: 2 }
+    E.game.stats.cash = 20
+    expect(E.coalPendNow().titulo).toMatch(/Racha/)
+    expect(E.coalPendEscolher('segurar')).toBeTruthy()
+    expect(own.humor).toBeGreaterThan(30)
+  })
+  it('aliança de campanha rende voto-ponto, tem limite de 2 e vira base depois da vitória', () => {
+    novo('presidente')
+    E.game.total = 6
+    E.roundAvancos()
+    E.game.election = { target: 'presidente', aliancas: [], foco: { g: {}, est: {} } }
+    E.game.phase = 'campaign'
+    E.game.stats.cash = 40
+    const c = E.coalNow()
+    const ps = c.partidos.filter((p) => !p.own)
+    ps.forEach((p) => (p.humor = 60))
+    const antes = E.baseScore()
+    expect(E.aliar(ps[0].id)).toBeTruthy()
+    expect(E.baseScore()).toBeGreaterThan(antes)
+    expect(E.aliar(ps[1].id)).toBeTruthy()
+    expect(E.aliancaMotivo(ps[2].id)).toMatch(/máximo/)
+    expect(E.aliancasNow().length).toBe(2)
+  })
+  it('legado: vitória registra o mandato e eventos só vêm das condições certas', async () => {
+    novo('presidente')
+    E.game.total = 20
+    E.game.stats.pop = 70
+    E.game.stats.img = 70
+    E.game.poder.statutes = [1, 2, 3, 4].map((i) => ({ id: i }))
+    E.game.election = { rival: 0, target: 'presidente', result: { won: true, share: 60, h2h: 60 }, rivalArc: false, aliancas: [] }
+    E.game.history = []
+    E.continueAfterResult()
+    const u = E.legadoResumo()
+    expect(u.leis).toBe(4)
+    expect(u.pop).toBeGreaterThan(60)
+    const L = await import('../src/game/coalizao33.js')
+    expect(L.LEGADO_EVENTOS.marca.cond(u)).toBe(true)
+    expect(L.LEGADO_EVENTOS.fantasma.cond(u)).toBe(false)
+    E.game.poder.legado.pend = { id: 'marca', left: 0 }
+    expect(E.legadoPendNow().titulo).toBeTruthy()
+    E.game.total = 22
+    E.roundAvancos()
+    expect(E.game.poder.legado.pend).toBeNull()
   })
 })
