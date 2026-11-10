@@ -12,6 +12,7 @@ import TabIdeas from '../tabs/TabIdeas.vue'
 import TabContacts from '../tabs/TabContacts.vue'
 import TabMundo from '../tabs/TabMundo.vue'
 import TabLeis from '../tabs/TabLeis.vue'
+import GuiaAba from './GuiaAba.vue'
 import Tips from './Tips.vue'
 
 const tab = ref('agenda')
@@ -115,6 +116,7 @@ const todo = computed(() => {
       </nav>
     </div>
     <div class="tabbody">
+      <GuiaAba v-if="!locked" :tab="cur" @go="tab = $event" />
       <GamePanel v-if="cur === 'agenda'" />
       <TabRace v-else-if="cur === 'disputa'" />
       <TabSocial v-else-if="cur === 'redes'" />

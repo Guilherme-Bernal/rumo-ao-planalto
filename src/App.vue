@@ -68,6 +68,7 @@ const cena = computed(() => {
   if (p && p.civil) return 'guerra'
   if (p && p.plot) return 'crise'
   if (p && (p.acao || (p.inq && p.inq.stage === game.stage))) return 'tribunal'
+  if (p && p.cst && p.cst.estado) return 'crise'
   if (p && p.prot) return 'protesto'
   return ''
 })

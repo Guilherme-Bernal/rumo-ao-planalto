@@ -288,3 +288,73 @@ ASKS.sindicalista = [
   { id: 'trégua', label: 'Pedir trégua nas negociações', you: 'Podemos esfriar a ameaça de greve enquanto a gente conversa?', ok: 'Dou um prazo. Mas quero resposta.', fail: 'A base já decidiu. Greve na semana que vem.', okFx: { pop: 2, soc: 1 }, base: 0.3, cost: 4 },
   { id: 'apoio', label: 'Pedir apoio da categoria', you: 'Queria o apoio da categoria ao que estamos construindo.', ok: 'Se cumprir o que falou, a gente apoia.', fail: 'Vocês só aparecem na eleição.', okFx: { pop: 3, cong: 1 }, base: 0.3, cost: 5 },
 ]
+
+// Conversas por cargo: só aparecem para quem exerce aquele mandato.
+const SO = (only, id, role, kind, title, text, ch) => ({ ...S(id, role, kind, ALL, title, text, ch), only })
+SCRIPTS.push(
+  SO(['vereador'], 'ver_projeto', 'lider', 'street', 'Projeto de lei para o bairro', 'Vereador(a), a gente queria um projeto de lei que proíba caminhão pesado na nossa rua. Dá para colocar em pauta na Câmara?', [
+    C('Protocolar o projeto esta semana', { pop: 3, cong: -1 }, 7, 'O bairro gostou. Os colegas, nem tanto.'),
+    C('Explicar que precisa de apoio de mais vereadores', { pop: 1 }, 2, 'Ele entendeu e vai juntar assinaturas.'),
+    C('Prometer e esquecer', { pop: 1, img: -2 }, -5, 'A promessa vazia vai voltar a cobrar você.'),
+  ]),
+  SO(['vereador'], 'ver_colega', 'aliado', 'call', 'Votar contra o prefeito', 'Aqui é um colega da Câmara. O prefeito mandou um aumento de taxa e queremos barrar. Posso contar com o seu voto?', [
+    C('Votar com o grupo', { cong: 3, pop: 2, cash: -1 }, 6, 'A Câmara barrou a taxa, e o prefeito ficou irritado.'),
+    C('Negociar mudanças na proposta', { cong: 1, img: 1 }, 3, 'Saiu um texto menos pesado.'),
+    C('Ficar com o prefeito', { cong: -3, cash: 1 }, -6, 'O grupo anotou o seu nome.'),
+  ]),
+  SO(['prefeito'], 'pref_licitacao', 'empresario', 'call', 'Licitação da coleta de lixo', 'Prefeito(a), sou da empresa que concorre à coleta de lixo. A concorrência está acirrada... existe um jeito de conversarmos?', [
+    C('Recusar e abrir a licitação com transparência', { img: 3, cash: -1 }, -4, 'A concorrência foi limpa e o preço caiu.'),
+    C('Aceitar o "agrado" e direcionar', { cash: 7, img: -6 }, 12, 'Dinheiro entrou e a auditoria vai ligar o seu nome.', { dirty: true, heat: 10 }),
+    C('Encaminhar ao jurídico da prefeitura', { img: 1 }, 0, 'Ele entendeu o recado.'),
+  ]),
+  SO(['prefeito'], 'pref_servidores', 'sindicalista', 'call', 'Reajuste dos servidores municipais', 'Prefeito(a), o funcionalismo está sem reajuste há dois anos. Ou conversamos, ou a gente para as escolas e os postos.', [
+    C('Dar um reajuste parcelado', { soc: 2, pop: 2, cash: -3 }, 8, 'A categoria aceitou. O caixa sentiu.'),
+    C('Propor uma comissão e nada de dinheiro agora', { pop: -1 }, -2, 'Eles ficaram desconfiados, mas esperam.'),
+    C('Negar e endurecer', { cash: 1, pop: -3, soc: -2 }, -9, 'A greve ficou mais provável.'),
+  ]),
+  SO(['prefeito'], 'pref_obra', 'lider', 'street', 'A obra do bairro atrasou', 'Prefeito(a), a obra da nossa rua está parada há três meses. O povo está bravo. O senhor vem ver?', [
+    C('Ir ao local e cobrar a empresa', { pop: 3, img: 1, cash: -1 }, 7, 'A obra voltou a andar com você na foto.'),
+    C('Mandar um secretário', { pop: 1 }, 1, 'O bairro sentiu a ausência.'),
+    C('Culpar o governo anterior', { pop: -1, img: -1 }, -3, 'Ninguém comprou a desculpa.'),
+  ]),
+  SO(['dep_estadual'], 'est_governo', 'aliado', 'call', 'O governo precisa do seu voto', 'Deputado(a), o Palácio quer aprovar o pacote fiscal na Assembleia hoje. Em troca, dá para pensar em emendas para a sua região.', [
+    C('Votar com o governo e pedir as emendas', { cong: 3, cash: 3, pop: 1, img: -1 }, 7, 'Pacote aprovado. As emendas saíram.'),
+    C('Condicionar o voto a mudanças no texto', { cong: 1, img: 2 }, 3, 'O governo cedeu um pouco.'),
+    C('Votar contra', { cong: -2, pop: 2, img: 1 }, -3, 'Você agradou à oposição.'),
+  ]),
+  SO(['dep_estadual'], 'est_prefeito', 'lider', 'call', 'Prefeito pede emenda ao estado', 'Deputado(a), aqui é o prefeito da sua região. A creche não sai sem uma emenda estadual. Conto com o senhor!', [
+    C('Garantir a emenda', { pop: 3, cash: -2, cong: 1 }, 8, 'A creche saiu, e o prefeito falou bem de você.'),
+    C('Prometer, sem data', { pop: 1 }, 0, 'Ele espera, mas está de olho.'),
+    C('Recusar', { pop: -2 }, -5, 'Perdeu um aliado local.'),
+  ]),
+  SO(['dep_federal'], 'fed_relatoria', 'aliado', 'msg', 'Relatoria de projeto importante', 'Deputado(a), o líder do bloco quer indicar você como relator de um projeto sensível. Dá visibilidade, mas desgasta.', [
+    C('Aceitar a relatoria', { cong: 3, img: 2, pop: -1 }, 7, 'Você virou nome conhecido em Brasília.'),
+    C('Aceitar se puder alterar o texto', { cong: 1, img: 1 }, 3, 'O líder topou com ressalvas.'),
+    C('Recusar para não se expor', { cong: -1 }, -3, 'Ele passou a vaga a outro.'),
+  ]),
+  SO(['dep_federal'], 'fed_prefeitos', 'lider', 'call', 'Prefeitos pedindo emendas', 'Deputado(a), uns prefeitos da sua base estão pedindo emenda para obras. Quem leva, apoia você na eleição.', [
+    C('Distribuir as emendas', { pop: 3, cash: -2, cong: 1 }, 7, 'Os prefeitos agradeceram e prometeram palanque.'),
+    C('Priorizar a região mais pobre', { soc: 1, pop: 2, img: 1 }, 4, 'Alguns prefeitos reclamaram, mas foi justo.'),
+    C('Segurar o dinheiro', { cash: 1, pop: -2 }, -6, 'Os prefeitos acharam que você sumiu.'),
+  ]),
+  SO(['senador'], 'sen_sabatina', 'aliado', 'call', 'Sabatina polêmica', 'Senador(a), o indicado do governo para a agência reguladora é ligado a empresas do setor. A sabatina é amanhã. Como o senhor vai votar?', [
+    C('Votar contra e justificar', { img: 3, cong: -2 }, -2, 'Você passou a imagem de independência.'),
+    C('Votar a favor com ressalvas', { cong: 2, img: -1 }, 4, 'O governo agradeceu.'),
+    C('Pedir vista para ganhar tempo', { cong: 0, img: 1 }, 1, 'A votação foi adiada.'),
+  ]),
+  SO(['senador'], 'sen_governador', 'lider', 'call', 'O governador pede socorro', 'Senador(a), a dívida do estado está sufocando o caixa. O senhor pode ajudar na renegociação com a União?', [
+    C('Articular a renegociação', { pop: 3, cong: 1, cash: -1 }, 8, 'Você virou o defensor do estado no Senado.'),
+    C('Pedir contrapartidas ao estado', { img: 1, cong: 1 }, 2, 'O governador topou com um suspiro.'),
+    C('Recusar', { pop: -2, cong: -1 }, -5, 'A bancada do estado ficou com raiva.'),
+  ]),
+  SO(['presidente'], 'pres_ciencia', 'cientista', 'msg', 'Orçamento da ciência', 'Presidente, os laboratórios nacionais estão sem verba. Com um investimento fixo, o país pode ter tecnologia própria em chips e energia.', [
+    C('Anunciar um programa de pesquisa', { eco: 2, img: 3, cash: -3 }, 8, 'A comunidade científica fez festa.'),
+    C('Pedir um plano antes', { img: 1 }, 2, 'Eles vão entregar um plano de metas.'),
+    C('Cortar o orçamento', { cash: 2, img: -3, eco: -1 }, -8, 'Os cientistas viraram críticos ferozes.'),
+  ]),
+  SO(['presidente'], 'pres_bloco', 'diplomata', 'call', 'Convite para um bloco', 'Presidente, estão nos convidando para uma cúpula que pode abrir as portas de um novo bloco. Mas há desconforto de outros parceiros.', [
+    C('Aceitar e ir pessoalmente', { img: 2, eco: 1 }, 6, 'A foto na cúpula rendeu manchete.'),
+    C('Mandar o chanceler', { img: 1 }, 2, 'Presença discreta, sem ruído.'),
+    C('Recusar para não irritar ninguém', { img: -1 }, -3, 'O Brasil perdeu um assento na mesa.'),
+  ]),
+)

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import SecTecnologia from './SecTecnologia.vue'
 import { game, STATS, officeInfo, worldPartners, worldWars, worldNuc, worldStances, diploActions, defActions, fedDefs, fedActions, isPresident, canDiplo, worldReady, diplo, defAct, nucInvest, fedAct, diploChance, askChance } from '../../game/engine'
 
 const w = computed(() => game.world)
@@ -50,7 +51,7 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
       </div>
       <div class="bar"><i :style="{ width: fedVal(d.id) + '%', background: color(fedVal(d.id)) }"></i></div>
       <div class="acts">
-        <button v-for="a in fedActions(d.dir)" :key="a.id" type="button" :disabled="!ready || !afford(a.fx)" :title="a.desc" @click="fedAct(d.id, a.id)">
+        <button v-for="a in fedActions(d.dir)" :key="a.id" type="button" :disabled="!ready || !afford(a.fx)" :title="!ready ? why : !afford(a.fx) ? 'Sem Caixa para isso.' : a.desc" @click="fedAct(d.id, a.id)">
           {{ a.name }}
           <small v-if="a.ask">{{ Math.round(askChance(d.id) * 100) }}% de chance</small>
           <small v-else>
@@ -70,7 +71,7 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
         </div>
         <div class="bar"><i :style="{ width: w.rel[p.id] + '%', background: color(w.rel[p.id]) }"></i></div>
         <div class="acts">
-          <button v-for="a in diploActions()" :key="a.id" type="button" :disabled="!ready || !afford(a.fx)" :title="a.desc" @click="diplo(p.id, a.id)">
+          <button v-for="a in diploActions()" :key="a.id" type="button" :disabled="!ready || !afford(a.fx)" :title="!ready ? why : !afford(a.fx) ? 'Sem Caixa para isso.' : a.desc" @click="diplo(p.id, a.id)">
             {{ a.name }}
             <small v-if="a.need">{{ Math.round(diploChance(p.id, a.id) * 100) }}% de chance</small>
             <small v-else>
@@ -94,7 +95,7 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
         <div class="bar"><i :style="{ width: w.fa + '%', background: color(w.fa) }"></i></div>
         <p v-if="w.fa < 25" class="legend" style="color: var(--bad)">⚠️ Os quartéis estão insatisfeitos: segurança e base caem a cada rodada. Com popularidade baixa, isso pode derrubar o governo.</p>
         <div class="acts">
-          <button v-for="a in defActions()" :key="a.id" type="button" :disabled="!ready || !afford(a.fx)" :title="a.desc" @click="defAct(a.id)">
+          <button v-for="a in defActions()" :key="a.id" type="button" :disabled="!ready || !afford(a.fx)" :title="!ready ? why : !afford(a.fx) ? 'Sem Caixa para isso.' : a.desc" @click="defAct(a.id)">
             {{ a.name }}
             <small>
               <span v-for="c in chips(a.fx)" :key="c.t" :class="c.up ? 'u' : 'dn'">{{ c.t }} </span>
@@ -118,6 +119,8 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
       </div>
     </template>
     <p v-else class="legend">Diplomacia, Forças Armadas e energia nuclear ficam com o cargo de Presidente da República.</p>
+
+    <SecTecnologia />
   </div>
 </template>
 

@@ -25,14 +25,47 @@ const T = {
     { id: 'f-energia', icon: '⚡', title: 'Marco da energia limpa', ementa: 'Incentiva eólica e solar com crédito para novos projetos.', pro: 'Investidores e ambientalistas', con: 'Setor de combustíveis fósseis', win: { eco: 3, img: 2, cash: -2 }, lose: {} },
   ],
 }
+
+// Projetos próprios de cada cargo: eles entram na pauta além dos da esfera.
+const B = (id, icon, title, ementa, pro, con, win, edu) => ({ id, icon, title, ementa, pro, con, win, lose: {}, ...(edu ? { edu } : {}) })
+const X = {
+  vereador: [
+    B('v-uso', '🏗️', 'Lei de uso do solo do bairro', 'Define o que pode ser construído em cada rua do seu bairro.', 'Moradores e associações', 'Construtoras', { pop: 2, eco: -1, img: 1 }),
+    B('v-pracas', '🌳', 'Adoção de praças por empresas', 'Empresas cuidam das praças em troca de placa.', 'Vizinhos e comércio', 'Quem teme privatizar espaço público', { pop: 2, cash: 1 }),
+  ],
+  prefeito: [
+    B('p-transp', '🚌', 'Tarifa zero aos domingos', 'Ônibus gratuito nos domingos e feriados.', 'Trabalhadores e comércio de rua', 'Empresas de ônibus (querem compensação)', { pop: 3, cash: -3, eco: 1 }),
+    B('p-habita', '🏘️', 'Programa municipal de moradia', 'Lotes urbanizados para famílias de baixa renda.', 'Famílias sem casa e movimentos sociais', 'Secretaria da Fazenda', { soc: 3, pop: 2, cash: -3 }),
+  ],
+  dep_estadual: [
+    B('de-agua', '💧', 'Plano estadual de saneamento', 'Metas de água e esgoto para os municípios do estado.', 'Prefeitos do interior e a saúde pública', 'Fazenda estadual (custo)', { soc: 3, img: 1, cash: -3 }),
+    B('de-tecno', '🔬', 'Fundo estadual de pesquisa', 'Dinheiro fixo para universidades e startups do estado.', 'Reitores e jovens empreendedores', 'Quem quer o dinheiro para obras', { eco: 2, soc: 1, cash: -2, img: 1 }, 2),
+  ],
+  governador: [
+    B('g-polo', '🏭', 'Polo industrial do estado', 'Incentivos para um novo polo industrial no interior.', 'Prefeitos e empresas', 'Ambientalistas', { eco: 4, cash: -3, img: -1 }),
+    B('g-seg', '🚓', 'Integração das polícias estaduais', 'Comando único e inteligência compartilhada.', 'Bancada da segurança', 'Corporações que perdem autonomia', { seg: 4, cash: -2, cong: -1 }),
+  ],
+  dep_federal: [
+    B('df-fundo', '🏛️', 'Fundo de desenvolvimento regional', 'Emenda para recursos do governo federal à sua região.', 'Prefeitos e lideranças locais', 'Equipe econômica', { cash: 1, pop: 3, cong: 1, img: -1 }),
+    B('df-eleit', '🗳️', 'Reforma política', 'Muda regras de financiamento e coligação.', 'Imprensa e sociedade civil', 'Partidos grandes', { img: 3, cong: -2, pop: 1 }),
+  ],
+  senador: [
+    B('s-federal', '🗺️', 'Pacto federativo e dívida dos estados', 'Renegocia a dívida dos estados com a União.', 'Governadores e a bancada regional', 'Equipe econômica', { cong: 2, pop: 2, cash: -2 }),
+    B('s-defesa', '🎖️', 'Marco legal da indústria de defesa', 'Estimula empresas nacionais de material militar.', 'Forças Armadas e indústria', 'Quem teme gasto militar', { eco: 2, seg: 2, cash: -1, img: -1 }),
+  ],
+  presidente: [
+    B('pr-ciencia', '🔬', 'Marco da ciência e inovação', 'Mais verba fixa para pesquisa e para parcerias com empresas.', 'Universidades e empresas de tecnologia', 'Equipe econômica', { eco: 3, img: 2, cash: -3 }, 3),
+    B('pr-espaco', '🚀', 'Programa espacial nacional', 'Satélites próprios e base de lançamento.', 'Cientistas e as Forças Armadas', 'Quem prefere gastar com saúde', { eco: 2, img: 2, cash: -3 }),
+  ],
+}
 const TIER = { vereador: 'mun', prefeito: 'mun', dep_estadual: 'est', governador: 'est', dep_federal: 'fed', senador: 'fed', presidente: 'fed' }
 export const billTier = (office) => TIER[office] || 'fed'
 // Projeto da pauta: varia por rodada, mas é o mesmo se abrir a votação duas vezes na mesma rodada.
 export const billFor = (office, round = 0) => {
-  const list = T[billTier(office)]
+  const list = billsOf(office)
   return list[Math.abs(round) % list.length]
 }
-export const ALL_BILLS = Object.values(T).flat()
+export const ALL_BILLS = [...Object.values(T).flat(), ...Object.values(X).flat()]
 // Efeito final. stance 'pro' = você defende o projeto; 'con' = você tenta derrubar.
 // passed = o projeto foi aprovado. Cada emenda negociada tira 25% do benefício do projeto.
 const scale = (fx, k) => Object.fromEntries(Object.entries(fx).map(([s, v]) => [s, v > 0 ? Math.round(v * k) : v]).filter(([, v]) => v))
@@ -93,4 +126,4 @@ export const statuteFx = (bill, k = 1) => {
   return out
 }
 export const billById = (id) => ALL_BILLS.find((b) => b.id === id)
-export const billsOf = (office) => T[billTier(office)]
+export const billsOf = (office) => [...T[billTier(office)], ...(X[office] || [])]

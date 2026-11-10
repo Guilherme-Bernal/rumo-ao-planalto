@@ -14,6 +14,7 @@ import { PARTIES } from './countries/brasil-parties'
 import { DAY_FLAVOR, ACTION_ICON, holidayOf, makePost, slug, GENERIC_TAGS, candName } from './social'
 import { MORE_FLAVOR } from './flavor'
 import { BIG, bigWhen, BIG_TAGS } from './bigevents'
+import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
 import { makeContacts, ensureContacts, SCRIPTS, ROLES, KIND, ASKS, CHAT, LIGAR } from './contacts'
 import { makeReactions } from './reactions'
 import { DEALS, STUDIES, POWER_ACTIONS, ESTUDAR, ACORDO, MAX_DEALS, STUDY_MAX, studyNeed, STUDY_FLAVOR } from './gabinete'
@@ -70,7 +71,7 @@ const R = () => {
 const rnd = (a, b) => a + R() * (b - a)
 
 function blankWorld() {
-  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50, india: 50, japao: 50, afr: 52, lat: 52, onu: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
+  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50, india: 50, japao: 50, afr: 52, lat: 52, onu: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], blocos: [], tratados: [], ops: [], tech: { done: [], prog: {}, foco: null }, fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
 }
 
 const blank = () => ({
@@ -890,10 +891,11 @@ function pickApproach() {
   if (!game.contacts.length) game.contacts = makeContacts(R, { religioso: !!game.traits.religiao && game.traits.religiao !== 'sem', rival: game.rival, religiao: game.traits.religiao })
   ensureContacts(game.contacts, R, { religiao: game.traits.religiao })
   if (R() > 0.7) return null
-  let list = SCRIPTS.filter((s) => s.stages.includes(game.stage) && !game.talkSeen.includes(s.id))
+  const cargoOk = (s) => !s.only || s.only.includes(officeId())
+  let list = SCRIPTS.filter((s) => s.stages.includes(game.stage) && cargoOk(s) && !game.talkSeen.includes(s.id))
   if (!list.length) {
     game.talkSeen = []
-    list = SCRIPTS.filter((s) => s.stages.includes(game.stage))
+    list = SCRIPTS.filter((s) => s.stages.includes(game.stage) && cargoOk(s))
   }
   const s = list[Math.floor(R() * list.length)]
   game.talkSeen.push(s.id)
@@ -922,6 +924,7 @@ export function talkChoice(ch) {
   if (ch.dirty) {
     game.dirty++
     game.termDirty++
+    if (R() < 0.6) agendar('dirty')
   }
   if (ch.heat) game.heat = clamp(game.heat + ch.heat)
   if (!ch.next) {
@@ -1013,6 +1016,8 @@ export function doAction(id, month) {
   curSphere = sphereOf(a)
   applyFx(a.fx, true)
   curSphere = null
+  cnt('a:' + a.id)
+  if ((a.id === 'obracidade' || a.id === 'parceriapriv') && R() < 0.7) agendar('obra')
   let res = null
   if (a.power) game.power = clamp(game.power + a.power)
   if (a.gamble) {
@@ -1923,7 +1928,7 @@ export const worldReady = () => game.phase === 'actions' && game.world.pts > 0
 function ensureWorld() {
   const b = blankWorld()
   const old = game.world || {}
-  game.world = { ...b, ...old, rel: { ...b.rel, ...(old.rel || {}) }, nuc: { ...b.nuc, ...(old.nuc || {}) }, fed: { ...(old.fed || {}) } }
+  game.world = { ...b, ...old, rel: { ...b.rel, ...(old.rel || {}) }, nuc: { ...b.nuc, ...(old.nuc || {}) }, tech: { ...b.tech, ...(old.tech || {}), done: [...((old.tech && old.tech.done) || [])], prog: { ...((old.tech && old.tech.prog) || {}) } }, blocos: [...(old.blocos || [])], tratados: [...(old.tratados || [])], ops: [...(old.ops || [])], fed: { ...(old.fed || {}) } }
   for (const d of fedDefs()) if (typeof game.world.fed[d.id] !== 'number') game.world.fed[d.id] = 50
 }
 
@@ -2116,7 +2121,10 @@ function tickWorld() {
     if (w.fa < 25) add({ seg: -1, cong: -0.5 }, 1)
     else if (w.fa > 70) add({ seg: 0.5, cong: 0.4 }, 1)
     for (const n of NUC) if (w.nucDone.includes(n.id)) add(n.passive, 1)
+    for (const b of BLOCOS) if (w.blocos.includes(b.id)) add(b.passive, 1)
+    for (const t of TRATADOS) if (w.tratados.includes(t.id)) add(t.pass, 1)
   }
+  for (const t of TECHS) if (w.tech.done.includes(t.id) && (pres || (officeId() === 'governador' && t.civil))) add(t.pass, pres ? 1 : 0.6)
   for (const d of fedDefs()) add(d.pass, ((w.fed[d.id] ?? 50) - 50) / 50)
   const wm = pres ? 1 : officeId() === 'governador' ? 0.6 : 0.4
   for (const wr of w.wars) {
@@ -2478,7 +2486,8 @@ export function paperAct(kind) {
 const EXEC = ['prefeito', 'governador', 'presidente']
 export const isExec = () => EXEC.includes(officeId())
 function ensurePoder() {
-  game.poder = { statutes: [], timeline: [], pending: null, press: [], seen: [], ...(game.poder || {}) }
+  const p = game.poder
+  if (!p || !p.statutes || !p.timeline || !p.press || !p.seen) game.poder = { statutes: [], timeline: [], pending: null, press: [], seen: [], ...(p || {}) }
 }
 export function timelineAdd(icon, text, tn = 'flat') {
   ensurePoder()
@@ -3079,14 +3088,23 @@ export const aprovacao = () => {
   return Math.round(Math.max(0, Math.min(100, 0.6 * s.pop + 0.2 * s.img + 0.2 * s.cong)))
 }
 export const GOALS = [
-  { id: 'fisc', kind: 'leg', icon: '🔎', text: 'Fiscalizar 3 vezes', need: 3, val: () => cntOf('fisc') },
+  { id: 'fisc', kind: 'leg', offs: ['vereador', 'dep_estadual', 'dep_federal'], icon: '🔎', text: 'Fiscalizar 3 vezes', need: 3, val: () => cntOf('fisc') },
   { id: 'leis', kind: 'all', icon: '📜', text: 'Ter 2 leis ou decretos ativos', need: 2, val: () => statutesActive().length },
-  { id: 'cpi', kind: 'leg', icon: '🕵️', text: 'Fazer uma CPI dar resultado', need: 1, val: () => cntOf('cpiok') },
+  { id: 'cpi', kind: 'leg', offs: ['dep_estadual', 'dep_federal', 'senador'], icon: '🕵️', text: 'Fazer uma CPI dar resultado', need: 1, val: () => cntOf('cpiok') },
   { id: 'nome', kind: 'exec', icon: '🎓', text: 'Preencher as 3 pastas do governo', need: 3, val: () => nomeados().length },
   { id: 'aprov', kind: 'exec', icon: '📊', text: 'Chegar a 55% de aprovação', need: 55, val: () => aprovacao() },
   { id: 'pop', kind: 'all', icon: '❤️', text: 'Manter popularidade acima de 60', need: 60, val: () => Math.round(game.stats.pop) },
+  { id: 'audiencia', kind: 'leg', offs: ['dep_estadual'], icon: '🎙️', text: 'Fazer 2 audiências públicas na região', need: 2, val: () => cntOf('a:caravanaE') },
+  { id: 'emendaE', kind: 'leg', offs: ['dep_estadual'], icon: '💼', text: 'Levar 2 emendas aos municípios', need: 2, val: () => cntOf('a:emendaEst') },
+  { id: 'relat', kind: 'leg', offs: ['dep_federal'], icon: '📑', text: 'Disputar uma relatoria', need: 1, val: () => cntOf('a:relatoria') + cntOf('relat') },
+  { id: 'baseF', kind: 'leg', offs: ['dep_federal', 'senador'], icon: '🤝', text: 'Manter a base acima de 60', need: 60, val: () => Math.round(game.stats.cong) },
+  { id: 'sabat', kind: 'leg', offs: ['senador'], icon: '🎤', text: 'Sabatinar 2 autoridades', need: 2, val: () => cntOf('a:sabatinar') },
+  { id: 'obras', kind: 'exec', offs: ['prefeito'], icon: '🏗️', text: 'Entregar 2 obras na cidade', need: 2, val: () => cntOf('a:obracidade') },
+  { id: 'pesqE', kind: 'exec', offs: ['governador'], icon: '🔬', text: 'Dominar uma tecnologia no estado', need: 1, val: () => (game.world.tech ? game.world.tech.done.length : 0) },
+  { id: 'emenda', kind: 'exec', offs: ['presidente'], icon: '🏛️', text: 'Promulgar uma emenda constitucional', need: 1, val: () => (game.poder.cst ? game.poder.cst.emendas : 0) },
+  { id: 'blocoP', kind: 'exec', offs: ['presidente'], icon: '🌐', text: 'Levar o país a um bloco internacional', need: 1, val: () => (game.world.blocos ? game.world.blocos.length : 0) },
 ]
-export const goalsNow = () => GOALS.filter((g) => g.kind === 'all' || (g.kind === 'exec') === isExec()).map((g) => ({ ...g, v: g.val(), done: !!(game.poder.goalsDone || []).includes(game.stage + ':' + g.id) }))
+export const goalsNow = () => GOALS.filter((g) => (g.kind === 'all' || (g.kind === 'exec') === isExec()) && (!g.offs || g.offs.includes(officeId()))).map((g) => ({ ...g, v: g.val(), done: !!(game.poder.goalsDone || []).includes(game.stage + ':' + g.id) }))
 function checkGoals() {
   ensurePoder()
   if (!game.poder.goalsDone) game.poder.goalsDone = []
@@ -3127,6 +3145,8 @@ export function novoPartido() {
 }
 function roundMundo() {
   novoPartido()
+  partidoHistoria()
+  roundAvancos()
   const p = game.poder
   if (!p.polls) p.polls = []
   p.polls.push({ r: game.total, v: Math.max(0, Math.min(100, aprovacao() + Math.round((R() - 0.5) * 5))) })
@@ -3158,6 +3178,7 @@ export function responderProtesto(how) {
   if (how === 'dialogar') {
     if (game.stats.cash < 2) return null
     fx = { cash: -2, pop: 1, img: 1 }
+    agendar('greve')
   } else if (how === 'reprimir' && isExec()) {
     fx = game.stats.seg >= 50 ? { pop: -1, img: -3 } : { pop: -3, img: -5 }
     game.heat = clamp(game.heat + 4)
@@ -3406,7 +3427,7 @@ export function roundDefesa() {
   if (!isPres() && !fedLeg()) return
   const s = game.stats
   const fa = game.world.fa
-  const alvo = clamp((50 - fa) * 1.1 + (48 - s.pop) * 1.0 + (48 - s.cong) * 0.6 + (game.heat || 0) * 0.35 + (inquerito() ? 10 : 0))
+  const alvo = clamp((50 - fa) * 1.1 + (48 - s.pop) * 1.0 + (48 - s.cong) * 0.6 + (game.heat || 0) * 0.35 + (inquerito() ? 10 : 0) + cstTemp())
   p.golpe = Math.max(0, (p.golpe || 0) + (alvo - (p.golpe || 0)) * 0.3)
   if (p.civil) return civilRound()
   if (!p.plot && p.golpe >= 50 && R() < 0.4) {
@@ -3610,4 +3631,496 @@ export function agirLegGolpe(id) {
   }
   save()
   return { mil: true, txt }
+}
+
+/* ---------- BLOCO 20: Constituição, blocos, pesquisa e armas, elenco, consequências ---------- */
+function cstState() {
+  ensurePoder()
+  const c = game.poder.cst
+  if (!c || !c.mps || !c.flags) game.poder.cst = { pec: null, mps: [], estado: null, consulta: null, flags: {}, emendas: 0, prorr: false, ...(c || {}) }
+  return game.poder.cst
+}
+export const cstOn = () => isPres() || fedLeg()
+export const cstCan = (id) => (isPres() ? exeCan('cst:' + id) : fedLeg() ? legCan('cst:' + id) : false)
+function cstMark(id) {
+  if (isPres()) exeMark('cst:' + id)
+  else legMark('cst:' + id)
+}
+export const cstInfo = () => (cstOn() ? cstState() : null)
+export const cstEstado = () => (game.poder && game.poder.cst && game.poder.cst.estado) || null
+function cstTemp() {
+  const e = cstEstado()
+  const def = e && ESTADOS.find((x) => x.id === e.id)
+  return def ? def.golpe * 2 : 0
+}
+export const cstDefs = () => ({ PECS, PETREAS, MPS, ESTADOS, CONSULTAS })
+
+// Por que um botão está apagado (vazio quando está liberado)
+export function cstWhy(id) {
+  if (!cstOn()) return 'Disponível só para presidente e parlamentares federais.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (!cstCan(id)) return 'Ação já usada nesta rodada ou sem pontos de ação.'
+  return ''
+}
+export function pecChance(def, step = 0) {
+  const c = game.stats.cong
+  return Math.max(0.08, Math.min(0.92, 0.3 + (c - 40) / 100 - (def.hard || 0) + step * 0.1))
+}
+export function propor(id) {
+  if (!cstOn() || !cstCan('pec')) return null
+  const c = cstState()
+  if (c.pec) return { txt: 'Já existe uma PEC em tramitação.' }
+  if (c.estado) return { txt: 'Não se vota emenda à Constituição durante estado de defesa, de sítio ou intervenção (art. 60, §1º).' }
+  game.delta = {}
+  const pet = PETREAS.find((x) => x.id === id)
+  if (pet) {
+    cstMark('pec')
+    applyFx({ img: -4, cong: -2 }, true)
+    if (isPres()) game.heat = clamp((game.heat || 0) + 8)
+    timelineAdd('⚖️', `Supremo barra a PEC "${pet.name.toLowerCase()}": cláusula pétrea`, 'down')
+    toast('⚖️', `O Supremo barrou: ${pet.name.toLowerCase()}.`)
+    cnt('petrea')
+    save()
+    return { txt: 'O STF derrubou a proposta na hora: é cláusula pétrea (art. 60, §4º).', bad: true }
+  }
+  const def = PECS.find((x) => x.id === id)
+  if (!def) return null
+  if (def.flag === 'nuclearOk' && c.flags.nuclearOk) return { txt: 'Essa mudança já foi aprovada.' }
+  cstMark('pec')
+  c.pec = { id, step: 0 }
+  timelineAdd('📜', `${game.name} apresenta a PEC: ${def.name.toLowerCase()}`, 'flat')
+  toast('📜', `PEC protocolada: ${def.name}. Precisa de 3/5 nas duas Casas, em dois turnos.`)
+  cnt('pec')
+  save()
+  return { txt: 'PEC protocolada. O 1º turno acontece no início da próxima rodada.' }
+}
+export function editarMP(id) {
+  if (!isPres() || !cstCan('mp')) return null
+  const c = cstState()
+  const def = MPS.find((x) => x.id === id)
+  if (!def || c.mps.length >= 2) return def ? { txt: 'Há MPs demais pendentes no Congresso.' } : null
+  if (def.fx.cash && def.fx.cash < 0 && game.stats.cash < -def.fx.cash) return { txt: 'Sem caixa para isso.' }
+  game.delta = {}
+  cstMark('mp')
+  applyFx(def.fx, true)
+  c.mps.push({ id, left: 3 })
+  timelineAdd('📜', `${game.name} edita a ${def.name}`, 'flat')
+  toast('📜', `${def.name} em vigor. O Congresso tem de converter em lei.`)
+  agendar('mp')
+  cnt('mp')
+  save()
+  return { txt: 'A MP vale desde já, mas perde a validade se o Congresso não votar a tempo.' }
+}
+function estadoOk(id) {
+  const p = game.poder
+  const s = game.stats
+  const prot = !!p.prot
+  if (id === 'defesa') return prot || s.seg < 50
+  if (id === 'sitio') return !!(guerraCivil() || plotAtual() || (prot && s.seg < 40))
+  if (id === 'intervencao') return s.seg < 50 || (p.pol != null && p.pol < 35) || prot
+  return false
+}
+export function estadoMotivo(id) {
+  const c = cstState()
+  if (!isPres()) return 'Só o presidente decreta.'
+  if (c.estado) return 'Já existe uma medida de exceção em vigor.'
+  if (!estadoOk(id)) return (ESTADOS.find((x) => x.id === id) || {}).dica || ''
+  return cstWhy('estado')
+}
+export function decretarExcecao(id) {
+  if (!isPres() || !cstCan('estado')) return null
+  const c = cstState()
+  const def = ESTADOS.find((x) => x.id === id)
+  if (!def || c.estado || !estadoOk(id)) return null
+  game.delta = {}
+  cstMark('estado')
+  if (def.auth) {
+    const p = Math.max(0.1, Math.min(0.9, 0.3 + (game.stats.cong - 30) / 90))
+    if (R() > p) {
+      applyFx({ cong: -2, img: -2 }, true)
+      timelineAdd('🚨', 'O Congresso nega a autorização para o estado de sítio', 'down')
+      toast('🚨', 'O Congresso negou o estado de sítio.')
+      save()
+      return { txt: 'O Congresso não autorizou. Desgaste político.', bad: true }
+    }
+  }
+  c.estado = { id, left: def.dur }
+  c.prorr = false
+  applyFx(def.fx, true)
+  cnt('estado')
+  timelineAdd(def.icon, `${game.name} decreta ${def.name.toLowerCase()}`, 'down')
+  toast(def.icon, `${def.name} decretado.`)
+  save()
+  return { txt: `${def.name} em vigor por ${def.dur} rodadas. Enquanto durar, não se vota PEC.` }
+}
+export function prorrogarEstado() {
+  const c = cstState()
+  if (!isPres() || !c.estado || c.estado.id !== 'defesa' || c.prorr || !cstCan('prorrogar')) return null
+  cstMark('prorrogar')
+  c.prorr = true
+  c.estado.left += 2
+  applyFx({ img: -1, pop: -0.5 }, true)
+  save()
+  return { txt: 'Estado de defesa prorrogado uma única vez, como manda a Constituição.' }
+}
+export function convocarConsulta(id) {
+  if (!cstOn() || !cstCan('consulta')) return null
+  const c = cstState()
+  const def = CONSULTAS.find((x) => x.id === id)
+  if (!def || c.consulta) return def ? { txt: 'Já há uma consulta popular marcada.' } : null
+  if (game.stats.cash < 2) return { txt: 'A consulta custa 2 de Caixa.' }
+  game.delta = {}
+  cstMark('consulta')
+  applyFx({ cash: -2, pop: 0.5 }, true)
+  c.consulta = { id, left: 1 }
+  timelineAdd('🗳️', `${game.name} convoca: ${def.name.toLowerCase()}`, 'flat')
+  toast('🗳️', `${def.name} convocado.`)
+  save()
+  return { txt: 'A população vai às urnas no início da próxima rodada.' }
+}
+
+function roundCst() {
+  const c = cstState()
+  if (c.pec) {
+    const def = PECS.find((x) => x.id === c.pec.id)
+    if (c.estado) {
+      toast('⏸️', 'A PEC ficou parada: não se vota emenda durante estado de exceção.')
+    } else if (!def) c.pec = null
+    else if (R() < pecChance(def, c.pec.step)) {
+      if (c.pec.step === 0) {
+        c.pec.step = 1
+        toast('📜', `PEC "${def.name}" passou no 1º turno.`)
+        timelineAdd('📜', `PEC "${def.name.toLowerCase()}" é aprovada no 1º turno`, 'up')
+      } else {
+        c.pec = null
+        c.emendas++
+        applyFx(def.fx, true)
+        if (def.flag) c.flags[def.flag] = true
+        for (const [k, d] of Object.entries(def.rel || {})) shiftRel(k, d)
+        timelineAdd('🏛️', `Promulgada a Emenda Constitucional: ${def.name.toLowerCase()}`, 'up')
+        toast('🏛️', `Emenda promulgada: ${def.name}.`)
+        cnt('emenda')
+      }
+    } else {
+      c.pec = null
+      applyFx({ cong: -1, img: -0.5 }, true)
+      timelineAdd('📜', `PEC "${def.name.toLowerCase()}" fica sem os 3/5 e é arquivada`, 'down')
+      toast('📜', `A PEC "${def.name}" não teve votos suficientes.`)
+    }
+  }
+  for (const m of c.mps) m.left--
+  for (const m of c.mps.filter((x) => x.left <= 0)) {
+    const def = MPS.find((x) => x.id === m.id)
+    if (R() < Math.max(0.15, Math.min(0.9, 0.3 + (game.stats.cong - 35) / 90))) {
+      applyFx({ pop: 1, eco: 0.5 }, true)
+      timelineAdd('📜', `Congresso converte em lei a ${def.name}`, 'up')
+    } else {
+      applyFx({ cong: -2, img: -1, pop: -1 }, true)
+      timelineAdd('📜', `A ${def.name} perde a validade no Congresso`, 'down')
+      toast('📜', `A ${def.name} caducou.`)
+    }
+  }
+  c.mps = c.mps.filter((x) => x.left > 0)
+  if (c.estado) {
+    const def = ESTADOS.find((x) => x.id === c.estado.id)
+    applyFx({ seg: (def.fx.seg || 0) * 0.3, pop: -0.5 })
+    c.estado.left--
+    if (game.stats.pop < 35 && c.estado.id !== 'intervencao') game.poder.golpe = (game.poder.golpe || 0) + 3
+    if (c.estado.left <= 0) {
+      timelineAdd(def.icon, `${def.name} chega ao fim`, 'flat')
+      toast(def.icon, `${def.name} terminou.`)
+      c.estado = null
+      c.prorr = false
+    }
+  }
+  if (c.consulta) {
+    const def = CONSULTAS.find((x) => x.id === c.consulta.id)
+    c.consulta = null
+    const yes = R() < Math.max(0.15, Math.min(0.85, game.stats.pop / 100 + 0.1))
+    applyFx(yes ? def.yes : def.no, true)
+    timelineAdd('🗳️', `${def.name}: o "${yes ? 'sim' : 'não'}" venceu`, yes ? 'up' : 'flat')
+    toast('🗳️', `${def.name}: o ${yes ? 'sim' : 'não'} venceu.`)
+  }
+}
+
+/* --- internacional: blocos, tratados, operações --- */
+export function blocoMotivo(id) {
+  const b = BLOCOS.find((x) => x.id === id)
+  const w = game.world
+  if (!b) return 'Indisponível.'
+  if (!isPresident()) return 'Só a presidência negocia blocos.'
+  if (w.blocos.includes(id)) return 'O país já faz parte.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (w.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  for (const [k, v] of Object.entries(b.need)) if ((w.rel[k] ?? 50) < v) return `Relação insuficiente com ${(PARTNERS.find((x) => x.id === k) || { name: k }).name} (precisa de ${v}).`
+  if (game.stats.cash < b.cash) return `Sem caixa (${b.cash}).`
+  return ''
+}
+export function entrarBloco(id) {
+  if (blocoMotivo(id)) return false
+  const b = BLOCOS.find((x) => x.id === id)
+  spendWorld({ cash: -b.cash, img: 1 }, `O Brasil entra: ${b.name}.`, `${b.name}: adesão concluída.`)
+  for (const [k, d] of Object.entries(b.rel)) shiftRel(k, d)
+  game.world.blocos.push(id)
+  timelineAdd(b.icon, `Brasil ingressa em: ${b.name}`, 'up')
+  cnt('bloco')
+  return true
+}
+export function tratadoMotivo(id) {
+  const t = TRATADOS.find((x) => x.id === id)
+  const w = game.world
+  if (!t) return 'Indisponível.'
+  if (!isPresident()) return 'Só a presidência firma tratados.'
+  if (w.tratados.includes(id)) return 'Tratado já em vigor.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (w.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  if ((w.rel[t.partner] ?? 50) < t.need) return `Relação com o parceiro precisa de ${t.need}.`
+  if (game.stats.cash < t.cost) return `Sem caixa (${t.cost}).`
+  return ''
+}
+export function firmarTratado(id) {
+  if (tratadoMotivo(id)) return null
+  const t = TRATADOS.find((x) => x.id === id)
+  const ok = R() < Math.max(0.2, Math.min(0.92, 0.4 + (game.stats.cong - 35) / 90))
+  if (!ok) {
+    spendWorld({ cash: -t.cost, cong: -1 }, `O Congresso não referenda: ${t.name}.`, 'O Congresso não referendou o tratado (art. 84, VIII).')
+    game.world.last.ok = false
+    return { ok: false }
+  }
+  spendWorld({ ...t.fx, cash: (t.fx.cash || 0) - t.cost }, `Tratado referendado: ${t.name}.`, `${t.name}: assinado e referendado pelo Congresso.`)
+  for (const [k, d] of Object.entries(t.rel)) shiftRel(k, d)
+  game.world.tratados.push(id)
+  timelineAdd(t.icon, `Tratado em vigor: ${t.name}`, 'up')
+  cnt('tratado')
+  return { ok: true }
+}
+export const techFeita = (id) => !!(game.world && game.world.tech && game.world.tech.done.includes(id))
+export function opMotivo(id) {
+  const o = OPS.find((x) => x.id === id)
+  const w = game.world
+  if (!o) return 'Indisponível.'
+  if (!isPresident()) return 'Só a presidência ordena operações externas.'
+  if (w.ops.some((x) => x.id === id)) return 'Operação em andamento.'
+  if (w.ops.length >= 2) return 'Há operações demais em curso.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (w.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  if (o.need.fa && w.fa < o.need.fa) return `Relação com as Forças Armadas precisa de ${o.need.fa}.`
+  if (o.need.tech && !techFeita('def1')) return 'Exige a indústria nacional de defesa (aba de pesquisa).'
+  if (o.war && game.stats.cong < 45) return 'O Congresso precisa autorizar: base acima de 45.'
+  if (game.stats.cash < o.cost) return `Sem caixa (${o.cost}).`
+  return ''
+}
+export function iniciarOp(id) {
+  if (opMotivo(id)) return false
+  const o = OPS.find((x) => x.id === id)
+  spendWorld({ cash: -o.cost }, `Operação: ${o.name}.`, `${o.name} começou.`)
+  game.world.ops.push({ id, left: o.left })
+  for (const [k, d] of Object.entries(o.rel)) shiftRel(k, d * 0.3)
+  timelineAdd(o.icon, `${game.name} ordena: ${o.name}`, 'flat')
+  cnt('op')
+  return true
+}
+function roundOps() {
+  const w = game.world
+  for (const op of w.ops) {
+    const o = OPS.find((x) => x.id === op.id)
+    if (!o) continue
+    applyFx(o.fx)
+    op.left--
+    if (o.risk && R() < o.risk * 0.5) {
+      applyFx({ pop: -2, img: -1.5 })
+      toast('🪖', `Baixas em ${o.name}: a opinião pública oscila.`)
+    }
+    if (op.left <= 0) {
+      applyFx(o.end, true)
+      for (const [k, d] of Object.entries(o.rel)) shiftRel(k, d)
+      if (o.war) w.fa = clamp(w.fa + 5)
+      timelineAdd(o.icon, `${o.name} termina`, 'up')
+      toast(o.icon, `${o.name} terminou.`)
+      cnt('opok')
+    }
+  }
+  w.ops = w.ops.filter((x) => x.left > 0)
+}
+
+/* --- pesquisa e armas --- */
+export const techOn = () => ['presidente', 'governador'].includes(officeId())
+export function techMotivo(id) {
+  const t = TECHS.find((x) => x.id === id)
+  const w = game.world
+  if (!t) return 'Indisponível.'
+  if (!techOn()) return 'Só presidência e governos de estado financiam pesquisa.'
+  if (!isPresident() && !t.civil) return 'Pesquisa reservada ao governo federal.'
+  if (w.tech.done.includes(id)) return 'Tecnologia já dominada.'
+  for (const r of t.req) if (!w.tech.done.includes(r)) return `Antes: ${(TECHS.find((x) => x.id === r) || { name: r }).name}.`
+  if (t.needFlag && !cstState().flags[t.needFlag]) return 'Exige a PEC que muda a vedação nuclear (art. 21).'
+  if (t.needNuc && !w.nucDone.includes(t.needNuc)) return 'Exige concluir o enriquecimento de urânio no programa nuclear.'
+  return ''
+}
+export function techPushMotivo(id) {
+  const m = techMotivo(id)
+  if (m) return m
+  const t = TECHS.find((x) => x.id === id)
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (game.world.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  if (game.stats.cash < t.cost) return `Sem caixa (${t.cost}).`
+  return ''
+}
+export function techFoco(id) {
+  if (techMotivo(id)) return false
+  game.world.tech.foco = id
+  save()
+  return true
+}
+export function techPush(id) {
+  if (techPushMotivo(id)) return false
+  const t = TECHS.find((x) => x.id === id)
+  spendWorld({ cash: -t.cost }, `Pesquisa: investimento em ${t.name}.`, `${t.name}: mais um passo.`)
+  techAdd(id, TECH_PUSH)
+  game.world.tech.foco = game.world.tech.foco || id
+  return true
+}
+function techAdd(id, v) {
+  const w = game.world
+  const t = TECHS.find((x) => x.id === id)
+  if (!t || w.tech.done.includes(id)) return
+  w.tech.prog[id] = Math.min(100, (w.tech.prog[id] || 0) + v)
+  if (w.tech.prog[id] < 100) return
+  w.tech.done.push(id)
+  if (w.tech.foco === id) w.tech.foco = null
+  const e = {}
+  for (const [k, d] of Object.entries(t.rel || {})) shiftRel(k, d)
+  void e
+  applyFx({ img: t.id === 'def5' ? -3 : 2, eco: 1 }, true)
+  timelineAdd(t.icon, `Marco científico: ${t.name}`, t.id === 'def5' ? 'down' : 'up')
+  toast(t.icon, `Tecnologia dominada: ${t.name}.`)
+  cnt('tech')
+  if (t.id === 'def5') cnt('arsenal')
+  if (R() < 0.5) agendar('parceria')
+}
+function roundTech() {
+  const w = game.world
+  if (!techOn()) return
+  const f = w.tech.foco
+  if (!f || techMotivo(f)) {
+    if (f) w.tech.foco = null
+    return
+  }
+  techAdd(f, 8)
+}
+
+/* --- consequências encadeadas --- */
+export function agendar(kind) {
+  const def = CHAIN[kind]
+  if (!def) return
+  ensurePoder()
+  if (!game.poder.agenda) game.poder.agenda = []
+  if (game.poder.agenda.length >= 6) return
+  game.poder.agenda.push({ kind, at: game.total + def.delay })
+}
+function roundAgenda() {
+  const p = game.poder
+  if (!p.agenda || !p.agenda.length) return
+  const due = p.agenda.filter((x) => x.at <= game.total)
+  p.agenda = p.agenda.filter((x) => x.at > game.total)
+  for (const d of due) {
+    const def = CHAIN[d.kind]
+    if (!def) continue
+    applyFx(def.fx, true)
+    if (def.heat) game.heat = clamp((game.heat || 0) + def.heat)
+    timelineAdd(def.icon, def.text, def.tone)
+    toast(def.icon, def.text)
+    p.press.push({ icon: def.icon, text: def.text })
+    p.press = p.press.slice(-4)
+  }
+}
+export const agendaPendente = () => ((game.poder && game.poder.agenda) || []).length
+
+/* --- elenco recorrente --- */
+export function elencoOf() {
+  ensurePoder()
+  if (!game.poder.elenco) game.poder.elenco = { rival: game.rival || null, exAliado: null, ministro: null, last: -9, nVoltas: 0 }
+  const e = game.poder.elenco
+  if (!e.rival) e.rival = game.rival || null
+  if (!e.exAliado && game.total >= 4) e.exAliado = candName(R)
+  const cab = nomeados()
+  if (cab.length && (!e.ministro || e.ministro.stage !== game.stage)) e.ministro = { nome: cab[0].nome, pasta: (PASTAS.find((x) => x.id === cab[0].pasta) || { name: 'ministério' }).name, stage: game.stage }
+  return e
+}
+function roundElenco() {
+  const e = elencoOf()
+  if (game.total - e.last < 4 || R() > 0.2) return
+  const opts = []
+  if (e.rival && game.total >= 3) opts.push('rival')
+  if (e.exAliado) opts.push('exAliado')
+  if (e.ministro && isExec()) opts.push('ministro')
+  if (!opts.length) return
+  const k = opts[Math.floor(R() * opts.length)]
+  const pick = (a) => a[Math.floor(R() * a.length)]
+  let o
+  if (k === 'rival') {
+    const v = pick(VOLTA_RIVAL)
+    o = { t: v.text(e.rival), fx: v.fx, icon: '🥊', good: false }
+  } else if (k === 'exAliado') {
+    const v = pick(VOLTA_EXALIADO)
+    o = { t: v.text(e.exAliado), fx: v.fx, icon: v.good ? '🤝' : '💔', good: !!v.good }
+  } else {
+    const v = pick(MINISTRO_FASES)
+    o = { t: v.text(e.ministro.nome, e.ministro.pasta), fx: v.fx, icon: '🎩', good: !!v.good, heat: v.heat }
+  }
+  e.last = game.total
+  e.nVoltas++
+  applyFx(o.fx, true)
+  if (o.heat) game.heat = clamp((game.heat || 0) + o.heat)
+  timelineAdd(o.icon, o.t, o.good ? 'up' : 'down')
+  toast(o.icon, o.t)
+  game.poder.press.push({ icon: o.icon, text: o.t })
+  game.poder.press = game.poder.press.slice(-4)
+}
+
+/* --- partidos com história --- */
+export function partidoHistoria() {
+  const np = game.novosPartidos || []
+  if (game.total < 4 || R() > 0.1) return
+  const meu = game.party
+  const kind = ['fusao', 'cisao', 'morte'][Math.floor(R() * 3)]
+  const say = (icon, text, tn = 'flat') => {
+    timelineAdd(icon, text, tn)
+    toast(icon, text)
+    game.poder.press.push({ icon, text })
+    game.poder.press = game.poder.press.slice(-4)
+  }
+  if (kind === 'fusao' && np.length >= 2) {
+    const livres = np.filter((x) => x.id !== meu)
+    if (livres.length < 2) return
+    const [a, b] = livres
+    const nome = `${a.name.split(' ')[0]} ${b.name.split(' ').slice(1).join(' ') || b.name}`
+    const merged = { ...a, id: 'fu' + game.total + a.sigla, sigla: (a.sigla.slice(0, 2) + b.sigla.slice(0, 2)).slice(0, 4), name: nome, perkText: `Fusão de ${a.sigla} e ${b.sigla}. ` + (a.perkText || '').replace(/^Fundado por [^.]*\. /, '') }
+    game.novosPartidos = np.filter((x) => x !== a && x !== b).concat(merged)
+    say('🔗', HIST_PARTIDOS.fusao(a.sigla, b.sigla, merged.sigla))
+  } else if (kind === 'cisao' && np.length < 6) {
+    const base = partiesNow().filter((x) => !x.nova && x.id !== meu)
+    if (!base.length) return
+    const a = base[Math.floor(R() * base.length)]
+    const nome = `Movimento ${NP_B[Math.floor(R() * NP_B.length)]}`
+    let sigla = ('R' + a.sigla).slice(0, 4)
+    const usados = new Set(partiesNow().map((x) => x.sigla))
+    while (usados.has(sigla)) sigla += Math.floor(R() * 9)
+    const perks = { ...NP_PERKS[Math.floor(R() * NP_PERKS.length)] }
+    game.novosPartidos.push({ id: 'ci' + game.total + sigla, sigla, name: nome, ideo: a.ideo, color: a.color, slogan: `Dissidência do ${a.sigla}.`, perks, nova: true, hard: 0.05, perkText: `Racha do ${a.sigla}. ` + Object.entries(perks).map(([k, v]) => `+${String(v).replace('.', ',')} ${PERK_LABEL[k]}`).join(', ') + '.' })
+    say('💥', HIST_PARTIDOS.cisao(a.sigla, sigla))
+  } else if (kind === 'morte' && np.length) {
+    const vit = np.filter((x) => x.id !== meu && game.total - (parseInt(String(x.id).replace(/\D/g, ''), 10) || 0) >= 0)[0]
+    if (!vit) return
+    game.novosPartidos = np.filter((x) => x !== vit)
+    say('⚰️', HIST_PARTIDOS.morte(vit.sigla), 'down')
+  }
+}
+
+export function roundAvancos() {
+  roundCst()
+  roundOps()
+  roundTech()
+  roundAgenda()
+  roundElenco()
 }

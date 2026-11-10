@@ -28,6 +28,19 @@ export function epilogue(g) {
   if (!marks.length) marks.push('Foi uma carreira de altos e baixos, sem grandes heroísmos nem grandes vexames.')
   out.push(...marks.slice(0, 2))
 
+  const cn = (k) => Object.entries((g.poder && g.poder.cnt) || {}).filter(([x]) => x.endsWith(':' + k)).reduce((a, [, v]) => a + v, 0)
+  const ot = g.over && g.over.title
+  if (ot === 'Golpe de Estado') out.push('A noite do golpe virou capítulo obrigatório nos livros. Quem tentou defender as instituições é lembrado; quem as derrubou, também, mas por outro motivo.')
+  else if (ot === 'Guerra civil') out.push('O país dividido deixou cicatrizes que levaram gerações para fechar. Nos museus, a data do início do conflito ganhou uma sala inteira.')
+  if (cn('paz') > 0 && ot !== 'Guerra civil') out.push('O pacto de paz que encerrou o conflito interno ficou conhecido como o dia em que o país escolheu conversar em vez de lutar.')
+  if (cn('golpefail') > 0 || cn('plotok') > 0) out.push('Houve quem tentasse romper a ordem, e as instituições seguraram. Esse capítulo costuma ser citado como prova de que a democracia resistiu.')
+  if (cn('emenda') > 0) out.push(`A sua assinatura ficou numa emenda à Constituição${cn('emenda') > 1 ? ' (e em outras)' : ''}, daquelas que professores citam em sala de aula.`)
+  if (cn('petrea') > 0) out.push('O Supremo teve de lembrar que algumas cláusulas da Constituição não se mexem, e o episódio ficou na sua biografia.')
+  if (cn('tech') >= 3) out.push('O investimento em pesquisa criou laboratórios, patentes e uma geração de cientistas que lembram o seu nome.')
+  if (cn('arsenal') > 0) out.push('O arsenal dissuasor mudou o lugar do país no tabuleiro do mundo, junto com sanções e uma desconfiança que durou décadas.')
+  else if (cn('bloco') >= 2) out.push('As alianças que o país firmou no seu tempo deram assento a mesas onde antes só se ouvia de longe.')
+  const el = g.poder && g.poder.elenco
+  if (el && el.rival && el.nVoltas >= 2) out.push(`${el.rival} nunca saiu de cena: voltou a aparecer a cada crise, e os dois acabaram ligados na memória do país.`)
   out.push(
     pick(
       [
