@@ -6201,7 +6201,7 @@ function roundMisterio() {
     return
   }
   if (m.fim) return
-  m.avanco = clamp(m.avanco + 2.2 + (game.heat || 0) / 80 - m.pistas.length * 0.15)
+  m.avanco = clamp(m.avanco + 3.2 + (game.heat || 0) / 80 - m.pistas.length * 0.2)
   if (m.avanco >= 50 && game.total % 2 === 0) applyFx({ img: -0.3, pop: -0.2 }, true)
   if (m.avanco >= 100) {
     misFechar(m, 'explodiu')
