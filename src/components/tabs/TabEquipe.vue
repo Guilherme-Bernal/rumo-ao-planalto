@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, teamDef, appoint, appointeeList, slotLock, officeInfo, coalition } from '../../game/engine'
+import { game, teamDef, appoint, appointAll, appointeeList, slotLock, officeInfo, coalition } from '../../game/engine'
 import { VICES, STAT_NAME } from '../../game/team'
 
 const def = computed(() => teamDef())
@@ -13,6 +13,10 @@ const level = (a) => (a >= 0.4 ? 'alto' : a >= 0.15 ? 'médio' : 'baixo')
 const co = computed(() => coalition())
 const pick = (slotId, e) => {
   if (!appoint(slotId, e.target.value)) e.target.value = typeOf(slotId)
+}
+const all = (e) => {
+  if (e.target.value) appointAll(e.target.value)
+  e.target.value = ''
 }
 </script>
 
@@ -38,6 +42,11 @@ const pick = (slotId, e) => {
     </div>
     <div v-if="game.team.hot" class="muted" style="margin: 6px 0">🗞️ Há um escândalo em andamento em uma das pastas.</div>
 
+    <select style="width: 100%; margin: 6px 0" @change="all($event)">
+      <option value="">Preencher todas as vagas de uma vez com…</option>
+      <option v-for="a in aps" :key="a.id" :value="a.id">{{ a.name }}</option>
+    </select>
+
     <div v-for="s in def.slots" :key="s.id" style="margin: 8px 0">
       <div>
         {{ s.icon }} <b>{{ s.name }}</b> <small class="muted">(mexe com {{ STAT_NAME[s.stat] }})</small>
@@ -51,6 +60,6 @@ const pick = (slotId, e) => {
       <small class="muted" v-if="apOf(s.id)">{{ apOf(s.id).desc }}</small>
       <small class="muted" v-for="a in aps.filter((x) => slotLock(s, x))" :key="a.id" style="display: block">🔒 {{ a.name }}: {{ slotLock(s, a) }}</small>
     </div>
-    <p class="legend">Cada nome rende um pouco por rodada na área da pasta e pode causar escândalo. Trocar um indicado político irrita o partido dele. Aliados com pasta garantem votos no plenário.</p>
+    <p class="legend">Cada nome rende um pouco por rodada na área da pasta e pode causar escândalo. Trocar um indicado político irrita o partido dele. Aliados com pasta garantem votos no plenário. O jogo lembra suas escolhas e já preenche as vagas quando você muda de cargo.</p>
   </div>
 </template>

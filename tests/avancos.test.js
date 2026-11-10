@@ -1345,3 +1345,18 @@ describe('carregamento de abas após atualização', () => {
     expect(m).toBe(2)
   })
 })
+
+describe('equipe lembra as escolhas', () => {
+  it('preencher todas as vagas respeita as travas e a escolha vale no cargo seguinte', () => {
+    novo('senador')
+    expect(E.appointAll('especialista')).toBe(3)
+    expect(E.appointAll('parente')).toBe(0)
+    E.game.office = 'presidente'
+    E.game.team = { vice: null, supl: [], slots: {} }
+    E.autoTeam()
+    const t = E.game.team.slots
+    expect(t.casa_civil.type).toBe('especialista')
+    expect(t.exterior.type).toBe('especialista')
+    expect(t.fazenda.type).toBe('tecnico')
+  })
+})

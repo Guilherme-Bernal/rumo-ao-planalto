@@ -1763,14 +1763,50 @@ export const teamDef = () => TEAMS[officeInfo().team]
 export const appointeeList = () => APPOINTEES
 export const slotLock = (slot, ap) => lockReason(teamDef(), slot, ap)
 
-function autoTeam() {
+export function autoTeam() {
   const def = teamDef()
   if (!def) return
   if (!game.team) game.team = { vice: null, supl: [], slots: {} }
   if (!game.team.slots) game.team.slots = {}
+  const memo = (game.poder && game.poder.teamMemo) || {}
   const keep = {}
-  for (const s of def.slots) keep[s.id] = game.team.slots[s.id] || { type: 'tecnico' }
+  for (const s of def.slots) {
+    if (game.team.slots[s.id]) { keep[s.id] = game.team.slots[s.id]; continue }
+    const m = memo[s.id] || memo['stat:' + s.stat]
+    const ap = m && APPOINTEES.find((a) => a.id === m)
+    keep[s.id] = { type: ap && !lockReason(def, s, ap) ? ap.id : 'tecnico' }
+  }
   game.team.slots = keep
+}
+
+// Lembra a última escolha para a pasta e para a área, e já preenche as vagas ao trocar de cargo
+function teamMemoSet(slot, typeId) {
+  if (!game.poder) return
+  if (!game.poder.teamMemo) game.poder.teamMemo = {}
+  game.poder.teamMemo[slot.id] = typeId
+  game.poder.teamMemo['stat:' + slot.stat] = typeId
+}
+
+// Preenche todas as vagas livres de uma vez com o mesmo perfil (pula as travadas por lei)
+export function appointAll(typeId) {
+  const def = teamDef()
+  const ap = APPOINTEES.find((a) => a.id === typeId)
+  if (!def || !ap) return 0
+  let n = 0
+  for (const s of def.slots) {
+    if (lockReason(def, s, ap)) continue
+    const old = game.team.slots[s.id] && game.team.slots[s.id].type
+    if (old === typeId) continue
+    if (old && ['politico', 'parlamentar'].includes(old)) applyFx({ cong: -1.5 })
+    game.team.slots[s.id] = { type: typeId }
+    teamMemoSet(s, typeId)
+    n++
+  }
+  if (n) {
+    toast('🧑‍💼', `${ap.name} em ${n} vaga(s).`)
+    save()
+  }
+  return n
 }
 
 export function appoint(slotId, typeId) {
@@ -1786,6 +1822,7 @@ export function appoint(slotId, typeId) {
     toast('😠', 'O partido do titular demitido ficou ressentido.')
   }
   game.team.slots[slotId] = { type: typeId }
+  teamMemoSet(slot, typeId)
   if (typeId === 'parlamentar') log(`Um parlamentar se licenciou para assumir ${slot.name}. O suplente ocupa a vaga dele.`)
   else log(`Nomeou ${ap.name.toLowerCase()} para ${slot.name}.`)
   save()
