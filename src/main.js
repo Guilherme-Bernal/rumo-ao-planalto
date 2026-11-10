@@ -4,6 +4,9 @@ import './style.css'
 import './extras.css'
 import './ui.css'
 import './screens.css'
+import { pwaInit } from './game/pwa'
+
+pwaInit()
 
 createApp(App).mount('#app')
 

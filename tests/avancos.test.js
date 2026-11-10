@@ -791,3 +791,48 @@ describe('BLOCO 28 — acesso e jogabilidade', () => {
     expect(T.TUT_STEPS.length).toBeGreaterThanOrEqual(4)
   })
 })
+
+describe('BLOCO 29 — dicas, PWA e bots', () => {
+  it('dica de primeira vez aparece uma vez por aba e some depois de vista', async () => {
+    const D = await import('../src/game/dicas.js')
+    D.dicasReset()
+    expect(D.dicaPendente('mundo')).toBeTruthy()
+    D.dicaVista('mundo')
+    expect(D.dicaPendente('mundo')).toBeNull()
+    expect(D.dicaPendente('leis')).toBeTruthy()
+    expect(D.dicaPendente('inexistente')).toBeNull()
+    for (const k of Object.keys(D.DICAS)) expect(D.DICAS[k].text.length).toBeGreaterThan(20)
+  })
+  it('rever o tutorial também reinicia as dicas das abas', async () => {
+    const D = await import('../src/game/dicas.js')
+    const T = await import('../src/game/tutorial.js')
+    D.dicaVista('mapa')
+    T.tutOpen()
+    expect(D.dicaPendente('mapa')).toBeTruthy()
+  })
+  it('estado do PWA começa sem instalação pendente nem atualização', async () => {
+    const P = await import('../src/game/pwa.js')
+    expect(P.pwa.canInstall).toBe(false)
+    expect(P.pwa.atualizada).toBe(false)
+    expect(await P.pwaInstalar()).toBe(false)
+  })
+  it('escândalo sem base política derruba governo (imagem no chão e base fraca)', () => {
+    novo('presidente')
+    E.game.stats.img = 3
+    E.game.stats.cong = 30
+    E.game.stats.pop = 60
+    E.game.stage = 3
+    E.endTurn()
+    expect(E.game.phase).toBe('over')
+    expect(E.game.over.title).toBe('Impeachment')
+  })
+  it('imagem baixa com base forte não derruba sozinha', () => {
+    novo('presidente')
+    E.game.stats.img = 3
+    E.game.stats.cong = 80
+    E.game.stats.pop = 60
+    E.game.stage = 3
+    E.endTurn()
+    expect(E.game.phase).not.toBe('over')
+  })
+})

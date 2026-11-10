@@ -1304,6 +1304,12 @@ function checkOver() {
       title: 'Cassação',
       text: 'A Câmara de Vereadores cassou o seu mandato.' + (plot ? ' O vice articulou nos bastidores.' : '') + viceNote(),
     }
+  } else if (exec && ['prefeito', 'governador', 'presidente'].includes(oid) && s.img <= 6 && s.cong <= 40) {
+    // escândalo sem base política: o Legislativo abre o processo (a imagem no chão deixa de ser só um número)
+    o = {
+      title: oid === 'prefeito' ? 'Cassação' : 'Impeachment',
+      text: (oid === 'prefeito' ? 'A Câmara de Vereadores' : oid === 'governador' ? 'A Assembleia Legislativa' : 'O Congresso') + ' aproveitou a sequência de escândalos e a falta de base para abrir o processo. Sem reputação, ninguém te defendeu.' + viceNote(),
+    }
   } else if ((st >= 2 || oid === 'prefeito') && game.cashNeg >= (st >= 2 ? 2 : 3)) {
     o = {
       title: 'Colapso fiscal',

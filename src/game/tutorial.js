@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { dicasReset } from './dicas'
 
 // Tutorial curto: abre sozinho na primeira carreira e pode ser revisto nas configurações.
 const KEY = 'rumo-tutorial-visto'
@@ -18,6 +19,7 @@ export const TUT_STEPS = [
   { icon: '🗳️', title: 'Eleição', text: 'No fim do mandato há eleição: campanha, pesquisas, debate e boatos. Chegue ao topo e deixe um legado. Dá para revisar este tutorial em ⚙️ Configurações.' },
 ]
 export function tutOpen() {
+  dicasReset()
   tut.step = 0
   tut.open = true
 }

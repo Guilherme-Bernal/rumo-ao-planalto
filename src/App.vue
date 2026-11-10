@@ -4,6 +4,7 @@ import { game, country, stageInfo, resetGame, traitNames, partyObj, officeId, in
 import { settings } from './game/settings'
 import { tutAutoOpen } from './game/tutorial'
 import Tutorial from './components/layout/Tutorial.vue'
+import PwaBar from './components/layout/PwaBar.vue'
 import { OFFICES } from './game/offices'
 const LADDER = Object.values(OFFICES).sort((a, b) => a.rank - b.rank || a.tier - b.tier)
 // o 3D (three.js) é o trecho mais pesado: carrega em paralelo, sem travar a tela inicial
@@ -139,6 +140,7 @@ function restart() {
   <Settings />
   <Reuniao />
   <Tutorial />
+  <PwaBar />
   <Sucessao />
   <StartScreen v-if="game.phase === 'start'" id="conteudo" role="main" tabindex="-1" />
   <EndScreen v-else-if="game.phase === 'over' || game.phase === 'end'" id="conteudo" role="main" tabindex="-1" />

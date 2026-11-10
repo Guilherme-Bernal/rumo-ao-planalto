@@ -1,19 +1,22 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, defineAsyncComponent, h } from 'vue'
 import { game, stageInfo, targetOffice } from '../../game/engine'
 import GamePanel from '../game/GamePanel.vue'
-import TabMap from '../tabs/TabMap.vue'
-import TabParty from '../tabs/TabParty.vue'
-import TabPlan from '../tabs/TabPlan.vue'
-import TabBudget from '../tabs/TabBudget.vue'
-import TabRace from '../tabs/TabRace.vue'
-import TabSocial from '../tabs/TabSocial.vue'
-import TabIdeas from '../tabs/TabIdeas.vue'
-import TabContacts from '../tabs/TabContacts.vue'
-import TabMundo from '../tabs/TabMundo.vue'
-import TabLeis from '../tabs/TabLeis.vue'
 import GuiaAba from './GuiaAba.vue'
 import Tips from './Tips.vue'
+import { dicaPendente, dicaVista } from '../../game/dicas'
+// abas pesadas carregam só quando abertas (a tela inicial fica bem mais leve)
+const aba = (f) => defineAsyncComponent({ loader: f, delay: 150, loadingComponent: { render: () => h('p', { class: 'muted' }, 'Carregando…') } })
+const TabMap = aba(() => import('../tabs/TabMap.vue'))
+const TabParty = aba(() => import('../tabs/TabParty.vue'))
+const TabPlan = aba(() => import('../tabs/TabPlan.vue'))
+const TabBudget = aba(() => import('../tabs/TabBudget.vue'))
+const TabRace = aba(() => import('../tabs/TabRace.vue'))
+const TabSocial = aba(() => import('../tabs/TabSocial.vue'))
+const TabIdeas = aba(() => import('../tabs/TabIdeas.vue'))
+const TabContacts = aba(() => import('../tabs/TabContacts.vue'))
+const TabMundo = aba(() => import('../tabs/TabMundo.vue'))
+const TabLeis = aba(() => import('../tabs/TabLeis.vue'))
 
 const tab = ref('agenda')
 const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches
@@ -26,6 +29,7 @@ watch(() => [game.phase, game.turn, tab.value], async () => {
 })
 const locked = computed(() => ['balance', 'rumo', 'campaign', 'runoff', 'result', 'plan'].includes(game.phase))
 const cur = computed(() => (locked.value ? 'agenda' : tab.value))
+const dica = computed(() => (locked.value ? null : dicaPendente(cur.value)))
 const pending = computed(() => game.phase === 'event' || game.phase === 'outcome')
 
 const tabs = computed(() => [
@@ -116,6 +120,11 @@ const todo = computed(() => {
       </nav>
     </div>
     <div class="tabbody">
+      <div v-if="dica" class="dica" role="note">
+        <span aria-hidden="true">{{ dica.icon }}</span>
+        <span><b>Primeira vez aqui:</b> {{ dica.text }}</span>
+        <button type="button" @click="dicaVista(cur)">Entendi</button>
+      </div>
       <GuiaAba v-if="!locked" :tab="cur" @go="tab = $event" />
       <GamePanel v-if="cur === 'agenda'" />
       <TabRace v-else-if="cur === 'disputa'" />
