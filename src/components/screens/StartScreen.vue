@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { countryList, hasSave, loadGame, startGame, STATS, baseStats, acceptChance, initialInvites, randomPlanName } from '../../game/engine'
+import { FINAIS, loadFinais } from '../../game/finais'
 import { ACHIEVEMENTS, loadHall, weeklyNow, loadUnlocked, randomName } from '../../game/extras'
 import { modsFor, defaultPicks } from '../../game/traits'
 import { AGE_MIN, AGE_MAX, AGE_DEF, ageMods, ageGate } from '../../game/countries/brasil-traits'
@@ -60,6 +61,7 @@ function onImport(e) {
 }
 const hall = loadHall().slice(0, 5)
 const semana = weeklyNow()
+const finaisVistos = loadFinais()
 const unlocked = loadUnlocked()
 
 const STEPS = ['Personagem', 'Origem', 'Partido', 'Plano']
@@ -264,6 +266,12 @@ const canNext = computed(() => (step.value === 3 ? !!partyId.value : true))
               <span>{{ i + 1 }}. {{ h.name }} ({{ h.region }}) · {{ h.label }}</span>
               <span>{{ h.points }} pts</span>
             </div>
+          </div>
+        </details>
+        <details>
+          <summary>🎭 Finais ({{ finaisVistos.length }}/{{ FINAIS.length }})</summary>
+          <div class="trophies">
+            <span v-for="f in FINAIS" :key="f.id" class="trophy" :class="{ locked: !finaisVistos.includes(f.id) }" :title="finaisVistos.includes(f.id) ? f.nome : f.dica">{{ finaisVistos.includes(f.id) ? f.icon + ' ' + f.nome : '❔ ' + f.dica }}</span>
           </div>
         </details>
         <details>

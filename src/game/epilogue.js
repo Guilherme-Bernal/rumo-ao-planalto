@@ -1,3 +1,5 @@
+import { finalLinhas } from './finais'
+
 // Epílogo: um pequeno texto de fechamento escrito a partir do que aconteceu na carreira.
 const pick = (arr, seed) => arr[Math.abs(seed) % arr.length]
 
@@ -41,6 +43,12 @@ export function epilogue(g) {
   if (cn('tech') >= 3) out.push('O investimento em pesquisa criou laboratórios, patentes e uma geração de cientistas que lembram o seu nome.')
   if (cn('arsenal') > 0) out.push('O arsenal dissuasor mudou o lugar do país no tabuleiro do mundo, junto com sanções e uma desconfiança que durou décadas.')
   else if (cn('bloco') >= 2) out.push('As alianças que o país firmou no seu tempo deram assento a mesas onde antes só se ouvia de longe.')
+  const rv = g.poder && g.poder.rv
+  if (rv && (rv.vit || rv.der)) {
+    const q = rv.estagio === 'aliado' ? 'acabou como aliado' : rv.estagio === 'inimigo' ? 'nunca perdoou' : rv.estagio === 'exilio' ? 'sumiu da política' : 'seguiu na briga'
+    out.push(`O rival de uma vida, ${rv.nome}, perdeu ${rv.der} e ganhou ${rv.vit} dos confrontos nas urnas, e ${q}${rv.voltas ? `, depois de voltar ${rv.voltas} ${rv.voltas > 1 ? 'vezes' : 'vez'}` : ''}.`)
+  }
+  out.push(...finalLinhas(g))
   const el = g.poder && g.poder.elenco
   if (el && el.rival && el.nVoltas >= 2) out.push(`${el.rival} nunca saiu de cena: voltou a aparecer a cada crise, e os dois acabaram ligados na memória do país.`)
   out.push(

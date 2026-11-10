@@ -6,8 +6,10 @@ import { ACHIEVEMENTS, loadHall, weeklyNow } from '../../game/extras'
 import Avatar from '../character/Avatar.vue'
 import { epilogue } from '../../game/epilogue'
 import { shareCard } from '../../game/sharecard'
+import { FINAIS } from '../../game/finais'
 
 const epi = epilogue(game)
+const final = FINAIS.find((f) => f.id === (game.final && game.final.id))
 
 const copied = ref(false)
 const imgMsg = ref('')
@@ -76,6 +78,7 @@ async function share() {
       </template>
       <p class="big">{{ game.points }} pts</p>
 
+      <p v-if="final" class="chip" style="margin-top: 8px" :title="final.dica">🎭 Final: {{ final.icon }} {{ final.nome }}</p>
       <h3 style="margin: 12px 0 6px">📖 Epílogo</h3>
       <p v-for="(l, i) in epi" :key="i" class="lead" style="margin-bottom: 6px">{{ l }}</p>
 

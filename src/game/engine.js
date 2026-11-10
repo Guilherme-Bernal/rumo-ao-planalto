@@ -21,6 +21,8 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook } from './look'
+import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
+import { finalOf, saveFinal } from './finais'
 import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS, CADEIAS } from './reunioes'
 import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
 import { makeContacts, ensureContacts, SCRIPTS, ROLES, KIND, ASKS, CHAT, LIGAR } from './contacts'
@@ -273,6 +275,9 @@ function computePoints(ended) {
 
 function finalize(ended) {
   game.points = computePoints(ended)
+  const fin = finalOf(game)
+  game.final = { id: fin.id }
+  saveFinal(fin.id)
   checkAch()
   game.hallPos = addHall({
     name: game.name,
@@ -993,7 +998,7 @@ export function callAsk(cid, askId, month) {
     game.termDirty++
   }
   if (ask.heat) game.heat = clamp(game.heat + (ask.heat < 0 ? (ok ? ask.heat : 0) : ok ? ask.heat : Math.ceil(ask.heat / 2)))
-  if (ask.rival && ok) game.rivalMod = (game.rivalMod || 0) + ask.rival
+  if (ask.rival && ok) (game.rivalMod = (game.rivalMod || 0) + ask.rival), rvOdio(ask.rival)
   const rel0 = c.rel
   c.rel = clampRel(c.rel + (ask === CHAT ? ask.gain : ok ? -ask.cost : -2))
   remember(c, ask === CHAT ? 'Bateu um papo' : `${ask.label}: ${ok ? 'deu certo' : 'não deu certo'}`, c.rel - rel0)
@@ -1067,7 +1072,7 @@ export function doAction(id, month) {
     game.dirty++
     game.termDirty++
     game.heat = clamp(game.heat + Math.round((a.heat || 0) * (1 - 0.06 * kn('dir'))))
-    if (a.rival) game.rivalMod = (game.rivalMod || 0) + a.rival
+    if (a.rival) (game.rivalMod = (game.rivalMod || 0) + a.rival), rvOdio(a.rival)
     if (R() < Math.max(0, (a.risk || 0) - 0.04 * kn('dir'))) {
       curSphere = sphereOf(a)
       applyFx(a.riskFx, true)
@@ -1586,6 +1591,7 @@ export function chooseRunoff(id) {
 
 export function continueAfterResult() {
   const e = game.election
+  rvResultado(e.result.won)
   if (!e.result.won) {
     game.over = {
       title: 'Derrota nas urnas',
@@ -1609,7 +1615,7 @@ export function continueAfterResult() {
   const tk = e.ticket || null
   game.election = null
   game.switched = false
-  game.rival = makeRival(R)
+  game.rival = (game.poder && game.poder.rv && game.poder.rv.nome) || makeRival(R)
   if (same) {
     game.term++
     applyFx({ cong: 50 - game.stats.cong, cash: 10 })
@@ -1672,7 +1678,12 @@ export function chooseRumo(id) {
   e.labelB = makeRival(R)
   e.sigA = PARTIES[Math.floor(R() * PARTIES.length)].sigla
   e.sigB = PARTIES[Math.floor(R() * PARTIES.length)].sigla
-  e.rival = o.rival + (op.same && id === 'presidente' ? 2 : 0) + jumpDiff(op.same, op.jump) + rnd(-6, 8) - Math.min(8, game.rivalMod || 0)
+  const rvr = rvEnsure()
+  e.rivalArc = !['exilio', 'aliado'].includes(rvr.estagio)
+  if (e.rivalArc) game.rival = rvr.nome
+  else game.rival = candName(R)
+  e.rivalName = (!op.same && ROLE[id] ? ROLE[id] + ' ' : '') + game.rival
+  e.rival = o.rival + (op.same && id === 'presidente' ? 2 : 0) + jumpDiff(op.same, op.jump) + rnd(-6, 8) - Math.min(8, game.rivalMod || 0) + (e.rivalArc ? rvMod() : 0) - (rvr.estagio === 'aliado' ? 2 : 0)
   game.rivalMod = 0
   e.ticket = null
   e.ticketDone = !needsTicket()
@@ -2505,6 +2516,7 @@ export function paperAct(kind) {
   } else if (kind === 'plantar') {
     fx = { pop: 2, cong: 1 }
     game.rivalMod = (game.rivalMod || 0) + 2
+    rvOdio(2)
     dirty = { heat: 8, risk: 0.35, riskFx: { img: -7 }, text: 'Rastrearam a origem da nota até o seu gabinete.' }
     text = `A nota atingiu ${game.rival || 'o rival'} e a oposição teve de se explicar.`
   } else return null
@@ -4100,7 +4112,7 @@ function roundElenco() {
   const e = elencoOf()
   if (game.total - e.last < 4 || R() > 0.2) return
   const opts = []
-  if (e.rival && game.total >= 3) opts.push('rival')
+  if (e.rival && game.total >= 3 && !(game.poder && game.poder.rv)) opts.push('rival')
   if (e.exAliado) opts.push('exAliado')
   if (e.ministro && isExec()) opts.push('ministro')
   if (!opts.length) return
@@ -4178,6 +4190,7 @@ export function roundAvancos() {
   roundMundo24()
   roundVida()
   roundFamilia()
+  roundRival()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -5271,7 +5284,7 @@ export function figAgir(figId, acao) {
   f.laco = clamp(f.laco + (ok ? a.lacoOk : a.lacoBad))
   f.hist.unshift({ r: game.total, t: ok ? a.hOk : a.hBad })
   f.hist = f.hist.slice(0, 5)
-  if (a.rivalMod && ok) game.rivalMod = (game.rivalMod || 0) + a.rivalMod
+  if (a.rivalMod && ok) (game.rivalMod = (game.rivalMod || 0) + a.rivalMod), rvOdio(a.rivalMod)
   v.usedR = game.total
   timelineAdd(f.icon, `${f.nome}: ${ok ? a.hOk : a.hBad}`, ok ? 'up' : 'down')
   cnt('laco')
@@ -5527,7 +5540,7 @@ export function debateMotivo() {
 export function debateAbrir() {
   if (debateMotivo()) return false
   const e = game.election
-  if (!e.rivalTrait) e.rivalTrait = TRAIT_KEYS[Math.floor(R() * TRAIT_KEYS.length)]
+  if (!e.rivalTrait) e.rivalTrait = (e.rivalArc && game.poder && game.poder.rv && game.poder.rv.trait) || TRAIT_KEYS[Math.floor(R() * TRAIT_KEYS.length)]
   const t = TEMAS_DEBATE[Math.floor(R() * TEMAS_DEBATE.length)]
   e.debate = { step: 1, tema: t, aud: 50, riv: 60, ultimo: null, falas: [], reveal: false, res: null }
   save()
@@ -5568,4 +5581,221 @@ export function debateFechar() {
   game.election.debate = null
   save()
   return true
+}
+
+/* ---------- BLOCO 30: o rival recorrente ---------- */
+const rvBase = () => ({ nome: '', sigla: '', trait: 'pragmatico', estagio: 'ascensao', forca: 48, odio: 20, estima: 20, vit: 0, der: 0, trocas: 0, voltas: 0, left: 0, last: -9, pend: null, hist: [], acao: -9 })
+export const rvNow = () => (game.poder && game.poder.rv) || { ...rvBase(), nome: game.rival || 'O rival' }
+export const rvEstagioInfo = (id) => RV_ESTAGIOS[id] || RV_ESTAGIOS.firme
+export const rvAcoes = () => RV_ACOES
+export const rvEventoDef = (id) => RV_EVENTOS.find((x) => x.id === id)
+export function rvEnsure() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.rv || !p.rv.hist) {
+    p.rv = { ...rvBase(), ...(p.rv || {}), nome: game.rival || candName(R), sigla: PARTIES[Math.floor(R() * PARTIES.length)].sigla, trait: RV_TRAITS[Math.floor(R() * RV_TRAITS.length)], forca: Math.round(44 + R() * 14) }
+    if (!game.rival) game.rival = p.rv.nome
+  }
+  return p.rv
+}
+const rvMod = () => {
+  const r = game.poder && game.poder.rv
+  if (!r) return 0
+  return (r.forca - 50) * 0.1 + (r.estagio === 'inimigo' ? 1 : 0) + (r.estagio === 'volta' ? 2 : 0)
+}
+function rvOdio(n) {
+  const r = game.poder && game.poder.rv
+  if (r) r.odio = clamp(r.odio + n * 2.5)
+}
+function rvLog(r, icon, txt, tone = 'flat') {
+  r.hist.unshift({ r: game.total, t: txt })
+  r.hist = r.hist.slice(0, 12)
+  timelineAdd(icon, txt, tone)
+  toast(icon, txt.length > 90 ? txt.slice(0, 88) + '…' : txt)
+}
+function rvDelta(r, d) {
+  if (d.forca) r.forca += d.forca
+  if (d.odio) r.odio += d.odio
+  if (d.estima) r.estima += d.estima
+  r.forca = clamp(r.forca)
+  r.odio = clamp(r.odio)
+  r.estima = clamp(r.estima)
+  if (d.queda && r.estagio !== 'exilio') {
+    r.estagio = 'queda'
+    r.left = 4
+    rvLog(r, '📉', RV_AUTO.queda(r), 'up')
+  }
+  rvRecalc(r)
+}
+// o estágio acompanha o que você faz: ódio alto vira inimizade, estima alta vira aliança
+function rvRecalc(r) {
+  if (r.estagio === 'aliado') {
+    if (r.estima < 35 && r.odio >= 40) {
+      r.estagio = 'inimigo'
+      applyFx({ img: -2, cong: -1.5 }, true)
+      rvLog(r, '💔', RV_AUTO.traicao(r), 'down')
+    }
+    return
+  }
+  if (r.estagio === 'exilio' || r.estagio === 'queda') return
+  if (r.estima >= 45 && r.odio < 45) {
+    r.estagio = 'aliado'
+    rvLog(r, '🤝', RV_AUTO.aliado(r), 'up')
+  } else if (r.odio >= 78 && r.estagio !== 'inimigo') {
+    r.estagio = 'inimigo'
+    rvLog(r, '☠️', RV_AUTO.inimigo(r), 'down')
+  } else if (r.estagio === 'inimigo' && r.odio < 60) r.estagio = 'firme'
+}
+function roundRival() {
+  if (game.total < 2) return
+  const r = rvEnsure()
+  if (r.estagio === 'queda') {
+    if (--r.left <= 0) {
+      r.estagio = 'exilio'
+      r.left = 6
+      rvLog(r, '🧳', RV_AUTO.exilio(r))
+    }
+  } else if (r.estagio === 'exilio') {
+    if (--r.left <= 0) {
+      r.estagio = 'volta'
+      r.forca = clamp(58 + R() * 14)
+      r.voltas++
+      rvLog(r, '🔥', RV_AUTO.volta(r), 'down')
+    }
+  } else if (r.estagio === 'volta' && R() < 0.1) r.estagio = 'firme'
+  else if (r.estagio === 'ascensao' && !(r.vit || r.der)) r.forca = clamp(r.forca + 0.8)
+  if (r.pend) {
+    const d = rvEventoDef(r.pend.id)
+    r.pend.left--
+    if (r.pend.left < 0 && d) {
+      rvAplicar(r, d, d.padrao, true)
+    }
+    return
+  }
+  if (game.total - r.last < 3) return
+  if (r.estagio === 'aliado') {
+    if (R() < 0.09) {
+      applyFx({ cong: 1.5, img: 0.8 }, true)
+      r.last = game.total
+      rvLog(r, '🤝', RV_AUTO.ajuda(r), 'up')
+    }
+    return
+  }
+  if ((r.estagio === 'firme' || r.estagio === 'ascensao') && R() < 0.03) {
+    const outras = PARTIES.filter((x) => x.sigla !== r.sigla)
+    const nova = outras[Math.floor(R() * outras.length)].sigla
+    rvLog(r, '🔁', RV_AUTO.troca(r, nova))
+    r.sigla = nova
+    r.trocas++
+    r.forca = clamp(r.forca + (R() < 0.5 ? 6 : -6))
+    r.last = game.total
+    return
+  }
+  if (R() > 0.14) return
+  const elig = RV_EVENTOS.filter((e) => e.est.includes(r.estagio) && (e.id !== 'trégua' || r.odio < 80))
+  if (!elig.length) return
+  const ev = elig[Math.floor(R() * elig.length)]
+  r.pend = { id: ev.id, left: 2 }
+  r.last = game.total
+  toast(ev.icon, ev.titulo(r))
+}
+export function rvPendNow() {
+  const r = game.poder && game.poder.rv
+  if (!r || !r.pend) return null
+  const e = rvEventoDef(r.pend.id)
+  return e ? { e, r, left: r.pend.left } : null
+}
+export function rvMotivo(opId) {
+  const pn = rvPendNow()
+  if (!pn) return 'Nada pendente.'
+  const o = pn.e.ops.find((x) => x.id === opId)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function rvAplicar(r, d, opId, auto) {
+  const o = d.ops.find((x) => x.id === opId) || d.ops[d.ops.length - 1]
+  const fx = { ...o.fx }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  applyFx(fx, true)
+  if (o.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp((game.heat || 0) + 6)
+  }
+  r.pend = null
+  rvLog(r, d.icon, `${d.titulo(r)}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`)
+  rvDelta(r, o.rv || {})
+  cnt('rival')
+  return o
+}
+export function rvEscolher(opId) {
+  if (rvMotivo(opId)) return null
+  const r = game.poder.rv
+  const d = rvEventoDef(r.pend.id)
+  const o = rvAplicar(r, d, opId, false)
+  save()
+  return { txt: `${d.titulo(r)}: ${o.name.toLowerCase()}.` }
+}
+export function rvAcaoMotivo(id) {
+  const r = game.poder && game.poder.rv
+  if (!r) return 'Ainda não há rival definido.'
+  if (r.estagio === 'exilio') return 'Ele está afastado da política.'
+  if (game.total - (r.acao ?? -9) < 3) return 'Espere algumas rodadas.'
+  if (id === 'trégua' && r.estagio === 'aliado') return 'Ele já é seu aliado.'
+  if (id === 'atacar' && r.estagio === 'aliado') return 'Atacar um aliado? Melhor não.'
+  return ''
+}
+export function rvAcao(id) {
+  if (rvAcaoMotivo(id)) return null
+  const r = rvEnsure()
+  r.acao = game.total
+  let txt
+  if (id === 'trégua') {
+    const ok = R() < clamp(0.25 + r.estima / 100 - r.odio / 150, 0.05, 0.9) 
+    if (ok) {
+      applyFx({ cong: 1, img: 0.5 }, true)
+      rvDelta(r, { estima: 14, odio: -10 })
+      txt = `${r.nome} aceitou conversar. A relação esfriou para melhor.`
+    } else {
+      rvDelta(r, { odio: 3 })
+      txt = `${r.nome} não quis conversa. A porta ficou entreaberta, mas por pouco.`
+    }
+  } else {
+    applyFx({ img: -1.5, pop: 0.5 }, true)
+    game.rivalMod = (game.rivalMod || 0) + 2
+    rvDelta(r, { forca: -4, odio: 10, estima: -6 })
+    txt = `Você atacou ${r.nome} em público. As manchetes dividiram o crédito.`
+  }
+  r.hist.unshift({ r: game.total, t: txt })
+  r.hist = r.hist.slice(0, 12)
+  cnt('rival')
+  save()
+  return { txt }
+}
+// o resultado da eleição muda o rival: quem perde enfraquece, quem ganha cresce
+function rvResultado(won) {
+  const e = game.election
+  const r = game.poder && game.poder.rv
+  if (!r || !e || !e.rivalArc) {
+    if (r) game.rival = r.nome
+    return
+  }
+  if (won) {
+    r.der++
+    rvDelta(r, { forca: -12, odio: 8, estima: -4 })
+    if (r.forca <= 22 && r.estagio !== 'exilio') {
+      r.estagio = 'queda'
+      r.left = 4
+      rvLog(r, '📉', RV_AUTO.queda(r), 'up')
+    }
+    r.hist.unshift({ r: game.total, t: `Perdeu a eleição para ${game.name}.` })
+  } else {
+    r.vit++
+    rvDelta(r, { forca: 10, odio: 4 })
+    if (r.estagio === 'ascensao') r.estagio = 'firme'
+    r.hist.unshift({ r: game.total, t: `Venceu ${game.name} na eleição.` })
+  }
+  r.hist = r.hist.slice(0, 12)
+  game.rival = r.nome
 }

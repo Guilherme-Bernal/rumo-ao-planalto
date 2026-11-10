@@ -836,3 +836,148 @@ describe('BLOCO 29 — dicas, PWA e bots', () => {
     expect(E.game.phase).not.toBe('over')
   })
 })
+
+describe('BLOCO 30 — rival recorrente e finais', () => {
+  const rivalNovo = () => {
+    novo('prefeito')
+    E.game.total = 6
+    return E.rvEnsure()
+  }
+  it('o rival nasce com perfil, partido e traço de debate próprios', () => {
+    const r = rivalNovo()
+    expect(r.nome.length).toBeGreaterThan(2)
+    expect(r.sigla.length).toBeGreaterThan(1)
+    expect(['pragmatico', 'idealista', 'ganancioso', 'orgulhoso', 'cauteloso']).toContain(r.trait)
+    expect(r.estagio).toBe('ascensao')
+  })
+  it('vazar o dossiê derruba o rival, que depois some e volta mais forte', () => {
+    const r = rivalNovo()
+    r.pend = { id: 'escandalo', left: 2 }
+    const dirty0 = E.game.dirty
+    E.rvEscolher('vazar')
+    expect(r.estagio).toBe('queda')
+    expect(r.forca).toBeLessThan(40)
+    expect(r.odio).toBeGreaterThan(30)
+    expect(E.game.dirty).toBe(dirty0 + 1)
+    for (let i = 0; i < 4; i++) E.roundAvancos()
+    expect(r.estagio).toBe('exilio')
+    for (let i = 0; i < 6; i++) E.roundAvancos()
+    expect(['volta', 'firme']).toContain(r.estagio)
+    expect(r.voltas).toBe(1)
+    expect(r.forca).toBeGreaterThanOrEqual(58)
+  })
+  it('poupar e aceitar trégua transformam o rival em aliado improvável', () => {
+    const r = rivalNovo()
+    r.pend = { id: 'escandalo', left: 2 }
+    E.rvEscolher('poupar')
+    r.pend = { id: 'trégua', left: 2 }
+    E.rvEscolher('aceitar')
+    expect(r.estagio).toBe('aliado')
+    expect(r.estima).toBeGreaterThanOrEqual(45)
+    expect(E.rvAcaoMotivo('trégua')).toMatch(/aliado/)
+  })
+  it('ódio acumulado vira inimigo mortal e atacar em público aumenta o ódio', () => {
+    const r = rivalNovo()
+    r.odio = 70
+    const o0 = r.odio
+    E.rvAcao('atacar')
+    expect(r.odio).toBeGreaterThan(o0)
+    expect(r.estagio).toBe('inimigo')
+    expect(E.rvAcaoMotivo('atacar')).toMatch(/Espere/)
+  })
+  it('deixar o evento passar aplica a opção padrão', () => {
+    const r = rivalNovo()
+    r.pend = { id: 'ataque', left: 0 }
+    const pop0 = E.game.stats.pop
+    E.roundAvancos()
+    expect(r.pend).toBeFalsy()
+    expect(E.game.stats.pop).toBeLessThan(pop0 + 2)
+  })
+  it('o resultado da eleição muda o rival e o rival entra na nota da eleição', () => {
+    const r = rivalNovo()
+    E.game.phase = 'rumo'
+    E.game.election = { rival: 0, target: null, rivalName: 'X', pollNoise: 0, result: null, promises: [], planBonus: 0 }
+    r.forca = 90
+    E.chooseRumo('prefeito')
+    const forte = E.game.election.rival
+    expect(E.game.election.rivalArc).toBe(true)
+    expect(E.game.rival).toBe(r.nome)
+    E.game.election.result = { won: true, share: 55, h2h: 55 }
+    E.continueAfterResult()
+    expect(r.der).toBe(1)
+    expect(r.forca).toBeLessThan(90)
+    expect(forte).toBeGreaterThan(40)
+  })
+  it('rival afastado ou aliado não aparece como adversário na eleição', () => {
+    const r = rivalNovo()
+    r.estagio = 'exilio'
+    E.game.phase = 'rumo'
+    E.game.election = { rival: 0, target: null, rivalName: 'X', pollNoise: 0, result: null, promises: [], planBonus: 0 }
+    E.chooseRumo('prefeito')
+    expect(E.game.election.rivalArc).toBe(false)
+    expect(E.game.rival).not.toBe(r.nome)
+  })
+  it('muitas rodadas com o arco do rival não quebram e mantêm os números em faixa', () => {
+    const r = rivalNovo()
+    for (let i = 0; i < 80; i++) {
+      E.game.stats.pop = 60
+      E.game.stats.cash = 60
+      E.roundAvancos()
+      if (r.pend && i % 2) E.rvEscolher(r.pend.id === 'trégua' ? 'recusar' : E.rvEventoDef(r.pend.id).ops[0].id)
+      E.game.total++
+    }
+    for (const k of ['forca', 'odio', 'estima']) {
+      expect(r[k]).toBeGreaterThanOrEqual(0)
+      expect(r[k]).toBeLessThanOrEqual(100)
+    }
+  })
+})
+
+describe('BLOCO 30 — finais múltiplos', () => {
+  const base = (o = {}) => ({
+    name: 'Ana', city: { name: 'Itu' }, region: { name: 'São Paulo' }, history: [1, 2, 3], total: 30, points: 80,
+    stats: { pop: 70, eco: 65, soc: 65, seg: 65, img: 65, cash: 50, cong: 60 }, phase: 'end', over: null, poder: { bio: { marcos: new Array(10).fill(1) } }, ...o,
+  })
+  it('cada situação cai no final certo', async () => {
+    const F = await import('../src/game/finais.js')
+    const id = (g) => F.finalOf(g).id
+    expect(id(base({ phase: 'over', over: { title: 'Golpe de Estado' }, stats: { pop: 20, eco: 30, soc: 30, seg: 30, img: 20, cash: 10, cong: 10 } }))).toBe('exilio')
+    expect(id(base({ phase: 'over', over: { title: 'Derrota nas urnas' }, history: [1, 2, 3] }))).toBe('oposicao')
+    expect(id(base({ phase: 'over', over: { title: 'Derrota nas urnas' }, history: [1] }))).toBe('interior')
+    expect(id(base({ phase: 'over', over: { title: 'Derrota nas urnas' }, history: [1, 2], poder: { rv: { vit: 2, nome: 'Zé' } } }))).toBe('vingado')
+    expect(id(base({ poder: { sucessao: { fim: { won: true }, nome: 'Bia' }, bio: { marcos: [] } } }))).toBe('ministro')
+    expect(id(base({ poder: { rv: { estagio: 'aliado', nome: 'Zé' }, bio: { marcos: [] } } }))).toBe('aliado_rival')
+    expect(id(base({ stats: { pop: 48, eco: 70, soc: 70, seg: 70, img: 60, cash: 50, cong: 60 }, poder: { bio: { marcos: [] } } }))).toBe('esquecido')
+    expect(id(base({ poder: { edu: 80, bio: { marcos: new Array(9).fill(1) } } }))).toBe('instituto')
+    expect(id(base({ stats: { pop: 50, eco: 50, soc: 50, seg: 50, img: 50, cash: 50, cong: 50 }, poder: { bio: { marcos: new Array(9).fill(1) } } }))).toBe('apagado')
+  })
+  it('todo final tem texto, ícone e dica, e o último é sempre alcançável', async () => {
+    const F = await import('../src/game/finais.js')
+    for (const f of F.FINAIS) {
+      expect(f.icon && f.nome && f.dica).toBeTruthy()
+      expect(f.linhas(base({ poder: { sucessao: { fim: { won: true }, nome: 'Bia' }, rv: { nome: 'Zé' }, bio: { marcos: [] } } })).length).toBeGreaterThan(0)
+    }
+    expect(F.FINAIS[F.FINAIS.length - 1].test({})).toBe(true)
+  })
+  it('a galeria guarda os finais vistos sem repetir', async () => {
+    const F = await import('../src/game/finais.js')
+    F.saveFinal('exilio')
+    F.saveFinal('exilio')
+    F.saveFinal('interior')
+    const v = F.loadFinais()
+    expect(v.filter((x) => x === 'exilio').length).toBe(1)
+    expect(v).toContain('interior')
+  })
+  it('ao terminar a carreira o final fica no jogo e entra no epílogo', async () => {
+    const { epilogue } = await import('../src/game/epilogue.js')
+    novo('prefeito')
+    E.game.stage = 0
+    E.game.history = []
+    E.game.election = { rival: 0, target: 'prefeito', result: { won: false, share: 40, h2h: 40 }, rivalArc: false }
+    E.continueAfterResult()
+    expect(E.game.phase).toBe('over')
+    expect(E.game.final.id).toBe('interior')
+    const e = epilogue(E.game)
+    expect(e.join(' ')).toMatch(/voltou para/)
+  })
+})
