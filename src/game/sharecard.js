@@ -50,7 +50,7 @@ export function drawCard(canvas, d) {
   ctx.textAlign = 'center'
   ctx.fillStyle = '#cbd5e1'
   ctx.font = '600 34px system-ui, sans-serif'
-  ctx.fillText(`🏛️  RUMO AO PLANALTO${d.daily ? '  ·  DESAFIO DO DIA' : ''}`, W / 2, 96)
+  ctx.fillText(`🏛️  RUMO AO PLANALTO${d.weekly ? '  ·  DESAFIO DA SEMANA' : d.daily ? '  ·  DESAFIO DO DIA' : ''}`, W / 2, 96)
 
   ctx.fillStyle = '#fff'
   ctx.font = '800 76px system-ui, sans-serif'

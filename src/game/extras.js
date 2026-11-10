@@ -15,6 +15,19 @@ export const todaySeed = () => {
   return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()
 }
 
+// semente do desafio da semana: ano + número da semana ISO (segunda a domingo)
+export const weekNumber = (d = new Date()) => {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const dow = t.getUTCDay() || 7
+  t.setUTCDate(t.getUTCDate() + 4 - dow)
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1))
+  return { year: t.getUTCFullYear(), week: Math.ceil(((t - y0) / 86400000 + 1) / 7) }
+}
+export const weekSeed = (d) => {
+  const w = weekNumber(d)
+  return 9000000 + w.year * 100 + w.week
+}
+
 const store = {
   get(k, def) {
     try {
@@ -41,6 +54,22 @@ export function addHall(entry) {
   const top = h.slice(0, 10)
   store.set('rumo-hall', top)
   return top.indexOf(entry)
+}
+
+// ranking local do desafio da semana (guarda as últimas semanas; mostra só a semana atual)
+export const loadWeekly = () => store.get('rumo-semanal', [])
+export function addWeekly(entry) {
+  const all = loadWeekly()
+  all.push(entry)
+  all.sort((a, b) => b.points - a.points)
+  const keep = all.filter((e) => e.seed === entry.seed).slice(0, 10).concat(all.filter((e) => e.seed !== entry.seed).slice(0, 30))
+  store.set('rumo-semanal', keep)
+  const cur = keep.filter((e) => e.seed === entry.seed)
+  return cur.indexOf(entry)
+}
+export const weeklyNow = () => {
+  const sd = weekSeed()
+  return loadWeekly().filter((e) => e.seed === sd).sort((a, b) => b.points - a.points).slice(0, 10)
 }
 
 const last = (g) => g.history[g.history.length - 1]
@@ -71,6 +100,7 @@ export const ACHIEVEMENTS = [
   { id: 'palavra', icon: '🤝', name: 'Palavra cumprida', desc: 'Cumpra todas as promessas do plano de governo em um mandato.', test: (g) => g.keptAll >= 1 },
   { id: 'casaca', icon: '🧥', name: 'Vira-casaca', desc: 'Troque de partido 2 vezes ou mais.', test: (g) => g.switches >= 2 },
   { id: 'interior', icon: '🌾', name: 'Do interior ao Planalto', desc: 'Seja eleito(a) presidente começando em cidade pequena.', test: (g) => g.city && g.city.size === 'pequena' && g.history.length >= 3 },
+  { id: 'semanal', icon: '🗓️', name: 'Desafio da semana', desc: 'Complete o desafio da semana até o fim.', test: (g) => g.weekly && g.phase === 'end' },
   { id: 'diario', icon: '📅', name: 'Desafio do dia', desc: 'Complete o desafio do dia até o fim.', test: (g) => g.daily && g.phase === 'end' },
 ]
 

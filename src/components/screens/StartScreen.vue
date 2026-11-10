@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { countryList, hasSave, loadGame, startGame, STATS, baseStats, acceptChance, initialInvites, randomPlanName } from '../../game/engine'
-import { ACHIEVEMENTS, loadHall, loadUnlocked, randomName } from '../../game/extras'
+import { ACHIEVEMENTS, loadHall, weeklyNow, loadUnlocked, randomName } from '../../game/extras'
 import { modsFor, defaultPicks } from '../../game/traits'
 import { AGE_MIN, AGE_MAX, AGE_DEF, ageMods, ageGate } from '../../game/countries/brasil-traits'
 import { PRESETS } from '../../game/presets'
@@ -19,6 +19,7 @@ const country = ref(countryList()[0])
 const c = country.value
 const step = ref(0) // 0 = início, 1..4 = assistente
 const daily = ref(false)
+const weekly = ref(false)
 const name = ref('')
 const look = ref(defaultLook())
 const archetype = ref(c.archetypes[0].id)
@@ -58,6 +59,7 @@ function onImport(e) {
   e.target.value = ''
 }
 const hall = loadHall().slice(0, 5)
+const semana = weeklyNow()
 const unlocked = loadUnlocked()
 
 const STEPS = ['Personagem', 'Origem', 'Partido', 'Plano']
@@ -209,11 +211,12 @@ function go(n) {
 function begin() {
   startGame({
     countryId: c.id, name: name.value, archetypeId: archetype.value, regionId: regionId.value, cityName: city.value.name,
-    partyId: partyId.value === 'own' ? null : partyId.value, ownParty: partyId.value === 'own' ? ownP.value : null, plan: { name: planName.value, ids: planIds.value }, daily: daily.value, traits: { ...picks.value }, look: { ...look.value },
+    partyId: partyId.value === 'own' ? null : partyId.value, ownParty: partyId.value === 'own' ? ownP.value : null, plan: { name: planName.value, ids: planIds.value }, daily: daily.value, weekly: weekly.value, traits: { ...picks.value }, look: { ...look.value },
   })
 }
-function newCareer(isDaily) {
-  daily.value = isDaily
+function newCareer(isDaily, isWeekly = false) {
+  daily.value = isDaily || isWeekly
+  weekly.value = isWeekly
   go(1)
 }
 const canNext = computed(() => (step.value === 3 ? !!partyId.value : true))
@@ -234,9 +237,10 @@ const canNext = computed(() => (step.value === 3 ? !!partyId.value : true))
         <div class="row-end" style="margin-top: 18px">
           <button class="primary" @click="newCareer(false)">Nova carreira</button>
           <button @click="newCareer(true)">📅 Desafio do dia</button>
+          <button @click="newCareer(false, true)">🗓️ Desafio da semana</button>
           <button v-if="saved" @click="loadGame">Continuar jogo salvo</button>
         </div>
-        <p class="legend">Desafio do dia: todo mundo joga hoje com os mesmos eventos. Dá para comparar o resultado com os amigos.</p>
+        <p class="legend">Desafio do dia: todo mundo joga hoje com os mesmos eventos. Dá para comparar o resultado com os amigos. Desafio da semana: mesma ideia, valendo a semana inteira, com ranking neste navegador.</p>
         <div class="savebar">
           <button @click="downloadSave">💾 Exportar save</button>
           <button @click="fileIn.click()">📂 Importar save</button>
@@ -249,6 +253,15 @@ const canNext = computed(() => (step.value === 3 ? !!partyId.value : true))
           <div class="hall">
             <div v-for="(h, i) in hall" :key="i">
               <span>{{ i + 1 }}. {{ h.name }} ({{ h.region }}) · {{ h.label }}<template v-if="h.daily"> 📅</template></span>
+              <span>{{ h.points }} pts</span>
+            </div>
+          </div>
+        </details>
+        <details v-if="semana.length">
+          <summary>🗓️ Ranking da semana ({{ semana.length }})</summary>
+          <div class="hall">
+            <div v-for="(h, i) in semana" :key="i">
+              <span>{{ i + 1 }}. {{ h.name }} ({{ h.region }}) · {{ h.label }}</span>
               <span>{{ h.points }} pts</span>
             </div>
           </div>
@@ -266,7 +279,7 @@ const canNext = computed(() => (step.value === 3 ? !!partyId.value : true))
         <div class="stepper">
           <span v-for="(s, i) in STEPS" :key="s" :class="{ on: step === i + 1, done: step > i + 1 }" @click="step > i + 1 && go(i + 1)"><em>{{ step > i + 1 ? '✓' : i + 1 }}</em>{{ s }}</span>
         </div>
-        <p v-if="daily" class="legend" style="margin: 0 0 8px">📅 Desafio do dia</p>
+        <p v-if="daily" class="legend" style="margin: 0 0 8px">{{ weekly ? '🗓️ Desafio da semana' : '📅 Desafio do dia' }}</p>
 
         <!-- 1. PERSONAGEM -->
         <template v-if="step === 1">

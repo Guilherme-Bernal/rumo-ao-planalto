@@ -10,6 +10,7 @@ const props = defineProps({
   office: { type: String, default: '' },
   war: { type: Number, default: 0 },
   cena: { type: String, default: '' },
+  ind: { type: Number, default: 0 },
 })
 
 const root = ref(null)
@@ -54,6 +55,8 @@ const CENA_OV = {
   crise: { sky: 0x6b5a5a, sun: 0xffb199 },
   guerra: { sky: 0x3a2f2f, sun: 0xff8a4d, ground: 0x4a3f33 },
   apuracao: { sky: 0x1b2347, sun: 0x8fa2d6, ground: 0x1f2c25, cam: { r: 46, h: 12, look: [0, 7, 6] } },
+  reuniao: { sky: 0xd9c8a8, sun: 0xffe9c2, ground: 0x6b5a45, cam: { r: 44, h: 13, look: [0, 5, 4] } },
+  posse: { sky: 0xbfe4ff, sun: 0xffffff, ground: 0x3f7a46, cam: { r: 54, h: 15, look: [0, 7, 6] } },
 }
 const theme = () => ({ ...(THEMES[props.stage] || THEMES[1]), ...(THEME_OV[props.office] || {}), ...(CENA_OV[props.cena] || {}) })
 const skyFor = (eco) => new THREE.Color(0x1a2233).lerp(new THREE.Color(theme().sky), Math.min(1, Math.max(0, eco / 100)))
@@ -436,7 +439,63 @@ function crisisOverlay(war) {
     }
   }
 }
-const CENA_SET = { comicio: buildComicio, tribunal: buildTribunal, apuracao: buildApuracao }
+function buildReuniao() {
+  // salão de reunião: mesa redonda com cadeiras, bandeiras ao fundo, janelas e lustre
+  box(56, 0.4, 44, 0x8a6a45, 0, 0.2, 8)
+  box(56, 22, 1, 0xe8dcc0, 0, 11, -14)
+  for (const x of [-18, 0, 18]) box(8, 12, 0.4, 0x9bd1ff, x, 12, -13.4)
+  for (const x of [-26, 26]) box(1, 22, 30, 0xe8dcc0, x, 11, 0)
+  cyl(9, 9, 0.7, 0x5b3a1e, 0, 3.4, 6, 40)
+  cyl(1.6, 2.2, 3.1, 0x3b2a1a, 0, 1.6, 6, 14)
+  cyl(7.6, 7.6, 0.12, 0x1d4ed8, 0, 3.8, 6, 40)
+  const cores = [0x1b8a3c, 0xef4444, 0x3b82f6, 0xfacc15, 0xf8fafc, 0x7c3aed]
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2
+    const x = Math.cos(a) * 11.2
+    const z = 6 + Math.sin(a) * 11.2
+    box(2.2, 0.5, 2.2, 0x7c2d12, x, 1.7, z)
+    box(2.2, 2.4, 0.4, 0x7c2d12, x * 1.07, 3, 6 + (z - 6) * 1.07)
+  }
+  for (let i = 0; i < 6; i++) {
+    cyl(0.1, 0.1, 9, 0xdddddd, -12.5 + i * 5, 6.5, -12.4, 6)
+    box(3, 2, 0.15, cores[i], -12.5 + i * 5 + 1.5, 10.2, -12.4)
+  }
+  cyl(0.1, 0.1, 6, 0x374151, 0, 18, 6, 6)
+  add(new THREE.SphereGeometry(1.4, 14, 10), mat(0xfff1c2, { emissive: 0xffe58a, emissiveIntensity: 1.1 }), 0, 14.6, 6)
+}
+function buildPosse() {
+  // posse: rampa vermelha, palanque com o púlpito, faixas, balões e bandeiras
+  box(56, 0.4, 44, 0xd6cfc0, 0, 0.2, 12)
+  box(26, 12, 12, 0xf1ece0, 0, 6, -10)
+  for (let i = -5; i <= 5; i++) cyl(0.7, 0.7, 10, 0xffffff, i * 2.3, 5.5, -3.5, 12)
+  box(30, 1.2, 14, 0xe5dfd0, 0, 12.6, -9)
+  for (let i = 0; i < 6; i++) box(10, 0.5, 4, 0xb91c1c, 0, 0.45 + i * 0.5, 4 + (5 - i) * 2.6)
+  box(14, 0.5, 6, 0x7c2d12, 0, 3.4, -1)
+  box(2.2, 2.6, 1.2, 0x3b2a1a, 0, 5, -1)
+  box(4, 0.2, 0.2, 0xfacc15, 0, 6.6, -1)
+  const cores = [0xef4444, 0x3b82f6, 0xfacc15, 0x22c55e, 0xf472b6]
+  for (let i = 0; i < 18; i++) balloon(-22 + i * 2.6, 6 + (i % 3) * 1.8, 8 + (i % 4), cores[i % cores.length])
+  flag(-16, 4, 14)
+  flag(16, 4, 14)
+  for (let i = 0; i < 40; i++) box(0.5, 1.1, 0.5, cores[i % 5], -18 + (i % 20) * 1.9, 0.9, 22 + Math.floor(i / 20) * 2.2)
+  trees(30, 30, 90, 32)
+}
+// indústrias na paisagem: uma fábrica por contrato fechado, com chaminé e fumaça
+function factoriesOverlay(n) {
+  for (let i = 0; i < Math.min(4, n); i++) {
+    const x = 30 + (i % 2) * 11
+    const z = 6 + Math.floor(i / 2) * 10
+    box(8, 4.5, 6, 0x9ca3af, x, 2.25, z)
+    box(8.4, 0.5, 6.4, 0x6b7280, x, 4.8, z)
+    box(2.4, 2.4, 0.2, 0x38bdf8, x - 2, 3, z + 3.1)
+    box(2.4, 2.4, 0.2, 0x38bdf8, x + 2, 3, z + 3.1)
+    cyl(0.7, 0.9, 9, 0x7f1d1d, x + 2.8, 8.5, z - 1.2, 10)
+    const f = add(new THREE.SphereGeometry(1.1, 10, 8), mat(0xe5e7eb, { transparent: true, opacity: 0.7 }), x + 2.8, 13.8, z - 1.2)
+    f.userData = { y0: 13.8, ph: Math.random() * 6.28 }
+    floaters.push(f)
+  }
+}
+const CENA_SET = { comicio: buildComicio, tribunal: buildTribunal, apuracao: buildApuracao, reuniao: buildReuniao, posse: buildPosse }
 const SETS = [buildVereador, buildDeputado, buildGovernador, buildPresidente]
 const setFor = () => SET_BY_OFFICE[props.office] || SETS[props.stage] || buildDeputado
 
@@ -459,6 +518,7 @@ function buildSet() {
   const g = add(new THREE.PlaneGeometry(500, 500), mat(theme().ground), 0, 0, 0)
   g.rotation.x = -Math.PI / 2
   ;(CENA_SET[props.cena] || setFor())()
+  if (props.ind > 0 && !CENA_SET[props.cena]) factoriesOverlay(props.ind)
   if (props.cena === 'protesto') protestOverlay()
   if (props.cena === 'crise' || props.cena === 'guerra') crisisOverlay(props.cena === 'guerra')
   if (sun) sun.color.set(theme().sun)
@@ -655,7 +715,7 @@ onBeforeUnmount(() => {
 watch(() => props.pop, () => { if (people) paintPeople(); applyEco() })
 watch(() => props.eco, applyEco)
 watch(() => settings.quality, applyQuality)
-watch(() => [props.stage, props.office, props.cena], () => scene && buildSet())
+watch(() => [props.stage, props.office, props.cena, Math.min(4, props.ind)], () => scene && buildSet())
 </script>
 
 <template>

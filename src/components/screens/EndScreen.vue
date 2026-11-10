@@ -1,7 +1,8 @@
 <script setup>
+import SerieChart from '../game/SerieChart.vue'
 import { ref } from 'vue'
 import { game, STATS, resetGame, country, officeId, ageNow } from '../../game/engine'
-import { ACHIEVEMENTS, loadHall } from '../../game/extras'
+import { ACHIEVEMENTS, loadHall, weeklyNow } from '../../game/extras'
 import Avatar from '../character/Avatar.vue'
 import { epilogue } from '../../game/epilogue'
 import { shareCard } from '../../game/sharecard'
@@ -11,6 +12,7 @@ const epi = epilogue(game)
 const copied = ref(false)
 const imgMsg = ref('')
 const hall = loadHall().slice(0, 5)
+const weekly = weeklyNow()
 const earned = ACHIEVEMENTS.filter((a) => game.runUnlocked.includes(a.id))
 const title = game.phase === 'end' ? game.legacy.title : game.over.title
 
@@ -29,6 +31,7 @@ async function shareImage() {
     epi: epi[0],
     trophies: earned.slice(0, 8).map((a) => a.icon).join(' '),
     daily: game.daily,
+    weekly: game.weekly,
     url: location.host + location.pathname.replace(/\/$/, ''),
   })
   if (r === 'download') {
@@ -41,7 +44,7 @@ async function share() {
   const c = country()
   const path = game.history.map((h) => h.office).join(' → ') || 'Sem vitórias'
   const text = [
-    `🏛️ Rumo ao Planalto${game.daily ? ' (desafio do dia)' : ''}`,
+    `🏛️ Rumo ao Planalto${game.weekly ? ' (desafio da semana)' : game.daily ? ' (desafio do dia)' : ''}`,
     `${game.name} (${game.region.id}): ${title}, ${game.points} pts`,
     `Carreira: ${path}`,
     earned.length ? `🏆 ${earned.map((a) => a.icon).join(' ')}` : '',
@@ -80,6 +83,8 @@ async function share() {
       <p v-if="!game.history.length" class="muted">Nenhuma eleição vencida.</p>
       <p v-for="(h, i) in game.history" :key="i" class="muted">✔ {{ h.office }} ({{ h.share.toFixed(1) }}% dos votos)</p>
 
+      <SerieChart escopo="carreira" titulo="📊 Sua carreira em números" />
+
       <h3 style="margin: 12px 0 6px">Estado final</h3>
       <div>
         <span v-for="s in STATS" :key="s.k" class="chip">{{ s.icon }} {{ s.short }} {{ Math.round(game.stats[s.k]) }}</span>
@@ -99,6 +104,16 @@ async function share() {
           <span>{{ h.points }} pts</span>
         </div>
       </div>
+
+      <template v-if="game.weekly">
+        <h3 style="margin: 12px 0 6px">🗓️ Ranking da semana (neste navegador)</h3>
+        <div class="hall">
+          <div v-for="(h, i) in weekly" :key="i" :class="{ me: i === game.weeklyPos }">
+            <span>{{ i + 1 }}. {{ h.name }} ({{ h.region }}) · {{ h.label }}</span>
+            <span>{{ h.points }} pts</span>
+          </div>
+        </div>
+      </template>
 
       <div class="row-end" style="margin-top: 18px">
         <button @click="shareImage">{{ imgMsg || '🖼️ Imagem para compartilhar' }}</button>

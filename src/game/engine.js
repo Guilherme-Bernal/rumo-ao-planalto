@@ -9,7 +9,7 @@ import { hash01 } from './countries/brasil-geo'
 import { OFFICES, PATHS, LEGACY_OFFICE } from './offices'
 import { VICES, SUPLS, TEAMS, APPOINTEES, lockReason } from './team'
 import { makeNews, makeSpecial } from './news'
-import { mulberry32, todaySeed, ACHIEVEMENTS, makeRival, loadUnlocked, saveUnlocked, addHall } from './extras'
+import { mulberry32, todaySeed, weekSeed, ACHIEVEMENTS, makeRival, loadUnlocked, saveUnlocked, addHall, addWeekly } from './extras'
 import { PARTIES } from './countries/brasil-parties'
 import { DAY_FLAVOR, ACTION_ICON, holidayOf, makePost, slug, GENERIC_TAGS, candName } from './social'
 import { MORE_FLAVOR } from './flavor'
@@ -119,6 +119,7 @@ const blank = () => ({
   legacy: null,
   cashNeg: 0,
   daily: false,
+  weekly: false,
   seed: 0,
   rngN: 0,
   dirty: 0,
@@ -126,6 +127,7 @@ const blank = () => ({
   runUnlocked: [],
   points: 0,
   hallPos: -1,
+  weeklyPos: -1,
   traits: {},
   sched: [], // [{ id, m }] ações marcadas no calendário da rodada
   eventMonth: 0,
@@ -278,8 +280,12 @@ function finalize(ended) {
     label: ended ? game.legacy.title : game.over.title,
     points: game.points,
     daily: game.daily,
+    weekly: game.weekly,
     date: new Date().toLocaleDateString('pt-BR'),
   })
+  if (game.weekly) {
+    game.weeklyPos = addWeekly({ name: game.name, region: game.region.id, label: ended ? game.legacy.title : game.over.title, points: game.points, seed: game.seed, date: new Date().toLocaleDateString('pt-BR') })
+  }
 }
 
 function save() {
@@ -507,8 +513,9 @@ export function stateEstimates() {
 
 /* ---------- fluxo do jogo ---------- */
 
-export function startGame({ countryId = 'brasil', name, archetypeId, regionId, cityName, partyId = null, ownParty = null, plan, daily = false, traits = {}, look = null }) {
-  Object.assign(game, blank(), { countryId, daily, seed: daily ? todaySeed() : 0, difficulty: daily ? 'normal' : settings.difficulty })
+export function startGame({ countryId = 'brasil', name, archetypeId, regionId, cityName, partyId = null, ownParty = null, plan, daily = false, weekly = false, traits = {}, look = null }) {
+  daily = daily || weekly
+  Object.assign(game, blank(), { countryId, daily, weekly, seed: weekly ? weekSeed() : daily ? todaySeed() : 0, difficulty: daily ? 'normal' : settings.difficulty })
   setRng()
   const c = country()
   game.name = (name || '').trim() || 'Candidato(a)'
@@ -755,7 +762,19 @@ export function chooseBig(i) {
   if (!checkOver()) save()
 }
 
+// série de números por rodada (alimenta os gráficos do resumo de mandato)
+function serieAdd() {
+  if (!game.poder) return
+  const p = game.poder
+  p.serie = p.serie || []
+  const st = game.stats
+  p.serie.push({ st: game.stage, tm: game.term, t: game.turn, pop: Math.round(st.pop), eco: Math.round(st.eco), cash: Math.round(st.cash), soc: Math.round(st.soc), seg: Math.round(st.seg), img: Math.round(st.img), cong: Math.round(st.cong) })
+  if (p.serie.length > 120) p.serie.splice(0, p.serie.length - 120)
+}
+export const serieNow = () => (game.poder && game.poder.serie) || []
+
 function beginTurn() {
+  serieAdd()
   game.ap = 2
   game.used = []
   game.sched = []

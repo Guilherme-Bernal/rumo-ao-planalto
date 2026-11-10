@@ -12,6 +12,8 @@ const DEFAULTS = {
   quality: 'auto', // auto | high | low (qualidade do 3D)
   fontScale: 1, // 1 | 1.12 | 1.25
   contrast: false,
+  readable: false, // fonte mais legível e espaçada
+  announce: true, // anúncios por região aria-live (leitor de tela)
   reduceMotion: mq('(prefers-reduced-motion: reduce)'),
   difficulty: 'normal', // facil | normal | real (vale para a próxima carreira)
 }
@@ -39,6 +41,7 @@ export function applyDom() {
   r.style.fontSize = Math.round(settings.fontScale * 100) + '%'
   r.classList.toggle('hc', !!settings.contrast)
   r.classList.toggle('rm', !!settings.reduceMotion)
+  r.classList.toggle('readable', !!settings.readable)
 }
 
 watch(

@@ -21,6 +21,7 @@ import {
 import Newspaper from './Newspaper.vue'
 import PostCard from './PostCard.vue'
 import Balance from './Balance.vue'
+import SerieChart from './SerieChart.vue'
 import BrazilMap from '../shared/BrazilMap.vue'
 import PlanEditor from '../character/PlanEditor.vue'
 import Rumo from './Rumo.vue'
@@ -255,6 +256,7 @@ const planIds = ref([])
     <template v-else-if="game.phase === 'result'">
       <h2>{{ game.election.result.won ? 'Vitória!' : 'Derrota' }}</h2>
       <Newspaper :news="game.election.news">{{ game.election.result.campaign }}: eleição para {{ targetOffice() }}. <template v-if="game.election.result.prop">Você ficou em {{ game.election.result.rank }}º lugar entre {{ game.election.result.cands }} candidatos, para {{ game.election.result.seats }} vagas, com {{ game.election.result.share.toFixed(1) }}% dos votos nominais.</template><template v-else>Você teve {{ game.election.result.share.toFixed(1) }}% dos votos válidos contra {{ game.election.rivalName }}.</template></Newspaper>
+      <SerieChart style="margin-top: 12px" />
       <button class="primary" style="width: 100%; margin-top: 12px" @click="continueAfterResult">
         {{ game.election.result.won ? 'Tomar posse' : 'Ver o balanço' }}
       </button>

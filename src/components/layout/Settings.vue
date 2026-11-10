@@ -2,6 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { settings, DIFFICULTIES } from '../../game/settings'
 import { unlock, sfx, STYLE_NAMES } from '../../game/audio'
+import { tutOpen } from '../../game/tutorial'
 
 const open = ref(false)
 const toggle = () => {
@@ -52,6 +53,9 @@ const FONTS = [
     </div>
     <label class="cfg-row"><span>🌗 Alto contraste</span><input v-model="settings.contrast" type="checkbox" /></label>
     <label class="cfg-row"><span>🌀 Reduzir movimento</span><input v-model="settings.reduceMotion" type="checkbox" /></label>
+    <label class="cfg-row"><span>📖 Fonte de leitura fácil</span><input v-model="settings.readable" type="checkbox" /></label>
+    <label class="cfg-row"><span>🔈 Avisos para leitor de tela</span><input v-model="settings.announce" type="checkbox" /></label>
+    <div class="cfg-row"><span>🎓 Tutorial</span><button type="button" @click="open = false; tutOpen()">Rever</button></div>
 
     <div class="cfg-grp">Dificuldade <small class="muted">(vale para a próxima carreira)</small></div>
     <div class="cfg-seg cfg-dif">

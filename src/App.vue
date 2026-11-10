@@ -1,9 +1,13 @@
 <script setup>
-import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { game, country, stageInfo, resetGame, traitNames, partyObj, officeId } from './game/engine'
+import { computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent, ref } from 'vue'
+import { game, country, stageInfo, resetGame, traitNames, partyObj, officeId, industriasNow } from './game/engine'
+import { settings } from './game/settings'
+import { tutAutoOpen } from './game/tutorial'
+import Tutorial from './components/layout/Tutorial.vue'
 import { OFFICES } from './game/offices'
 const LADDER = Object.values(OFFICES).sort((a, b) => a.rank - b.rank || a.tier - b.tier)
-import Scene3D from './components/scene/Scene3D.vue'
+// o 3D (three.js) é o trecho mais pesado: carrega em paralelo, sem travar a tela inicial
+const Scene3D = defineAsyncComponent(() => import('./components/scene/Scene3D.vue'))
 import StartScreen from './components/screens/StartScreen.vue'
 import StatsPanel from './components/layout/StatsPanel.vue'
 import Hub from './components/layout/Hub.vue'
@@ -61,6 +65,8 @@ const cena = computed(() => {
   if (game.phase === 'start') return ''
   if (game.phase === 'result' || game.phase === 'runoff') return 'apuracao'
   if (game.phase === 'campaign') return 'comicio'
+  if (game.phase === 'plan') return 'posse'
+  if (game.poder && game.poder.reuniao) return 'reuniao'
   const p = game.poder
   if (p && p.civil) return 'guerra'
   if (p && p.plot) return 'crise'
@@ -80,6 +86,7 @@ const tema = computed(() => {
   if (c === 'guerra') return 'guerra'
   if (c === 'crise' || c === 'protesto') return 'crise'
   if (c === 'tribunal') return 'tribunal'
+  if (c === 'posse') return 'campanha'
   return 'gov'
 })
 watch(
@@ -92,33 +99,53 @@ watch(tema, (t, o) => {
   else if ((t === 'crise' || t === 'guerra') && o === 'gov') sfx('alert')
 })
 
+// tutorial: abre sozinho na primeira carreira
+watch(() => game.phase, (p, o) => { if (o === 'start' && p !== 'start') tutAutoOpen() })
+
+// anúncios para leitor de tela (região aria-live educada)
+const aviso = ref('')
+watch(
+  () => [game.phase, game.turn, game.stage],
+  () => {
+    if (!settings.announce || game.phase === 'start') return
+    const nomes = { event: 'Novo evento. Decida o que fazer.', actions: 'Escolha suas ações da rodada.', campaign: 'Campanha eleitoral.', result: 'Resultado da eleição.', plan: 'Posse. Monte o plano de governo.', recap: 'Resumo do período.', over: 'Fim de jogo.', end: 'Fim da carreira.' }
+    aviso.value = `Rodada ${game.turn + 1}. ${nomes[game.phase] || ''}`
+  },
+)
+
 function restart() {
   if (confirm('Abandonar a carreira atual e voltar ao início?')) resetGame()
 }
 </script>
 
 <template>
+  <a class="skip" href="#conteudo">Pular para o conteúdo</a>
   <Scene3D
+    aria-hidden="true"
     :pop="game.stats.pop"
     :eco="game.stats.eco"
     :stage="game.phase === 'start' ? 1 : game.stage"
     :office="game.phase === 'start' ? '' : officeId()"
     :war="game.phase === 'start' || !game.world ? 0 : game.world.wars.length"
+    :ind="game.phase === 'start' ? 0 : industriasNow().length"
     :cena="cena"
   />
+  <div class="sr-only" role="status" aria-live="polite">{{ aviso }}</div>
 
-  <div class="toasts">
+  <div class="toasts" role="status" aria-live="polite" aria-atomic="false">
     <div v-for="t in game.toasts" :key="t.id" class="toast">{{ t.msg ? `${t.icon} ${t.msg}` : `🏆 Conquista: ${t.icon} ${t.name}` }}</div>
   </div>
 
   <Settings />
   <Reuniao />
+  <Tutorial />
   <Sucessao />
-  <StartScreen v-if="game.phase === 'start'" />
-  <EndScreen v-else-if="game.phase === 'over' || game.phase === 'end'" />
+  <StartScreen v-if="game.phase === 'start'" id="conteudo" role="main" tabindex="-1" />
+  <EndScreen v-else-if="game.phase === 'over' || game.phase === 'end'" id="conteudo" role="main" tabindex="-1" />
 
   <div v-else class="hud">
     <header class="top panel">
+      <h1 class="sr-only">Rumo ao Planalto</h1>
       <div>
         <div class="who">{{ country().flag }} {{ game.name }} · {{ stageInfo().office }}
           <span v-if="partyObj()" class="chip" :style="{ background: partyObj().color + '55' }">{{ partyObj().sigla }}</span>
@@ -138,7 +165,7 @@ function restart() {
       </div>
     </header>
     <StatsPanel class="stats panel" />
-    <Hub class="main panel" />
+    <Hub id="conteudo" role="main" tabindex="-1" class="main panel" />
     <Sandbox v-if="showSandbox" />
     <Apoie />
   </div>
