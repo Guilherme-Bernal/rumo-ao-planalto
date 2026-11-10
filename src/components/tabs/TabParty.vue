@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { game, country, partyObj, partyChanceNow, askJoin, declineInvite, foundParty, foundReasons, ideology } from '../../game/engine'
+import { game, country, partiesNow, partyObj, partyChanceNow, askJoin, declineInvite, foundParty, foundReasons, ideology } from '../../game/engine'
 import { AFF_TEXT, affinity } from '../../game/countries/brasil-parties'
 import { perkChips } from '../../game/ideas'
 import PartyFounder from '../character/PartyFounder.vue'
@@ -8,8 +8,8 @@ import PartyFounder from '../character/PartyFounder.vue'
 const msg = ref('')
 const open = ref(false)
 const me = () => partyObj()
-const others = () => country().parties.filter((p) => p.id !== game.party)
-const byId = (id) => country().parties.find((p) => p.id === id)
+const others = () => partiesNow().filter((p) => p.id !== game.party)
+const byId = (id) => partiesNow().find((p) => p.id === id)
 const COST = [{ t: '💰 −10 caixa', good: false }, { t: '🏛️ −3 base', good: false }, { t: '⚖️ +2 imagem', good: true }]
 function join(id) {
   const r = askJoin(id)

@@ -1,10 +1,11 @@
 <script setup>
 import { computed } from 'vue'
-import { game, STATS, officeInfo, worldPartners, worldWars, worldNuc, worldStances, diploActions, defActions, fedDefs, fedActions, isPresident, worldReady, diplo, defAct, nucInvest, fedAct, diploChance, askChance } from '../../game/engine'
+import { game, STATS, officeInfo, worldPartners, worldWars, worldNuc, worldStances, diploActions, defActions, fedDefs, fedActions, isPresident, canDiplo, worldReady, diplo, defAct, nucInvest, fedAct, diploChance, askChance } from '../../game/engine'
 
 const w = computed(() => game.world)
 const ready = computed(() => worldReady())
 const pres = computed(() => isPresident())
+const diploOk = computed(() => canDiplo())
 const color = (v) => (v < 30 ? 'var(--bad)' : v < 55 ? 'var(--warn)' : 'var(--good)')
 const mood = (v) => (v >= 75 ? 'aliado' : v >= 55 ? 'amigável' : v >= 40 ? 'neutro' : v >= 25 ? 'frio' : 'hostil')
 const short = (k) => (STATS.find((s) => s.k === k) || { short: k }).short
@@ -60,7 +61,7 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
       </div>
     </div>
 
-    <template v-if="pres">
+    <template v-if="diploOk">
       <h3 class="sub">🌐 Diplomacia</h3>
       <div v-for="p in worldPartners()" :key="p.id" class="rel">
         <div class="row">
@@ -79,7 +80,10 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
           </button>
         </div>
       </div>
-      <p class="legend">Aproximar-se de um parceiro esfria a relação com os rivais dele (EUA e China, Rússia e Europa).</p>
+      <p class="legend">Aproximar-se de um parceiro esfria a relação com os rivais dele (EUA e China, Rússia e Europa, Índia e China).<template v-if="!pres"> Governador e senador conduzem a diplomacia do estado e da Comissão de Relações Exteriores.</template></p>
+    </template>
+
+    <template v-if="pres">
 
       <h3 class="sub">🎖️ Forças Armadas</h3>
       <div class="rel">

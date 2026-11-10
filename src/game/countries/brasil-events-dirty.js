@@ -28,6 +28,25 @@ export const dirtyEvents = [
     C('Recusar sem rodeio', { pop: -3, img: 3 }, 'Os votos do bairro ficaram mais caros na próxima eleição.'),
   ]),
 
+  /* ---------- prefeito (só aparecem para prefeito) ---------- */
+  { ...E('pref_superfat', [0], 'mun', 'Obra superfaturada na sua gestão', 'Um auditor interno mostra que a obra da praça custou o triplo do preço de mercado. A empreiteira é de um aliado seu.', [
+    C('Cancelar o contrato e abrir sindicância', { img: 6, pop: 2, cong: -4, cash: 2 }, 'O aliado virou inimigo e a Câmara reclamou. Mas o dinheiro voltou para o cofre.'),
+    D('Abafar o caso e tocar a obra', { cong: 3, cash: 4, img: -8 }, 'O auditor foi transferido, mas o relatório vazou para a imprensa.', 12),
+    C('Renegociar o valor com a empreiteira', { img: 1, cash: 1, cong: -1 }, 'A empresa baixou o preço pela metade e todo mundo fingiu que nada aconteceu.'),
+    C('Entregar tudo ao Ministério Público', { img: 5, pop: 3, cong: -6 }, 'Você ganhou fama de gestor limpo, e a base da Câmara ficou com raiva.'),
+  ]), only: 'prefeito' },
+  { ...E('pref_camara_trava', [0], 'mun', 'A Câmara trava o seu projeto', 'Os vereadores de oposição rejeitaram o principal projeto da sua gestão e dizem que ele não passa tão cedo.', [
+    C('Negociar emendas com a oposição', { cong: 4, cash: -2, pop: 1 }, 'O projeto foi aprovado com mudanças, e a oposição comemorou.'),
+    C('Ir para a TV e pressionar os vereadores', { pop: 3, cong: -4, img: 1 }, 'A pressão funcionou em parte, mas a relação azedou.'),
+    D('Liberar cargos para os vereadores indecisos', { cong: 7, img: -5, cash: -1 }, 'O projeto passou. A fatura saiu em cargos e em manchetes.', 8),
+    C('Retirar o projeto e reapresentar depois', { cong: 1, pop: -1 }, 'Você ganhou tempo, mas perdeu a iniciativa por uns meses.'),
+  ]), only: 'prefeito' },
+  { ...E('pref_vereadores_cargos', [0], 'mun', 'A bancada governista cobra cargos', 'Vereadores da sua base pedem cargos na prefeitura em troca de apoio nas votações da Câmara.', [
+    C('Dar cargos técnicos e manter a base', { cong: 4, soc: 1, cash: -1 }, 'A base ficou satisfeita e a máquina funcionou melhor.'),
+    D('Distribuir cargos políticos sem critério', { cong: 8, img: -6, cash: -2 }, 'A base ficou fiel, mas o jornal contou os cargos um a um.', 8),
+    C('Recusar e governar sem a barganha', { cong: -5, img: 4, pop: 1 }, 'Você ficou com a imagem limpa e a Câmara cada vez mais difícil.'),
+  ]), only: 'prefeito' },
+
   /* ---------- deputado ---------- */
   E('emendaRelator', [1], 'fed', 'A emenda do relator', 'O líder do governo oferece uma verba extra para a sua base em troca do seu voto num projeto que você acha ruim. Ninguém vai saber de onde veio o dinheiro.', [
     D('Aceitar a verba e votar com o governo', { cong: 6, pop: 4, img: -7, cash: 3 }, 'Seu reduto ganhou uma obra. O orçamento secreto ganhou uma manchete.', 12),

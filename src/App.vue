@@ -15,7 +15,7 @@ const showSandbox = import.meta.env.DEV || new URLSearchParams(location.search).
 import EndScreen from './components/screens/EndScreen.vue'
 import { downloadSave } from './game/savefile'
 
-// cada aviso some sozinho depois de ~10 s (agenda um timer por aviso, mesmo quando v?rios chegam juntos)
+// cada aviso some sozinho depois de ~10 s (agenda um timer por aviso, mesmo quando vários chegam juntos)
 const toastAgendado = new Set()
 watch(
   () => game.toasts.map((t) => t.id).join(','),

@@ -8,6 +8,11 @@ export const PARTNERS = [
   { id: 'arg', name: 'Argentina e Mercosul', ico: '🧉', note: 'Vizinhos, fronteira e comércio regional.' },
   { id: 'rus', name: 'Rússia', ico: '🐻', note: 'Fertilizantes, diesel e uma relação delicada.' },
   { id: 'ori', name: 'Oriente Médio', ico: '🛢️', note: 'Petróleo, investimentos e compra de carne.' },
+  { id: 'india', name: 'Índia', ico: '🐘', note: 'Mercado gigante, tecnologia e farmacêuticos.' },
+  { id: 'japao', name: 'Japão e Coreia', ico: '🗾', note: 'Tecnologia, indústria e financiamento de infraestrutura.' },
+  { id: 'afr', name: 'África e países de língua portuguesa', ico: '🌍', note: 'Laços históricos, cooperação e novos mercados.' },
+  { id: 'lat', name: 'América Latina', ico: '🌎', note: 'Vizinhos andinos e caribenhos: integração e energia.' },
+  { id: 'onu', name: 'ONU, OMC e BRICS', ico: '🏛️', note: 'Organismos multilaterais: prestígio, regras e financiamento.' },
 ]
 
 // Efeito passivo por rodada de uma boa relação (rel 100) ou má (rel 0), aplicado de forma proporcional.
@@ -18,15 +23,23 @@ export const PARTNER_PASSIVE = {
   arg: { seg: 0.4, eco: 0.3 },
   rus: { eco: 0.4, cash: 0.3 },
   ori: { eco: 0.4, cash: 0.2 },
+  india: { eco: 0.5, soc: 0.1 },
+  japao: { eco: 0.5, cash: 0.2 },
+  afr: { img: 0.3, eco: 0.2 },
+  lat: { eco: 0.3, seg: 0.2 },
+  onu: { img: 0.5, cash: 0.2 },
 }
 
 // Alinhar com um parceiro estremece outro (quanto vale em pontos)
-export const RIVALRY = { eua: { china: 3, rus: 4 }, china: { eua: 3 }, rus: { eua: 4, ue: 4 }, ue: { rus: 2 } }
+export const RIVALRY = { eua: { china: 3, rus: 4 }, china: { eua: 3, india: 2 }, rus: { eua: 4, ue: 4 }, ue: { rus: 2 }, india: { china: 2 }, japao: { china: 2 } }
 
 export const DIPLO_ACTIONS = [
   { id: 'visita', name: 'Visita oficial', desc: 'Viagem de Estado com comitiva e foto na bandeira.', fx: { img: 1, cash: -2 }, rel: 10 },
   { id: 'acordo', name: 'Acordo comercial', desc: 'Só sai se a relação estiver boa. Rende comércio.', fx: { eco: 3, cash: -1 }, rel: 6, need: 45, fail: { fx: { img: -1 }, rel: -3, out: 'O parceiro enrolou, e o acordo ficou para depois.' } },
   { id: 'duro', name: 'Endurecer o tom', desc: 'Discurso duro. A torcida gosta, o parceiro não.', fx: { pop: 2, img: -1 }, rel: -14 },
+  { id: 'missao', name: 'Missão comercial', desc: 'Empresários e governo na mesma comitiva. Dá resultado se a relação for razoável.', fx: { eco: 2, cash: -1 }, rel: 7, need: 40, fail: { fx: { img: -1, cash: -1 }, rel: -2, out: 'A missão voltou sem contratos e com despesa de viagem.' } },
+  { id: 'ciencia', name: 'Cooperação científica e tecnológica', desc: 'Intercâmbio de pesquisadores e laboratórios conjuntos.', fx: { img: 1, eco: 1, cash: -1 }, rel: 8 },
+  { id: 'invest', name: 'Atrair investimento estrangeiro', desc: 'Só funciona com boa relação. Entra caixa e economia.', fx: { cash: 3, eco: 1 }, rel: 4, need: 55, fail: { fx: { img: -1 }, rel: -3, out: 'Os investidores acharam o ambiente incerto e foram para outro lugar.' } },
 ]
 
 // Guerras e crises no mundo
@@ -36,6 +49,9 @@ export const WARS = [
   { id: 'mar', name: 'Tensão no Mar da China', ico: '🚢', who: ['china', 'eua'], fx: { eco: -0.7, img: -0.2 }, desc: 'As rotas de comércio ficam arriscadas.' },
   { id: 'africa', name: 'Guerra civil na África', ico: '🕊️', who: ['ori', 'ue'], fx: { soc: -0.4, img: -0.2 }, desc: 'Refugiados e pressão humanitária.' },
   { id: 'fronteira', name: 'Crise na fronteira sul-americana', ico: '⛔', who: ['arg', 'eua'], fx: { seg: -0.6, eco: -0.3 }, desc: 'Tropas se movem perto das nossas fronteiras.' },
+  { id: 'ciber', name: 'Ataques cibernéticos entre potências', ico: '💻', who: ['eua', 'china'], fx: { eco: -0.4, img: -0.2 }, desc: 'Sistemas e cadeias digitais viram alvo, e as empresas pedem proteção.' },
+  { id: 'fome', name: 'Crise global de alimentos', ico: '🌾', who: ['rus', 'afr'], fx: { soc: -0.4, eco: -0.3 }, desc: 'Preço de grãos e de adubo dispara pelo mundo.' },
+  { id: 'clima', name: 'Eventos climáticos extremos pelo mundo', ico: '🌪️', who: ['onu', 'lat'], fx: { cash: -0.3, soc: -0.3 }, desc: 'Secas e enchentes pedem ajuda e encarecem seguros e alimentos.' },
 ]
 
 // Como cada postura do Brasil muda o efeito da guerra e o que traz de bom
@@ -63,35 +79,52 @@ export const NUC = [
 // Relações federativas por cargo. dir: 'up' (quem te ajuda), 'down' (quem você ajuda), 'peer' (par/legislativo)
 export const FED = {
   vereador: [
+    { id: 'bairros', name: 'Associações de bairro', ico: '🏘️', dir: 'down', pass: { pop: 0.5 } },
+    { id: 'bancadaV', name: 'Sua bancada na Câmara', ico: '🤝', dir: 'peer', pass: { cong: 0.4 } },
+    { id: 'governadorV', name: 'Governo do estado', ico: '🗺️', dir: 'up', pass: { cash: 0.3 } },
     { id: 'prefeito', name: 'Prefeito', ico: '🏙️', dir: 'up', pass: { cash: 0.6 } },
     { id: 'mesa', name: 'Presidente da Câmara', ico: '🏛️', dir: 'peer', pass: { cong: 0.7 } },
   ],
   prefeito: [
+    { id: 'empresarios', name: 'Empresários e comércio local', ico: '🏪', dir: 'down', pass: { eco: 0.5, cash: 0.3 } },
+    { id: 'bairrosP', name: 'Associações de moradores', ico: '🏘️', dir: 'down', pass: { pop: 0.5 } },
     { id: 'governador', name: 'Governador', ico: '🗺️', dir: 'up', pass: { cash: 0.8 } },
     { id: 'planalto', name: 'Governo federal', ico: '🇧🇷', dir: 'up', pass: { cash: 0.6, eco: 0.2 } },
     { id: 'camara', name: 'Câmara de Vereadores', ico: '🏛️', dir: 'peer', pass: { cong: 0.7 } },
   ],
   dep_estadual: [
+    { id: 'secretarios', name: 'Secretários do governo', ico: '📋', dir: 'up', pass: { cash: 0.4 } },
+    { id: 'sindicatos', name: 'Sindicatos e categorias', ico: '✊', dir: 'down', pass: { pop: 0.4 } },
     { id: 'governador', name: 'Governador', ico: '🗺️', dir: 'up', pass: { cong: 0.5, cash: 0.4 } },
     { id: 'prefeitos', name: 'Prefeitos da sua base', ico: '🏙️', dir: 'down', pass: { pop: 0.6 } },
     { id: 'mesa', name: 'Mesa da Assembleia', ico: '🏛️', dir: 'peer', pass: { cong: 0.7 } },
   ],
   dep_federal: [
+    { id: 'bancadaE', name: 'Bancada do seu estado', ico: '🗺️', dir: 'peer', pass: { cong: 0.6 } },
+    { id: 'liderP', name: 'Liderança do seu partido', ico: '🎖️', dir: 'up', pass: { cong: 0.5 } },
     { id: 'planalto', name: 'Governo federal', ico: '🇧🇷', dir: 'up', pass: { cong: 0.5, cash: 0.4 } },
     { id: 'governador', name: 'Governador', ico: '🗺️', dir: 'up', pass: { pop: 0.4 } },
     { id: 'prefeitos', name: 'Prefeitos da sua base', ico: '🏙️', dir: 'down', pass: { pop: 0.6 } },
   ],
   senador: [
+    { id: 'lideresS', name: 'Líderes do Senado', ico: '🏛️', dir: 'peer', pass: { cong: 0.8 } },
+    { id: 'ministros', name: 'Ministros e agências', ico: '📋', dir: 'up', pass: { cash: 0.5 } },
+    { id: 'bancadaS', name: 'Bancada do estado', ico: '🗺️', dir: 'peer', pass: { cong: 0.4 } },
     { id: 'planalto', name: 'Governo federal', ico: '🇧🇷', dir: 'up', pass: { cong: 0.5, cash: 0.4 } },
     { id: 'governador', name: 'Governador', ico: '🗺️', dir: 'up', pass: { pop: 0.4 } },
     { id: 'prefeitos', name: 'Prefeitos do estado', ico: '🏙️', dir: 'down', pass: { pop: 0.5 } },
   ],
   governador: [
+    { id: 'produtivo', name: 'Setor produtivo do estado', ico: '🏭', dir: 'down', pass: { eco: 0.5 } },
+    { id: 'servidores', name: 'Servidores e sindicatos', ico: '✊', dir: 'down', pass: { soc: 0.3, pop: 0.3 } },
     { id: 'prefeitos', name: 'Prefeitos do estado', ico: '🏙️', dir: 'down', pass: { pop: 0.7, soc: 0.2 } },
     { id: 'planalto', name: 'Governo federal', ico: '🇧🇷', dir: 'up', pass: { cash: 0.8 } },
     { id: 'assembleia', name: 'Assembleia Legislativa', ico: '🏛️', dir: 'peer', pass: { cong: 0.8 } },
   ],
   presidente: [
+    { id: 'ministerios', name: 'Ministérios e agências', ico: '📋', dir: 'down', pass: { cong: 0.4, soc: 0.2 } },
+    { id: 'setorprod', name: 'Setor produtivo nacional', ico: '🏭', dir: 'down', pass: { eco: 0.6, cash: 0.3 } },
+    { id: 'multilaterais', name: 'Organismos internacionais', ico: '🌐', dir: 'up', pass: { img: 0.4, cash: 0.3 } },
     { id: 'governadores', name: 'Governadores', ico: '🗺️', dir: 'down', pass: { pop: 0.6, cong: 0.3 } },
     { id: 'congresso', name: 'Líderes do Congresso', ico: '🏛️', dir: 'peer', pass: { cong: 0.9 } },
     { id: 'prefeitos', name: 'Prefeitos das capitais', ico: '🏙️', dir: 'down', pass: { pop: 0.5 } },

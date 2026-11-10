@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { billsOf } from '../src/game/bills'
+import { makeNews } from '../src/game/news'
 import { describe, it, expect, beforeAll } from 'vitest'
 
 // localStorage de mentira para rodar o motor sem navegador
@@ -544,5 +545,81 @@ describe('defesa, golpes e guerra civil', () => {
     E.endTurn()
     expect(E.game.phase === 'recap' || E.game.phase === 'over').toBe(true)
     if (E.game.phase === 'recap') expect(Array.isArray(E.game.recap.bastidores)).toBe(true)
+  })
+  it('prefeito não recebe eventos de vereador e vice-versa', () => {
+    for (const o of ['prefeito', 'vereador']) {
+      novo(o)
+      E.game.stage = 0
+      const evs = E.devEvents().filter((e) => e.stages.includes(0))
+      expect(evs.length).toBeGreaterThan(10)
+    }
+    novo('prefeito')
+    expect(E.eventoServe({ id: 'superfat', stages: [0] })).toBe(false)
+    expect(E.eventoServe({ id: 'pref_superfat', only: 'prefeito', stages: [0] })).toBe(true)
+    novo('vereador')
+    expect(E.eventoServe({ id: 'pref_superfat', only: 'prefeito', stages: [0] })).toBe(false)
+    expect(E.eventoServe({ id: 'superfat', stages: [0] })).toBe(true)
+  })
+  it('ações respeitam o cargo dentro do mesmo nível', () => {
+    const ids = (o, st) => { novo(o); E.game.stage = st; return E.allActions().map((a) => a.id) }
+    expect(ids('prefeito', 0)).not.toContain('fiscalizar')
+    expect(ids('prefeito', 0)).toContain('obracidade')
+    expect(ids('vereador', 0)).toContain('fiscalizar')
+    expect(ids('vereador', 0)).not.toContain('obracidade')
+    expect(ids('dep_estadual', 1)).not.toContain('agendaBr')
+    expect(ids('dep_estadual', 1)).toContain('agendaEst')
+    expect(ids('dep_federal', 1)).toContain('agendaBr')
+    expect(ids('presidente', 3)).toContain('projeto')
+    novo('dep_estadual')
+    expect(E.eventoServe({ id: 'reformaTributaria', stages: [1] })).toBe(false)
+    novo('dep_federal')
+    expect(E.eventoServe({ id: 'reformaTributaria', stages: [1] })).toBe(true)
+  })
+})
+
+describe('jornal', () => {
+  it('não repete nota lateral nem manchete nas edições seguintes', () => {
+    let n = 0
+    const vistos = []
+    for (let i = 0; i < 20; i++) {
+      const j = makeNews({ who: 'Fulano', state: 'SP', city: 'Campinas', party: 'XYZ', rival: 'Beltrano', fx: { pop: 3 }, total: i, pop: 50 }, Math.random)
+      for (const s of j.side) { if (vistos.slice(-24).includes(s.text)) n++; vistos.push(s.text) }
+    }
+    expect(n).toBe(0)
+  })
+  const novo = (office = 'presidente') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.stage = { vereador: 0, prefeito: 0, dep_estadual: 1, dep_federal: 1, senador: 1, governador: 2, presidente: 3 }[office]
+    E.game.phase = 'actions'
+    E.game.stats.cash = 50
+  }
+  it('partidos novos surgem durante o jogo e podem convidar', () => {
+    novo('vereador')
+    E.game.total = 5
+    for (let i = 0; i < 300; i++) E.novoPartido()
+    expect(E.game.novosPartidos.length).toBeLessThanOrEqual(6)
+    expect(E.game.novosPartidos.length).toBeGreaterThan(0)
+    const np = E.game.novosPartidos[0]
+    expect(np.sigla.length).toBeGreaterThan(1)
+    expect(E.partiesNow().some((x) => x.id === np.id)).toBe(true)
+  })
+  it('governador e senador podem fazer diplomacia, vereador não', () => {
+    novo('governador')
+    E.game.phase = 'actions'
+    E.game.world.pts = 2
+    expect(E.canDiplo()).toBe(true)
+    expect(E.diplo('india', 'visita')).toBe(true)
+    novo('vereador')
+    E.game.phase = 'actions'
+    E.game.world.pts = 2
+    expect(E.diplo('india', 'visita')).toBe(false)
+    expect(E.worldPartners().length).toBeGreaterThanOrEqual(11)
+  })
+  it('cada cargo tem várias relações', () => {
+    for (const o of ['vereador', 'prefeito', 'dep_estadual', 'dep_federal', 'senador', 'governador', 'presidente']) {
+      novo(o)
+      expect(E.fedDefs().length).toBeGreaterThanOrEqual(4)
+    }
   })
 })

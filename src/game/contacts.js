@@ -116,6 +116,56 @@ export const SCRIPTS = [
     C('Ajudar a acelerar a análise', { eco: 4, cash: 5, img: -5 }, 8, 'A avenida saiu rápido. A auditoria também.', { dirty: true }),
     C('Pedir para entrar com um pedido formal', { eco: 1 }, 1, 'Prazos e papéis. Nada de errado, nada de rápido.'),
   ]),
+  S('startup', 'tecnologia', 'call', ALL, 'Startup pede incentivo', 'Oi, sou fundador(a) de uma startup que usa dados para melhorar o transporte. Estamos crescendo e queria saber se há como o poder público ajudar com incentivo ou contrato de teste.', [
+    C('Criar um programa de incentivo à inovação', { eco: 3, img: 1, cash: -2 }, 8, 'O programa foi para o jornal e virou vitrine de modernidade.'),
+    C('Apoiar só com divulgação e agenda', { eco: 1, img: 1 }, 3, 'Ele agradeceu e disse que divulgar não paga o servidor.'),
+    C('Recusar: não é prioridade agora', { eco: -1 }, -4, 'A startup abriu escritório em outra cidade.'),
+  ]),
+  S('vazadados', 'jornalista', 'msg', [1, 2, 3], 'Vazamento de dados', 'Um sistema do governo expôs dados de milhares de pessoas. Vou publicar. Antes, quero a sua versão.', [
+    C('Admitir o erro e anunciar medidas', { img: 2, pop: -1, cash: -1 }, 6, 'A transparência rendeu respeito. A auditoria começou na semana seguinte.'),
+    C('Minimizar: "foi só uma falha técnica"', { img: -3, pop: -1 }, -6, 'Os especialistas desmentiram na mesma tarde.'),
+    C('Culpar o fornecedor', { img: -1, cash: -1 }, -2, 'Ele recebeu a culpa, mas a conta voltou para você.'),
+  ]),
+  S('deepfake', 'influenciador', 'msg', ALL, 'Vídeo falso com o seu rosto', 'Tem um vídeo circulando que parece você falando uma coisa horrível. É montagem feita por IA, mas está viralizando. Você quer que eu ajude a desmentir?', [
+    C('Desmentir com perícia técnica', { img: 2, cash: -1 }, 7, 'O laudo saiu em dois dias e o vídeo perdeu força.'),
+    C('Ignorar e esperar passar', { img: -3, pop: -1 }, -5, 'O vídeo fez vítimas e você ficou calado tempo demais.'),
+    C('Processar e fazer barulho na imprensa', { img: 1, pop: 1, cash: -2 }, 3, 'O processo chamou atenção e ajudou a derrubar o vídeo.'),
+  ]),
+  S('missaoext', 'empresario', 'msg', [1, 2, 3], 'Missão empresarial no exterior', 'Estou montando uma comitiva para uma feira internacional. Ter uma autoridade junto abre portas. Topa ir?', [
+    C('Ir e liderar a comitiva', { eco: 3, img: 1, cash: -2 }, 8, 'Voltou com contratos e fotos ao lado de gente importante.'),
+    C('Mandar um representante', { eco: 1, cash: -1 }, 3, 'A comitiva foi bem, mas sem o peso do seu nome.'),
+    C('Recusar a viagem', { img: 1, eco: -1 }, -3, 'Ficou em casa e foi poupado de críticas por viajar.'),
+  ]),
+  S('embaixada', 'diplomata', 'call', [2, 3], 'Embaixador pede encontro', 'Sou embaixador de um país parceiro e vou estar na cidade. Queria apresentar uma proposta de cooperação e entender o seu plano de governo.', [
+    C('Receber com agenda cheia e imprensa', { eco: 2, img: 2, cash: -1 }, 9, 'O encontro rendeu um memorando de cooperação.'),
+    C('Receber sem alarde e ouvir a proposta', { eco: 2 }, 5, 'A conversa foi franca e a proposta, interessante.'),
+    C('Recusar a reunião', { img: -1 }, -6, 'Você ficou conhecido como fechado ao mundo.'),
+  ]),
+  S('pesquisadores', 'cientista', 'msg', ALL, 'Laboratório em risco', 'O nosso laboratório pode fechar por falta de verba. Temos uma pesquisa promissora e ela só precisa de dois anos. Dá para ajudar?', [
+    C('Garantir uma verba pequena e contínua', { eco: 2, img: 2, cash: -2 }, 8, 'O laboratório continuou e a pesquisa chegou a uma patente.'),
+    C('Prometer ajuda quando o caixa permitir', { img: 0 }, 1, 'Ele agradeceu, mas já tinha começado a demitir.'),
+    C('Dizer que não há como ajudar', { img: -1, eco: -1 }, -5, 'Dois pesquisadores foram embora do país e a notícia saiu na imprensa.'),
+  ]),
+  S('greveameaca', 'sindicalista', 'call', ALL, 'Sindicato ameaça greve', 'A categoria está esgotada. Sem reajuste, vamos parar na semana que vem. Prefiro negociar, mas preciso de uma resposta.', [
+    C('Abrir negociação com parte do reajuste', { soc: 1, pop: 1, cash: -2 }, 7, 'A greve foi evitada e o sindicato saiu respeitando você.'),
+    C('Endurecer e cortar o ponto de quem parar', { pop: -2, img: 1, cash: 1 }, -8, 'A greve começou e o conflito apareceu no noticiário.'),
+    C('Ignorar e deixar a greve acontecer', { soc: -2, pop: -2 }, -6, 'Os serviços pararam por uma semana inteira.'),
+  ]),
+  S('novopartido', 'aliado', 'msg', ALL, 'Convite de um partido novo', 'Estamos fundando um partido para renovar a política e queremos nomes com credibilidade. Você é um dos primeiros da lista. Topa conversar?', [
+    C('Conversar e ouvir o projeto', { cong: 2, img: -1 }, 4, 'A conversa foi boa, mas sem compromisso.'),
+    C('Recusar com elegância', { cong: -1 }, -1, 'Eles entenderam e disseram que a porta fica aberta.'),
+    C('Usar o convite como moeda na sua legenda atual', { cong: 3, img: -2 }, 2, 'Seu partido te deu mais atenção, mas alguém contou a história.'),
+  ]),
+  S('prefeitosinterior', 'lider', 'call', [1, 2], 'Prefeitos do interior cobram obra', 'Somos um grupo de prefeitos do interior. A rodovia estadual está se desmanchando e ninguém escuta a gente. Você pode levar o assunto para cima?', [
+    C('Levar o pedido ao governo e acompanhar', { pop: 2, cong: 1, cash: -1 }, 8, 'O governo prometeu a obra e os prefeitos ficaram devendo uma.'),
+    C('Fazer um discurso cobrando na tribuna', { pop: 3, img: 1, cong: -2 }, 3, 'O discurso viralizou, mas ninguém resolveu a rodovia.'),
+    C('Dizer que a obra não é da sua alçada', { pop: -2 }, -6, 'Eles anotaram e lembraram na eleição.'),
+  ]),
+  S('bancadaestado', 'aliado', 'call', [1], 'A bancada do estado quer fechar posição', 'A bancada do estado vai fechar uma posição única sobre o orçamento. Precisamos de você em bloco, senão perdemos a força.', [
+    C('Fechar com a bancada', { cong: 4, img: -1 }, 9, 'Você entrou no bloco e ganhou espaço na mesa.'),
+    C('Pedir contrapartida para o seu município', { cong: 2, pop: 2, cash: 1 }, 4, 'Levou uma emenda pequena para a sua base.'),
+    C('Votar do jeito que achar melhor', { cong: -4, img: 2 }, -9, 'Você virou o dissidente da bancada.'),
+  ]),
 ]
 
 // ---------- ligar para um contato (usa 1 ação) ----------
@@ -158,7 +208,13 @@ Object.assign(ROLES, {
   promotor: { icon: '⚖️', name: 'Promotor(a) / Justiça', hi: { img: 0.4 }, lo: { img: -0.6 }, hiText: '+0,4 imagem por rodada', loText: '−0,6 imagem por rodada' },
 })
 
-export const EXTRA_ROLES = { emissora: 42, editor: 40, candidato: 35, promotor: 45 }
+Object.assign(ROLES, {
+  cientista: { icon: '🔬', name: 'Cientista e pesquisador(a)', hi: { eco: 0.5 }, lo: { img: -0.3 }, hiText: '+0,5 economia por rodada', loText: '−0,3 imagem por rodada' },
+  diplomata: { icon: '🌍', name: 'Diplomata e embaixador(a)', hi: { eco: 0.4, img: 0.3 }, lo: { img: -0.4 }, hiText: '+0,4 economia e +0,3 imagem por rodada', loText: '−0,4 imagem por rodada' },
+  tecnologia: { icon: '💻', name: 'Empreendedor(a) de tecnologia', hi: { eco: 0.5, cash: 0.3 }, lo: { img: -0.3 }, hiText: '+0,5 economia e +0,3 caixa por rodada', loText: '−0,3 imagem por rodada' },
+  sindicalista: { icon: '✊', name: 'Líder sindical', hi: { pop: 0.5, soc: 0.2 }, lo: { cong: -0.4 }, hiText: '+0,5 popularidade e +0,2 serviços por rodada', loText: '−0,4 base por rodada' },
+})
+export const EXTRA_ROLES = { emissora: 42, editor: 40, candidato: 35, promotor: 45, cientista: 40, diplomata: 38, tecnologia: 40, sindicalista: 35 }
 // Garante que saves antigos e jogos novos tenham os contatos de mídia, candidatos e Justiça
 export function ensureContacts(list, R) {
   const have = new Set(list.map((c) => c.role))
@@ -216,3 +272,19 @@ SCRIPTS.push(
     C('Pedir para tratar o assunto com discrição', { img: -6, cong: 2 }, -6, 'A conversa vazou. Ficou parecendo pressão.', { dirty: true, heat: 10 }),
   ]),
 )
+ASKS.cientista = [
+  { id: 'parecer', label: 'Pedir um parecer técnico', you: 'Preciso de uma análise séria antes de decidir. Você me ajuda?', ok: 'Mando um relatório curto e honesto.', fail: 'Estou no meio de uma pesquisa e sem tempo.', okFx: { eco: 2, img: 2 }, base: 0.35, cost: 3 },
+  { id: 'lab', label: 'Propor parceria com o laboratório', you: 'Podemos fechar uma parceria entre o governo e o seu laboratório?', ok: 'Adorei. Vamos montar um projeto.', fail: 'Sem verba garantida, não consigo me comprometer.', okFx: { eco: 3, img: 1 }, base: 0.3, cost: 6 },
+]
+ASKS.diplomata = [
+  { id: 'agenda', label: 'Pedir ajuda com uma agenda no exterior', you: 'Queria abrir portas com empresas e governos de fora. Você ajuda?', ok: 'Posso marcar duas reuniões boas.', fail: 'A agenda do embaixador está lotada.', okFx: { eco: 3, img: 2 }, base: 0.3, cost: 5 },
+  { id: 'dica', label: 'Pedir um panorama do mundo', you: 'Qual é o clima lá fora e o que eu devo esperar?', ok: 'Vou te contar o que ninguém diz no jornal.', fail: 'Não posso comentar isso por telefone.', okFx: { img: 2 }, base: 0.5, cost: 2 },
+]
+ASKS.tecnologia = [
+  { id: 'invest', label: 'Atrair a empresa para a região', you: 'Quero que a sua empresa abra uma unidade aqui. O que precisa?', ok: 'Se tiver internet e mão de obra, eu vou.', fail: 'Sem incentivos claros, não me convence.', okFx: { eco: 4, cash: 2 }, base: 0.3, cost: 6 },
+  { id: 'app', label: 'Pedir ajuda com um aplicativo público', you: 'Preciso de um app simples para atender o cidadão. Você ajuda?', ok: 'Faço uma versão inicial de graça.', fail: 'Agora não consigo, tenho equipe pequena.', okFx: { img: 3, pop: 2 }, base: 0.3, cost: 4 },
+]
+ASKS.sindicalista = [
+  { id: 'trégua', label: 'Pedir trégua nas negociações', you: 'Podemos esfriar a ameaça de greve enquanto a gente conversa?', ok: 'Dou um prazo. Mas quero resposta.', fail: 'A base já decidiu. Greve na semana que vem.', okFx: { pop: 2, soc: 1 }, base: 0.3, cost: 4 },
+  { id: 'apoio', label: 'Pedir apoio da categoria', you: 'Queria o apoio da categoria ao que estamos construindo.', ok: 'Se cumprir o que falou, a gente apoia.', fail: 'Vocês só aparecem na eleição.', okFx: { pop: 3, cong: 1 }, base: 0.3, cost: 5 },
+]

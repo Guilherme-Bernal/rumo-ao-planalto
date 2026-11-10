@@ -6,6 +6,7 @@ import { PROMISES, MAX_PROMISES, PLAN_NAMES_A, PLAN_NAMES_B } from './brasil-pla
 import { extraEvents } from './brasil-events-extra'
 import { moreEvents } from './brasil-events-more'
 import { dirtyEvents } from './brasil-events-dirty'
+import { novosEventos } from './brasil-events-novos'
 import { regionalEvents } from './brasil-events-regional'
 import { healthEvents } from './brasil-events-health'
 import { teamEvents } from './brasil-events-team'
@@ -22,7 +23,7 @@ brasil.parties = PARTIES
 brasil.promises = PROMISES
 brasil.maxPromises = MAX_PROMISES
 brasil.planNames = [PLAN_NAMES_A, PLAN_NAMES_B]
-brasil.events = [...brasil.events, ...extraEvents, ...moreEvents, ...dirtyEvents, ...regionalEvents, ...healthEvents, ...teamEvents, ...worldEvents, ...vidaEvents]
+brasil.events = [...brasil.events, ...extraEvents, ...moreEvents, ...dirtyEvents, ...novosEventos, ...regionalEvents, ...healthEvents, ...teamEvents, ...worldEvents, ...vidaEvents]
 // ids repetidos entre arquivos faziam o jogo mostrar o texto do evento errado: o repetido ganha sufixo
 {
   const vistos = {}

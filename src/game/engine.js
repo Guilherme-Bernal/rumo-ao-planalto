@@ -70,7 +70,7 @@ const R = () => {
 const rnd = (a, b) => a + R() * (b - a)
 
 function blankWorld() {
-  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
+  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50, india: 50, japao: 50, afr: 52, lat: 52, onu: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
 }
 
 const blank = () => ({
@@ -82,6 +82,7 @@ const blank = () => ({
   city: null,
   party: null,
   invites: [],
+  novosPartidos: [],
   rejected: [],
   invitesTotal: 0,
   switches: 0,
@@ -174,10 +175,11 @@ const KNOW_LOSS = (k) => (k === 'img' ? Math.max(0.5, 1 - 0.04 * kn('com') - 0.0
 const modV = (k, v) => {
   const m = mods()
   const dif = difficultyOf(game.difficulty)
-  return v > 0 ? v * (m.gain[k] || 1) * KNOW_GAIN(k) * dif.gain : v * (m.loss[k] || 1) * KNOW_LOSS(k) * dif.loss
+  return v > 0 ? v * (m.gain[k] || 1) * KNOW_GAIN(k) * dif.gain : v * (m.loss[k] || 1) * KNOW_LOSS(k) * dif.loss * (k === 'cash' ? 0.8 : 1)
 }
 export const effectiveFx = (fx) => Object.fromEntries(Object.entries(fx).map(([k, v]) => [k, Math.round(modV(k, v) * 10) / 10]))
-export const partyObj = () => (game.party === 'own' ? game.myParty : game.party ? country().parties.find((p) => p.id === game.party) : null)
+export const partiesNow = () => [...country().parties, ...(game.novosPartidos || [])]
+export const partyObj = () => (game.party === 'own' ? game.myParty : game.party ? partiesNow().find((p) => p.id === game.party) : null)
 export const campaignCost = (c) => Math.round(c.cost * mods().camp * (partyObj()?.perks.camp || 1))
 export const traitNames = () =>
   country()
@@ -332,7 +334,7 @@ export function partyChanceNow(p) {
 }
 
 export function askJoin(id) {
-  const p = country().parties.find((x) => x.id === id)
+  const p = partiesNow().find((x) => x.id === id)
   if (!p || p.id === game.party || game.switched) return null
   const invited = game.invites.includes(id)
   const ok = invited || R() < partyChanceNow(p)
@@ -365,7 +367,7 @@ export function declineInvite(id) {
 function maybeInvite() {
   const chance = 0.14 + (game.stats.pop > 65 ? 0.1 : 0) + game.stage * 0.03
   if (R() > chance) return
-  const pool = country().parties.filter((p) => p.id !== game.party && !game.invites.includes(p.id) && partyChanceNow(p) > 0.3)
+  const pool = partiesNow().filter((p) => p.id !== game.party && !game.invites.includes(p.id) && partyChanceNow(p) > 0.3)
   if (!pool.length) return
   const p = pool[Math.floor(R() * pool.length)]
   game.invites.push(p.id)
@@ -436,7 +438,7 @@ function turnDelta(noise) {
   const d = {
     pop: (fundamentals - s.pop) * 0.18,
     eco: (50 - s.eco) * 0.05 + (s.cash < 15 ? -2 : 0) + (noise ? rnd(-2, 2) : 0),
-    cash: 2 + (s.eco - 50) * 0.1,
+    cash: 4 + (s.eco - 50) * 0.12 + [0, 0.3, 0.6, 1][game.stage],
     soc: -1.5,
     seg: -1.5,
     cong: -2.5,
@@ -532,9 +534,21 @@ export function startGame({ countryId = 'brasil', name, archetypeId, regionId, c
   beginTurn()
 }
 
+// vereador e prefeito dividem o mesmo nível; estes eventos só fazem sentido para um dos dois
+const SO_VEREADOR = ['buraco', 'cargos', 'poste', 'castracao', 'alvara', 'superfat', 'prefeito_cargo', 'jovem_demais', 'camara_veta', 'enchente_bairro']
+const SO_PREFEITO = ['lrf_alerta']
+const SO_FEDERAL = ['emendaPix', 'reformaTributaria']
+export const eventoServe = (e) => {
+  const o = officeId()
+  if (e.only && !(Array.isArray(e.only) ? e.only : [e.only]).includes(o)) return false
+  if (o === 'prefeito' && SO_VEREADOR.includes(e.id)) return false
+  if (o === 'vereador' && SO_PREFEITO.includes(e.id)) return false
+  if (o === 'dep_estadual' && SO_FEDERAL.includes(e.id)) return false
+  return true
+}
 function drawEvent() {
   const c = country()
-  const pool = c.events.filter((e) => e.stages.includes(game.stage) && (!e.cond || e.cond(game)))
+  const pool = c.events.filter((e) => e.stages.includes(game.stage) && eventoServe(e) && (!e.cond || e.cond(game)))
   let fresh = pool.filter((e) => !game.seen.includes(e.id))
   if (!fresh.length) {
     game.seen = game.seen.filter((id) => !pool.some((e) => e.id === id))
@@ -803,17 +817,38 @@ const ACTION_SPHERE = { rodar: 'mun', bancada: 'fed', social: 'mun', seguranca: 
 export const SPHERE_ACTIONS = [
   { id: 'mutirao', stages: [0], sphere: 'mun', name: 'Mutirão no bairro', desc: 'Meter a mão na massa: limpeza, pintura e cadeira na calçada.', fx: { pop: 3, soc: 3, cash: -3 } },
   { id: 'audiencia', stages: [0], sphere: 'mun', name: 'Audiência pública', desc: 'Ouvir o bairro, anotar tudo e dar retorno.', fx: { img: 3, pop: 1, cong: -1 } },
-  { id: 'agendaBr', stages: [1], sphere: 'fed', name: 'Agenda em Brasília', desc: 'Ministérios, gabinetes e corredores.', fx: { cong: 4, img: 1, cash: -2 } },
-  { id: 'projeto', stages: [1, 3], sphere: 'fed', name: 'Projeto de lei de impacto', desc: 'Um projeto que dá manchete nacional.', fx: { cong: 3, img: 2, pop: 1, cash: -2 } },
+  { id: 'agendaBr', stages: [1], offs: ['dep_federal', 'senador'], sphere: 'fed', name: 'Agenda em Brasília', desc: 'Ministérios, gabinetes e corredores.', fx: { cong: 4, img: 1, cash: -2 } },
+  { id: 'projeto', stages: [1, 3], offs: ['dep_federal', 'senador', 'presidente'], sphere: 'fed', name: 'Projeto de lei de impacto', desc: 'Um projeto que dá manchete nacional.', fx: { cong: 3, img: 2, pop: 1, cash: -2 } },
   { id: 'obraestado', stages: [2], sphere: 'est', name: 'Obra estadual', desc: 'Estrada, ponte ou hospital regional.', fx: { eco: 4, pop: 2, cash: -5 } },
   { id: 'interior', stages: [1, 2], sphere: 'est', name: 'Caravana pelo interior', desc: 'Visitar cidades pequenas que nunca recebem político.', fx: { pop: 4, cong: 1, cash: -3 } },
   { id: 'diplomacia', stages: [3], sphere: 'fed', name: 'Agenda internacional', desc: 'Encontros com chefes de Estado e empresários.', fx: { eco: 3, img: 2, cash: -3 } },
   // decisões de cada cargo
-  { id: 'fiscalizar', stages: [0], sphere: 'mun', name: 'Fiscalizar o prefeito', desc: 'Pedir documentos, visitar obras e cobrar na tribuna.', fx: { img: 4, pop: 1, cong: -3 } },
-  { id: 'emendabairro', stages: [0], sphere: 'mun', name: 'Emenda para o bairro', desc: 'Garantir verba para uma obra pequena que o povo vê.', fx: { pop: 4, soc: 2, cong: -1, cash: -2 } },
-  { id: 'emenda', stages: [1], sphere: 'fed', name: 'Emenda para a sua base', desc: 'Levar verba federal para os municípios que te apoiam.', fx: { pop: 3, cong: 3, cash: -4 } },
-  { id: 'cpi', stages: [1], sphere: 'fed', name: 'Assinar pedido de CPI', desc: 'Cobrar investigação. A imprensa gosta, a bancada nem tanto.', fx: { img: 4, pop: 2, cong: -5 } },
-  { id: 'frente', stages: [1], sphere: 'fed', name: 'Criar frente parlamentar', desc: 'Reunir colegas em torno de uma causa e ganhar espaço.', fx: { cong: 4, img: 2, cash: -2 } },
+
+  // formas de recuperar o caixa (cada cargo tem as suas)
+  { id: 'arrecadacao', stages: [0, 2, 3], offs: ['prefeito', 'governador', 'presidente'], sphere: 'fed', name: 'Reforçar a arrecadação', desc: 'Cobrar dívida ativa e fiscalizar sonegação. Entra dinheiro, mas ninguém gosta de pagar.', fx: { cash: 6, pop: -1.5, eco: -0.5 } },
+  { id: 'parceriapriv', stages: [0, 2, 3], offs: ['prefeito', 'governador', 'presidente'], sphere: 'fed', name: 'Parceria com a iniciativa privada', desc: 'Concessões e PPPs: o caixa respira e o investimento chega.', fx: { cash: 5, eco: 1, img: -1, soc: -0.5 } },
+  { id: 'captar', stages: [0, 2, 3], offs: ['prefeito', 'governador', 'presidente'], sphere: 'fed', name: 'Captar recursos de fora', desc: 'Prefeito e governador buscam convênios e crédito; presidente negocia com bancos multilaterais.', fx: { cash: 5, cong: -1, img: 0.5 } },
+  { id: 'apoiadores', stages: [0, 1], offs: ['vereador', 'dep_estadual', 'dep_federal', 'senador'], sphere: 'mun', name: 'Jantar de arrecadação com apoiadores', desc: 'Doações legais de quem acredita em você. Rende caixa e dá um pouco de fofoca.', fx: { cash: 5, img: -1, cong: 0.5 } },
+  { id: 'fundopart', stages: [0, 1], offs: ['vereador', 'dep_estadual', 'dep_federal', 'senador'], sphere: 'mun', name: 'Cobrar o fundo do partido', desc: 'Repasse da legenda para o seu mandato. Quem tem poder no partido recebe mais.', fx: { cash: 4, cong: -0.5 } },
+  { id: 'palestra', stages: [0, 1], offs: ['vereador', 'dep_estadual', 'dep_federal', 'senador'], sphere: 'mun', name: 'Palestras, livro e mídia', desc: 'Monetize o nome sem passar da linha. Rende pouco, mas rende imagem.', fx: { cash: 3, img: 1, pop: 0.5 } },
+  { id: 'plenarioS', stages: [1], offs: ['senador'], sphere: 'fed', name: 'Discurso de peso no plenário do Senado', desc: 'A tribuna do Senado ainda reverbera. Imagem e voto de opinião.', fx: { img: 3, pop: 1, cong: -0.5 } },
+  { id: 'sabatinar', stages: [1], offs: ['senador'], sphere: 'fed', name: 'Sabatinar uma autoridade', desc: 'Perguntas duras a um indicado do governo. Rende imagem, irrita o Planalto.', fx: { img: 3, cong: -1.5 } },
+  { id: 'relatoria', stages: [1], offs: ['dep_federal'], sphere: 'fed', name: 'Disputar uma relatoria', desc: 'Quem relata, manda um pouco. Cada relatoria custa articulação.', fx: { cong: 3, img: 1, cash: -1 } },
+  { id: 'caravanaE', stages: [1], offs: ['dep_estadual'], sphere: 'est', name: 'Audiência pública na sua região', desc: 'Leve a Assembleia ao interior e anote as demandas.', fx: { pop: 3, img: 1, cash: -1 } },
+  // ações próprias do prefeito e do deputado estadual (dividem o nível com vereador e deputado federal)
+  { id: 'obracidade', stages: [0], offs: ['prefeito'], sphere: 'mun', name: 'Obra na cidade', desc: 'Pavimentação, praça ou creche inaugurada com placa e fita.', fx: { eco: 3, pop: 2, cash: -4 } },
+  { id: 'secretariado', stages: [0], offs: ['prefeito'], sphere: 'mun', name: 'Reunião de secretariado', desc: 'Cobrar metas das secretarias e acertar o rumo da gestão.', fx: { soc: 2, seg: 1, img: 1, cash: -1 } },
+  { id: 'camarapref', stages: [0], offs: ['prefeito'], sphere: 'mun', name: 'Negociar com a Câmara', desc: 'Conversar com os vereadores antes de mandar um projeto.', fx: { cong: 4, cash: -1 } },
+  { id: 'agendaEst', stages: [1], offs: ['dep_estadual'], sphere: 'est', name: 'Agenda no Palácio e nas secretarias', desc: 'Gabinetes do governo estadual e corredores da Assembleia.', fx: { cong: 4, img: 1, cash: -2 } },
+  { id: 'emendaEst', stages: [1], offs: ['dep_estadual'], sphere: 'est', name: 'Emenda para os municípios da base', desc: 'Levar verba estadual para as cidades que te apoiam.', fx: { pop: 3, cong: 3, cash: -3 } },
+  { id: 'cpiEst', stages: [1], offs: ['dep_estadual'], sphere: 'est', name: 'Pedir CPI na Assembleia', desc: 'Cobrar investigação sobre o governo estadual. A imprensa gosta, a base nem tanto.', fx: { img: 4, pop: 2, cong: -5 } },
+  { id: 'frenteEst', stages: [1], offs: ['dep_estadual'], sphere: 'est', name: 'Criar frente parlamentar estadual', desc: 'Reunir colegas da Assembleia em torno de uma causa.', fx: { cong: 4, img: 2, cash: -2 } },
+  { id: 'projetoEst', stages: [1], offs: ['dep_estadual'], sphere: 'est', name: 'Projeto de lei estadual de impacto', desc: 'Um projeto que dá manchete no estado inteiro.', fx: { cong: 3, img: 2, pop: 1, cash: -2 } },
+  { id: 'fiscalizar', stages: [0], offs: ['vereador'], sphere: 'mun', name: 'Fiscalizar o prefeito', desc: 'Pedir documentos, visitar obras e cobrar na tribuna.', fx: { img: 4, pop: 1, cong: -3 } },
+  { id: 'emendabairro', stages: [0], offs: ['vereador'], sphere: 'mun', name: 'Emenda para o bairro', desc: 'Garantir verba para uma obra pequena que o povo vê.', fx: { pop: 4, soc: 2, cong: -1, cash: -2 } },
+  { id: 'emenda', stages: [1], offs: ['dep_federal', 'senador'], sphere: 'fed', name: 'Emenda para a sua base', desc: 'Levar verba federal para os municípios que te apoiam.', fx: { pop: 3, cong: 3, cash: -4 } },
+  { id: 'cpi', stages: [1], offs: ['dep_federal', 'senador'], sphere: 'fed', name: 'Assinar pedido de CPI', desc: 'Cobrar investigação. A imprensa gosta, a bancada nem tanto.', fx: { img: 4, pop: 2, cong: -5 } },
+  { id: 'frente', stages: [1], offs: ['dep_federal', 'senador'], sphere: 'fed', name: 'Criar frente parlamentar', desc: 'Reunir colegas em torno de uma causa e ganhar espaço.', fx: { cong: 4, img: 2, cash: -2 } },
   { id: 'pacto', stages: [2], sphere: 'est', name: 'Pacto com os prefeitos', desc: 'Dividir obras e metas com os prefeitos do estado.', fx: { cong: 5, pop: 1, cash: -3 } },
   { id: 'concessao', stages: [2], sphere: 'est', name: 'Concessão e parceria privada', desc: 'Passar um serviço para a iniciativa privada. Entra caixa, sai discussão.', fx: { eco: 4, cash: 5, img: -1, soc: -1 } },
   { id: 'forcatarefa', stages: [2], sphere: 'est', name: 'Força-tarefa de segurança', desc: 'Polícias integradas em uma grande operação.', fx: { seg: 6, pop: 1, cash: -6 } },
@@ -828,7 +863,7 @@ export const SPHERE_ACTIONS = [
   { id: 'cargos', stages: [0, 1], sphere: 'fed', dirty: true, risk: 0.25, heat: 10, riskFx: { img: -7, cong: -3 }, name: 'Trocar cargos por apoio', desc: 'Nomeações em troca de votos. Funciona, até virar manchete.', fx: { cong: 7, img: -3, cash: -1 } },
 ]
 export const COMICIO = { id: 'comicio', special: true, sphere: 'mun', name: 'Comício', desc: 'Discurso ao vivo para a multidão. O efeito depende do seu desempenho no mini jogo.', fx: { cash: -3 } }
-export const allActions = () => [...country().actions, ...SPHERE_ACTIONS.filter((a) => a.stages.includes(game.stage)), ...POWER_ACTIONS.filter((a) => a.stages.includes(game.stage) && (!a.when || a.when(game)))]
+export const allActions = () => [...country().actions, ...SPHERE_ACTIONS.filter((a) => a.stages.includes(game.stage) && (!a.offs || a.offs.includes(officeId()))), ...POWER_ACTIONS.filter((a) => a.stages.includes(game.stage) && (!a.when || a.when(game)))]
 const sphereOf = (a) => a.sphere || ACTION_SPHERE[a.id] || STAGE_SPHERE[game.stage]
 export const actionSphere = sphereOf
 
@@ -1882,6 +1917,7 @@ export const fedActions = (dir) => FED_ACTIONS[dir] || []
 export const worldTemas = () => TEMAS
 export const worldOusadia = () => OUSADIA
 export const isPresident = () => officeId() === 'presidente'
+export const canDiplo = () => ['presidente', 'governador', 'senador'].includes(officeId())
 export const worldReady = () => game.phase === 'actions' && game.world.pts > 0
 
 function ensureWorld() {
@@ -1931,7 +1967,7 @@ export function diploChance(partnerId, actionId) {
 }
 
 export function diplo(partnerId, actionId) {
-  if (!isPresident() || !worldReady()) return false
+  if (!canDiplo() || !worldReady()) return false
   const p = PARTNERS.find((x) => x.id === partnerId)
   const a = DIPLO_ACTIONS.find((x) => x.id === actionId)
   if (!p || !a || !canPay(a.fx)) return false
@@ -3065,7 +3101,32 @@ function checkGoals() {
 export const protesto = () => (game.poder && game.poder.prot) || null
 export const consultaFeita = () => !!(game.poder && game.poder.cons === game.stage)
 export const emCrise = () => isExec() && game.stats.pop <= 30 && game.stats.cong <= 30
+const NP_A = ['Movimento', 'Aliança', 'Frente', 'Partido', 'União', 'Rede']
+const NP_B = ['Cidadania Digital', 'do Interior', 'Verde Urbano', 'da Inovação', 'Nacional Popular', 'pela Transparência', 'dos Empreendedores', 'da Segurança Cidadã', 'Livre e Federalista', 'pelo Clima', 'dos Servidores Públicos', 'da Terceira Idade', 'do Agro Sustentável', 'das Cidades', 'da Educação em Primeiro Lugar', 'Brasil 2030', 'da Reconstrução', 'Pela Família Trabalhadora']
+const NP_PERKS = [{ cash: 0.6, vote: 0.4 }, { cong: 0.8 }, { pop: 0.5, vote: 0.5 }, { eco: 0.4, cong: 0.5 }, { img: 0.4, vote: 0.8 }, { cash: 0.4, pop: 0.4 }]
+const PERK_LABEL = { cash: 'caixa', cong: 'base', pop: 'popularidade', eco: 'economia', img: 'imagem', vote: 'voto-ponto' }
+// de tempos em tempos um partido novo é fundado e passa a poder te convidar
+export function novoPartido() {
+  if (!game.novosPartidos) game.novosPartidos = []
+  if (game.total < 2 || game.novosPartidos.length >= 6 || R() > 0.12) return
+  const nome = `${NP_A[Math.floor(R() * NP_A.length)]} ${NP_B[Math.floor(R() * NP_B.length)]}`
+  const usados = new Set(partiesNow().map((x) => x.sigla))
+  let sigla = nome.split(' ').filter((w) => /^[A-ZÀ-Ú0-9]/.test(w)).map((w) => w[0]).join('').toUpperCase().slice(0, 4)
+  if (sigla.length < 3) sigla = (sigla + 'NPR').slice(0, 3)
+  while (usados.has(sigla)) sigla += Math.floor(R() * 9)
+  const ideo = ['esquerda', 'centro', 'direita', 'independente'][Math.floor(R() * 4)]
+  const perks = { ...NP_PERKS[Math.floor(R() * NP_PERKS.length)] }
+  const cores = ['#06b6d4', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#ec4899', '#84cc16']
+  const fundador = candName(R)
+  game.novosPartidos.push({
+    id: 'np' + game.total + sigla, sigla, name: nome, ideo, color: cores[Math.floor(R() * cores.length)], slogan: 'Um partido novo para um país que muda.',
+    perks, nova: true, hard: 0.05, perkText: 'Fundado por ' + fundador + '. ' + Object.entries(perks).map(([k, v]) => `+${String(v).replace('.', ',')} ${PERK_LABEL[k]}`).join(', ') + '.',
+  })
+  toast('🆕', `Surge um novo partido: ${sigla}, fundado por ${fundador}.`)
+  timelineAdd('🆕', `${fundador} funda o ${nome} (${sigla})`, 'flat')
+}
 function roundMundo() {
+  novoPartido()
   const p = game.poder
   if (!p.polls) p.polls = []
   p.polls.push({ r: game.total, v: Math.max(0, Math.min(100, aprovacao() + Math.round((R() - 0.5) * 5))) })
