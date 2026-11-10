@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -9,6 +9,8 @@ const g = computed(() => GUIAS[props.tab])
 const fase = computed(() => (props.tab !== 'agenda' && game.phase !== 'actions' && FASES[game.phase] ? FASES[game.phase] : ''))
 const tribunal = computed(() => !!(acaoPendente() || inquerito()))
 const excecao = computed(() => cstEstado())
+const convites = computed(() => convitesNow().map((c, i) => ({ ...c, i, d: reuniaoDef(c.defId) })).filter((c) => c.d))
+const inds = computed(() => industriasNow())
 </script>
 
 <template>
@@ -19,6 +21,12 @@ const excecao = computed(() => cstEstado())
     </p>
     <p v-if="excecao" class="aviso warn">🚨 Medida de exceção em vigor: não se vota PEC até ela terminar.</p>
     <p v-if="fase" class="aviso">⏳ Agora é a fase de <b>{{ fase }}</b>. Os botões de ação desta aba ficam apagados até a fase de ações, na aba Agenda.</p>
+    <div v-for="c in convites" :key="c.defId + c.i" class="aviso conv">
+      {{ c.d.icon }} <b>Convite:</b> {{ c.d.title }} <small>(vale mais {{ c.left + 1 }} rodada(s))</small>
+      <button type="button" class="mini" :disabled="!!reuniaoMotivo(c.i)" :title="reuniaoMotivo(c.i)" @click="reuniaoAbrir(c.i)">Participar</button>
+      <small v-if="reuniaoMotivo(c.i)" class="why">🔒 {{ reuniaoMotivo(c.i) }}</small>
+    </div>
+    <p v-if="inds.length" class="aviso">🏭 Em operação: {{ inds.map((x) => x.nome).join(' · ') }}.</p>
     <details v-if="g" class="guiabox">
       <summary>📖 Guia rápido: {{ g.t }}</summary>
       <p>{{ g.txt }}</p>
@@ -32,6 +40,8 @@ const excecao = computed(() => cstEstado())
 .aviso.bad { border-color: var(--bad); }
 .aviso.warn { border-color: var(--warn); }
 .mini { margin-left: 8px; padding: 3px 8px; font-size: 0.8rem; }
+.conv { border-color: var(--accent); }
+.why { display: block; opacity: 0.8; }
 .guiabox { font-size: 0.86rem; opacity: 0.92; }
 .guiabox summary { cursor: pointer; }
 .guiabox p { margin: 6px 0 0; }

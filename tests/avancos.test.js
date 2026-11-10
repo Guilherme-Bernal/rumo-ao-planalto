@@ -234,3 +234,92 @@ describe('pontos separados', () => {
     expect(E.ptsOf('ptsM')).toBe(1)
   })
 })
+
+describe('reuniões', () => {
+  const joga = (defId, abord = 'ouvir', extra = {}) => {
+    E.game.poder.convites = [{ defId, left: 2, ...extra }]
+    expect(E.reuniaoAbrir(0)).toBe(true)
+    const r = E.reuniaoAtual()
+    if (r.step === 0) E.reuniaoLocal(E.reuniaoDef(defId).locais[0].id)
+    for (let i = 0; i < 3; i++) E.reuniaoAbordar(abord)
+    return E.reuniaoAtual().resultado
+  }
+  it('toda reunião do catálogo pode ser jogada até o fim, em qualquer cargo', async () => {
+    const { REUNIOES } = await import('../src/game/reunioes.js')
+    for (const d of REUNIOES) {
+      for (const off of d.offs === 'all' ? ['vereador', 'presidente'] : d.offs) {
+        novo(off)
+        E.game.world.pactos.push({ partner: 'arg', tipo: 'defesa' })
+        const r = joga(d.id, 'ouvir', { partner: 'arg', fict: 'karv' })
+        expect(['acordo', 'parcial', 'fracasso'], d.id).toContain(r.cls)
+        expect(E.reuniaoFechar()).toBe(true)
+        for (const k of Object.keys(E.game.stats)) expect(Number.isFinite(E.game.stats[k]), d.id + k).toBe(true)
+      }
+    }
+  })
+  it('só abre na fase de ações, uma por vez, e o convite some ao abrir', () => {
+    novo()
+    E.game.poder.convites = [{ defId: 'p_executiva', left: 2 }, { defId: 'f_lideres', left: 2 }]
+    E.game.phase = 'event'
+    expect(E.reuniaoMotivo(0)).toMatch(/fase de ações/)
+    E.game.phase = 'actions'
+    expect(E.reuniaoAbrir(0)).toBe(true)
+    expect(E.convitesNow().length).toBe(1)
+    expect(E.reuniaoMotivo(0)).toMatch(/andamento/)
+  })
+  it('a abordagem muda a atitude conforme o temperamento', () => {
+    novo()
+    E.game.poder.convites = [{ defId: 'p_executiva', left: 2 }]
+    E.reuniaoAbrir(0)
+    const r = E.reuniaoAtual()
+    const antes = r.parts.map((p) => p.att)
+    for (const p of r.parts) p.att = 0
+    E.reuniaoAbordar('pressionar')
+    const orgulhoso = r.parts.find((p) => p.trait === 'orgulhoso')
+    expect(orgulhoso.att).toBeLessThan(0)
+    void antes
+  })
+  it('oferecer vantagem custa Caixa e fica apagado sem dinheiro', () => {
+    novo()
+    E.game.stats.cash = 0
+    expect(E.reuniaoCustoOk('ofertar')).toBe(false)
+    expect(E.reuniaoCustoOk('ouvir')).toBe(true)
+  })
+  it('indústria instalada rende por rodadas e depois acaba', () => {
+    novo('prefeito')
+    E.game.poder.industrias = [{ nome: 'Teste', left: 2, fx: { eco: 1 } }]
+    const eco = E.game.stats.eco
+    E.roundAvancos()
+    expect(E.game.stats.eco).toBeGreaterThan(eco - 0.01)
+    E.roundAvancos()
+    expect(E.industriasNow().length).toBe(0)
+  })
+  it('pacto de defesa é registrado e o chamado do aliado pode quebrá-lo', () => {
+    novo()
+    for (let i = 0; i < 40 && !E.game.world.pactos.length; i++) {
+      novo()
+      joga('s_pacto', 'ofertar', { partner: 'arg' })
+      E.reuniaoFechar()
+    }
+    expect(E.game.world.pactos.length).toBeGreaterThanOrEqual(1)
+    E.game.world.pactos = [{ partner: 'arg', tipo: 'defesa' }]
+    for (const p of [0]) void p
+    E.game.poder.convites = [{ defId: 's_chamado', left: 2, partner: 'arg' }]
+    E.reuniaoAbrir(0)
+    for (const pt of E.reuniaoAtual().parts) pt.att = -3
+    E.reuniaoAtual().step = 3
+    E.reuniaoAbordar('adiar')
+    expect(E.reuniaoAtual().resultado.cls).toBe('fracasso')
+    expect(E.game.world.pactos.length).toBe(0)
+  })
+  it('convites aparecem sozinhos ao longo das rodadas e expiram', () => {
+    novo()
+    let vistos = 0
+    for (let i = 0; i < 80; i++) {
+      E.roundAvancos()
+      vistos = Math.max(vistos, E.convitesNow().length)
+      expect(E.convitesNow().length).toBeLessThanOrEqual(2)
+    }
+    expect(vistos).toBeGreaterThan(0)
+  })
+})

@@ -14,6 +14,7 @@ import { PARTIES } from './countries/brasil-parties'
 import { DAY_FLAVOR, ACTION_ICON, holidayOf, makePost, slug, GENERIC_TAGS, candName } from './social'
 import { MORE_FLAVOR } from './flavor'
 import { BIG, bigWhen, BIG_TAGS } from './bigevents'
+import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS } from './reunioes'
 import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
 import { makeContacts, ensureContacts, SCRIPTS, ROLES, KIND, ASKS, CHAT, LIGAR } from './contacts'
 import { makeReactions } from './reactions'
@@ -71,7 +72,7 @@ const R = () => {
 const rnd = (a, b) => a + R() * (b - a)
 
 function blankWorld() {
-  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50, india: 50, japao: 50, afr: 52, lat: 52, onu: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], blocos: [], tratados: [], ops: [], tech: { done: [], prog: {}, foco: null }, fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
+  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50, india: 50, japao: 50, afr: 52, lat: 52, onu: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], blocos: [], tratados: [], ops: [], pactos: [], tech: { done: [], prog: {}, foco: null }, fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
 }
 
 const blank = () => ({
@@ -1929,7 +1930,7 @@ export const worldReady = (pool = 'pts') => game.phase === 'actions' && ptsOf(po
 function ensureWorld() {
   const b = blankWorld()
   const old = game.world || {}
-  game.world = { ...b, ...old, rel: { ...b.rel, ...(old.rel || {}) }, nuc: { ...b.nuc, ...(old.nuc || {}) }, tech: { ...b.tech, ...(old.tech || {}), done: [...((old.tech && old.tech.done) || [])], prog: { ...((old.tech && old.tech.prog) || {}) } }, blocos: [...(old.blocos || [])], tratados: [...(old.tratados || [])], ops: [...(old.ops || [])], fed: { ...(old.fed || {}) } }
+  game.world = { ...b, ...old, rel: { ...b.rel, ...(old.rel || {}) }, nuc: { ...b.nuc, ...(old.nuc || {}) }, tech: { ...b.tech, ...(old.tech || {}), done: [...((old.tech && old.tech.done) || [])], prog: { ...((old.tech && old.tech.prog) || {}) } }, blocos: [...(old.blocos || [])], tratados: [...(old.tratados || [])], ops: [...(old.ops || [])], pactos: [...(old.pactos || [])], fed: { ...(old.fed || {}) } }
   for (const d of fedDefs()) if (typeof game.world.fed[d.id] !== 'number') game.world.fed[d.id] = 50
 }
 
@@ -2126,6 +2127,7 @@ function tickWorld() {
     for (const n of NUC) if (w.nucDone.includes(n.id)) add(n.passive, 1)
     for (const b of BLOCOS) if (w.blocos.includes(b.id)) add(b.passive, 1)
     for (const t of TRATADOS) if (w.tratados.includes(t.id)) add(t.pass, 1)
+    for (const x of w.pactos) add({ seg: x.tipo === 'defesa' ? 0.25 : 0.1 }, 1)
   }
   for (const t of TECHS) if (w.tech.done.includes(t.id) && (pres || (officeId() === 'governador' && t.civil))) add(t.pass, pres ? 1 : 0.6)
   for (const d of fedDefs()) add(d.pass, ((w.fed[d.id] ?? 50) - 50) / 50)
@@ -4128,4 +4130,179 @@ export function roundAvancos() {
   roundTech()
   roundAgenda()
   roundElenco()
+  roundReunioes()
+}
+
+/* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
+export const reuniaoDef = (id) => REUNIOES.find((x) => x.id === id)
+export const reuniaoAtual = () => (game.poder && game.poder.reuniao) || null
+export const convitesNow = () => (game.poder && game.poder.convites) || []
+export const industriasNow = () => (game.poder && game.poder.industrias) || []
+export const reuniaoAbordagens = () => ABORDAGENS
+export const reuniaoTraits = () => TRAITS
+const PARCEIROS_PACTO = ['arg', 'lat', 'afr', 'ue', 'eua', 'india', 'japao']
+const partnerName = (id) => (PARTNERS.find((x) => x.id === id) || { name: id }).name
+
+function reuOk(d) {
+  if (!(d.offs === 'all' || d.offs.includes(officeId()))) return false
+  const w = game.world
+  const pa = w.pactos || []
+  switch (d.cond) {
+    case 'blocos': return w.blocos.length > 0
+    case 'semblocos': return w.blocos.length === 0
+    case 'tech': return w.tech.done.length > 0
+    case 'pactoLivre': return pa.length < 2
+    case 'pacto': return pa.some((x) => x.tipo === 'defesa')
+    case 'exaliado': return !!elencoOf().exAliado
+    default: return true
+  }
+}
+function roundReunioes() {
+  ensurePoder()
+  const p = game.poder
+  p.convites = p.convites || []
+  p.industrias = p.industrias || []
+  p.reuHist = p.reuHist || []
+  for (const i of p.industrias) applyFx(i.fx)
+  for (const i of p.industrias) i.left--
+  p.industrias = p.industrias.filter((i) => i.left > 0)
+  for (const c of p.convites) c.left--
+  for (const c of p.convites.filter((x) => x.left < 0)) {
+    const d = reuniaoDef(c.defId)
+    applyFx({ img: -0.5 }, true)
+    if (d) toast('📅', `Você deixou passar: ${d.title}.`)
+  }
+  p.convites = p.convites.filter((c) => c.left >= 0)
+  if (p.convites.length >= 2 || R() > 0.45) return
+  const pool = REUNIOES.filter((d) => reuOk(d) && !p.reuHist.slice(-4).includes(d.id) && !p.convites.some((c) => c.defId === d.id))
+  if (!pool.length) return
+  const d = pool[Math.floor(R() * pool.length)]
+  const w = game.world
+  const c = { defId: d.id, left: 2 }
+  if (d.id === 's_chamado') c.partner = w.pactos.find((x) => x.tipo === 'defesa').partner
+  else if (d.partner) {
+    const livre = d.id === 's_pacto' ? PARCEIROS_PACTO.filter((x) => !w.pactos.some((y) => y.partner === x)) : PARTNERS.map((x) => x.id)
+    c.partner = livre[Math.floor(R() * livre.length)]
+  }
+  if (d.fict) c.fict = FICTICIOS[Math.floor(R() * FICTICIOS.length)].id
+  p.convites.push(c)
+  toast(d.icon, `Convite para reunião: ${d.title}.`)
+}
+const attBucket = (a) => (a <= -1 ? 'hostil' : a >= 1.5 ? 'favoravel' : 'neutro')
+function reuFalas(r) {
+  const d = reuniaoDef(r.defId)
+  r.falas = r.parts.map((pt) => {
+    const arr = FALAS[pt.trait][attBucket(pt.att)]
+    return arr[Math.floor(R() * arr.length)].replace('{t}', d.tema)
+  })
+}
+export function reuniaoMotivo(idx) {
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (reuniaoAtual()) return 'Já há uma reunião em andamento.'
+  if (!convitesNow()[idx]) return 'Convite indisponível.'
+  return ''
+}
+export function reuniaoAbrir(idx) {
+  if (reuniaoMotivo(idx)) return false
+  const c = game.poder.convites[idx]
+  const d = reuniaoDef(c.defId)
+  const parts = d.parts.map((x) => {
+    let nome = x.role
+    if (x.nome === 'auto') nome = candName(R)
+    else if (x.nome === 'exaliado') nome = elencoOf().exAliado || candName(R)
+    return { role: x.role, icon: x.icon, trait: x.trait, peso: x.peso || 1, nome, att: Math.max(-3, Math.min(3, x.base + Math.floor(R() * 3) - 1)), d: 0 }
+  })
+  const fic = c.fict ? FICTICIOS.find((f) => f.id === c.fict) : null
+  game.poder.convites.splice(idx, 1)
+  game.poder.reuHist = [...(game.poder.reuHist || []), d.id].slice(-8)
+  game.poder.reuniao = { defId: d.id, parts, step: d.locais ? 0 : 1, falas: [], reacoes: [], loc: null, partner: c.partner || null, fict: fic ? fic.name : null, resultado: null }
+  if (!d.locais) reuFalas(game.poder.reuniao)
+  save()
+  return true
+}
+export function reuniaoLocal(id) {
+  const r = reuniaoAtual()
+  const d = r && reuniaoDef(r.defId)
+  if (!r || r.step !== 0 || !d.locais) return false
+  const l = d.locais.find((x) => x.id === id)
+  if (!l) return false
+  r.loc = l.label
+  for (const pt of r.parts) pt.att = Math.max(-3, Math.min(3, pt.att + (l.eff[pt.trait] || 0)))
+  r.step = 1
+  reuFalas(r)
+  save()
+  return true
+}
+export function reuniaoCustoOk(abId) {
+  const ab = ABORDAGENS.find((x) => x.id === abId)
+  return !!ab && (!ab.cost || game.stats.cash >= ab.cost)
+}
+export function reuniaoAbordar(abId) {
+  const r = reuniaoAtual()
+  const ab = ABORDAGENS.find((x) => x.id === abId)
+  if (!r || !ab || r.resultado || r.step < 1 || r.step > 3 || !reuniaoCustoOk(abId)) return false
+  game.delta = {}
+  if (ab.cost) applyFx({ cash: -ab.cost }, true)
+  if (ab.fx) applyFx(ab.fx, true)
+  r.reacoes = []
+  for (const pt of r.parts) {
+    const d = ab.eff[pt.trait] + (R() < 0.25 ? Math.floor(R() * 3) - 1 : 0)
+    const antes = pt.att
+    pt.att = Math.max(-3, Math.min(3, pt.att + d))
+    pt.d = pt.att - antes
+    r.reacoes.push({ nome: pt.nome, d: pt.d })
+  }
+  r.step++
+  if (r.step > 3) return reuniaoFinalizar(r)
+  reuFalas(r)
+  save()
+  return true
+}
+function reuniaoFinalizar(r) {
+  const d = reuniaoDef(r.defId)
+  const w = game.world
+  const tot = r.parts.reduce((a, x) => a + x.peso, 0)
+  const score = r.parts.reduce((a, x) => a + x.att * x.peso, 0) / tot
+  const cls = score >= 1 ? 'acordo' : score >= -0.4 ? 'parcial' : 'fracasso'
+  const o = d.out[cls]
+  game.delta = {}
+  applyFx(o.fx, true)
+  for (const [k, v] of Object.entries(o.rel || {})) shiftRel(k, v)
+  if (o.relP && r.partner) shiftRel(r.partner, o.relP)
+  if (o.ind) {
+    game.poder.industrias = [...(game.poder.industrias || []), { ...o.ind }].slice(-5)
+    cnt('industria')
+  }
+  if (o.tech) {
+    const foco = w.tech.foco && !techMotivo(w.tech.foco) ? w.tech.foco : (TECHS.find((t) => !techMotivo(t.id)) || {}).id
+    if (foco && techOn()) techAdd(foco, o.tech)
+  }
+  if (o.vaza && w.tech.foco) w.tech.prog[w.tech.foco] = Math.max(0, (w.tech.prog[w.tech.foco] || 0) - o.vaza)
+  if (o.pacto && r.partner) {
+    w.pactos.push({ partner: r.partner, tipo: o.pacto })
+    cnt('pacto')
+  }
+  if (o.quebraPacto) w.pactos = w.pactos.filter((x) => !(x.partner === r.partner && x.tipo === 'defesa'))
+  if (o.fa) w.fa = clamp(w.fa + o.fa)
+  r.resultado = { cls, text: o.t, score: Math.round(score * 10) / 10 }
+  r.step = 4
+  timelineAdd(d.icon, `${d.title}: ${o.t}`, cls === 'acordo' ? 'up' : cls === 'fracasso' ? 'down' : 'flat')
+  cnt('reuniao')
+  if (cls === 'acordo') cnt('reuniaook')
+  save()
+  return true
+}
+export function reuniaoFechar() {
+  const r = reuniaoAtual()
+  if (!r || !r.resultado) return false
+  game.poder.reuniao = null
+  save()
+  return true
+}
+export const reuniaoTitulo = (r) => {
+  const d = reuniaoDef(r.defId)
+  let t = d.title
+  if (r.partner) t += ` · ${partnerName(r.partner)}`
+  if (r.fict) t += ` · ${r.fict}`
+  return t
 }
