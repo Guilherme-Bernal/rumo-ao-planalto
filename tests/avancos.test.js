@@ -1360,3 +1360,129 @@ describe('equipe lembra as escolhas', () => {
     expect(t.fazenda.type).toBe('tecnico')
   })
 })
+
+describe('BLOCO 35 — família na criação, rival ativo, pressão e pendências', () => {
+  const comOrigem = (familia, office = 'presidente') => {
+    E.startGame({ name: 'Teste', regionId: 'SP', traits: { familia } })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.stats.cong = 70
+    E.game.poder.exe = { used: [] }
+    E.game.poder.leg = { used: [] }
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.total = 1
+    E.roundAvancos()
+  }
+  it('a origem escolhida na criação monta a família da largada', () => {
+    comOrigem('filhos')
+    const f = E.familiaNow()
+    expect(f.origem).toBe('filhos')
+    expect(f.conjuge && f.conjuge.casado).toBe(true)
+    expect(f.filhos.length).toBe(2)
+    comOrigem('solteiro')
+    expect(E.familiaNow().conjuge).toBeNull()
+    comOrigem('divorciado')
+    expect(E.familiaNow().filhos.length).toBe(1)
+  })
+  it('cada origem libera ações próprias e esconde as dos outros', () => {
+    comOrigem('dinastia')
+    expect(E.famAcoes().map((a) => a.id)).toContain('sobrenome')
+    expect(E.famAcoes().map((a) => a.id)).not.toContain('raiz')
+    expect(E.famAcoes().map((a) => a.id)).not.toContain('casal')
+    comOrigem('humilde')
+    expect(E.famAcoes().map((a) => a.id)).toContain('raiz')
+    comOrigem('casado')
+    expect(E.famAcoes().map((a) => a.id)).toContain('casal')
+    expect(E.famAcoes().map((a) => a.id)).not.toContain('escola')
+  })
+  it('ação própria da origem aplica o efeito e gasta a rodada de família', () => {
+    comOrigem('dinastia', 'senador')
+    const antes = E.game.stats.cong
+    E.game.phase = 'actions'
+    expect(E.famAgir('sobrenome')).toBeTruthy()
+    expect(E.game.stats.cong).toBeGreaterThan(antes)
+    expect(E.famAcaoMotivo('sobrenome')).toMatch(/família/i)
+  })
+  it('família em paz e com cônjuge atuante rende voto, em crise tira', () => {
+    comOrigem('casado')
+    const f = E.game.poder.familia
+    f.conjuge.perfil = 'atuante'
+    f.harmonia = 90
+    const bom = E.baseScore ? E.baseScore('player') : null
+    f.harmonia = 10
+    const ruim = E.baseScore ? E.baseScore('player') : null
+    if (bom != null && ruim != null) expect(bom).toBeGreaterThan(ruim)
+  })
+  it('novas ações do rival: debate, investigar e oferecer cargo', () => {
+    comOrigem('solteiro')
+    const r = E.rvEnsure()
+    r.estima = 60
+    E.game.phase = 'actions'
+    expect(E.rvAcoes().map((a) => a.id)).toEqual(expect.arrayContaining(['debate', 'espionar', 'cooptar']))
+    const cash = E.game.stats.cash
+    expect(E.rvAcao('espionar')).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(cash)
+    r.acao = -9
+    r.estima = 10
+    expect(E.rvAcaoMotivo('cooptar')).toMatch(/estima/)
+  })
+  it('evento do rival contra a família abala a harmonia', () => {
+    comOrigem('casado')
+    const r = E.rvEnsure()
+    r.estagio = 'inimigo'
+    r.pend = { id: 'familia', left: 2 }
+    E.game.poder.familia.harmonia = 60
+    E.rvEscolher('ignorar')
+    expect(E.game.poder.familia.harmonia).toBeLessThan(60)
+  })
+  it('pressão do Congresso aparece, tem prazo e cai na opção padrão', () => {
+    comOrigem('solteiro')
+    E.game.total = 6
+    const s = (E.game.poder.press = { pend: { id: 'pauta_bomba', left: 0 }, last: -9 })
+    expect(E.pressPendNow().id).toBe('pauta_bomba')
+    const cash = E.game.stats.cash
+    E.roundAvancos()
+    expect(E.pressPendNow()).toBeNull()
+    expect(E.game.stats.cash).toBeLessThan(cash)
+    E.game.poder.press = { pend: { id: 'convocacao', left: 2 }, last: -9 }
+    const cong = E.game.stats.cong
+    expect(E.pressEscolher('trocar')).toBeTruthy()
+    expect(E.game.stats.cong).toBeGreaterThan(cong - 0.01)
+    expect(s).toBeTruthy()
+  })
+  it('pressão ocorre com o tempo e é mais frequente com base fraca', () => {
+    let vistas = 0
+    for (let i = 0; i < 40; i++) {
+      comOrigem('solteiro')
+      E.game.total = 5
+      E.game.stats.cong = 20
+      for (let k = 0; k < 6 && !E.pressPendNow(); k++) { E.game.total++; E.roundAvancos() }
+      if (E.pressPendNow()) vistas++
+    }
+    expect(vistas).toBeGreaterThan(8)
+  })
+  it('pendências listam decisões com prazo e ações da rodada', () => {
+    comOrigem('solteiro')
+    E.game.phase = 'actions'
+    E.game.ap = 2
+    E.game.poder.press = { pend: { id: 'obstrucao', left: 1 }, last: -9 }
+    const l = E.pendenciasNow()
+    expect(l.find((x) => x.id === 'press').tipo).toBe('decisao')
+    expect(l.find((x) => x.id === 'press').left).toBe(2)
+    expect(l.find((x) => x.id === 'ap').tipo).toBe('acao')
+    expect(l.find((x) => x.id === 'poder').tab).toBe('leis')
+    E.game.ap = 0
+    E.game.poder.exe.used = ['a', 'b']
+    const l2 = E.pendenciasNow()
+    expect(l2.find((x) => x.id === 'ap')).toBeUndefined()
+    expect(l2.find((x) => x.id === 'poder')).toBeUndefined()
+  })
+  it('a criação de personagem oferece a categoria de família', async () => {
+    const { brasilTraits } = await import('../src/game/countries/brasil-traits.js')
+    const cat = brasilTraits.find((c) => c.id === 'familia')
+    expect(cat.options.length).toBeGreaterThanOrEqual(6)
+    expect(cat.options.map((o) => o.id)).toContain(cat.def)
+  })
+})

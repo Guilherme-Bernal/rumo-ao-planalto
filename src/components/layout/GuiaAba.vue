@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher, arcoPendNow, arcoMotivo, arcoEscolher } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher, arcoPendNow, arcoMotivo, arcoEscolher, pressPendNow, pressMotivo, pressEscolher, pendenciasNow } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -26,6 +26,9 @@ const hist = computed(() => histPendNow())
 const coal = computed(() => coalPendNow())
 const leg = computed(() => legadoPendNow())
 const arco = computed(() => arcoPendNow())
+const press = computed(() => pressPendNow())
+// fora da Agenda, as decisões ficam numa linha só (os cartões completos moram na Agenda)
+const esperando = computed(() => pendenciasNow().filter((x) => x.tab === 'agenda' && (x.tipo === 'decisao' || x.id === 'convites')))
 const missao = computed(() => { const v = missaoView(); return v && v.passo ? v : null })
 const cadeia = computed(() => {
   const c = cadeiaNow()
@@ -41,6 +44,7 @@ const cadeia = computed(() => {
     </p>
     <p v-if="excecao" class="aviso warn">🚨 Medida de exceção em vigor: não se vota PEC até ela terminar.</p>
     <p v-if="fase" class="aviso">⏳ Agora é a fase de <b>{{ fase }}</b>. Os botões de ação desta aba ficam apagados até a fase de ações, na aba Agenda.</p>
+    <template v-if="tab === 'agenda'">
     <div v-for="c in convites" :key="c.defId + c.i" class="aviso conv">
       {{ c.d.icon }} <b>Convite:</b> {{ c.d.title }} <small>(vale mais {{ c.left + 1 }} rodada(s))</small>
       <button type="button" class="mini" :disabled="!!reuniaoMotivo(c.i)" :title="reuniaoMotivo(c.i)" @click="reuniaoAbrir(c.i)">Participar</button>
@@ -117,6 +121,18 @@ const cadeia = computed(() => {
         <button v-for="o in arco.e.ops" :key="o.id" type="button" class="mini" :disabled="!!arcoMotivo(o.id)" :title="o.desc" @click="arcoEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
       </span>
     </div>
+    <div v-if="press" class="aviso conv">
+      {{ press.d.icon }} <b>{{ press.d.titulo }}</b> <small>({{ press.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ press.d.texto }}</small>
+      <span class="ops">
+        <button v-for="o in press.d.ops" :key="o.id" type="button" class="mini" :disabled="!!pressMotivo(o.id)" :title="o.desc" @click="pressEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    </template>
+    <p v-else-if="esperando.length" class="aviso conv">
+      📌 <b>{{ esperando.length }} decisão(ões) esperando na Agenda:</b> {{ esperando.map((x) => x.txt).join(' · ') }}
+      <button type="button" class="mini" @click="emit('go', 'agenda')">Ir para a Agenda</button>
+    </p>
     <p v-if="inds.length" class="aviso">🏭 Em operação: {{ inds.map((x) => x.nome).join(' · ') }}.</p>
     <details v-if="g" class="guiabox">
       <summary>📖 Guia rápido: {{ g.t }}</summary>

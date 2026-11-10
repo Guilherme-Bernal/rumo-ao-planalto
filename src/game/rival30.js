@@ -1,3 +1,4 @@
+import { RV_EVENTOS_35, RV_ACOES_35 } from './bloco35'
 // BLOCO 30: o rival recorrente. Ele aparece desde o começo da carreira, sobe, cai, some, volta, vira aliado
 // improvável ou inimigo mortal, e se lembra de como você o tratou. Tudo aqui é dado: a lógica fica no motor.
 
@@ -54,6 +55,7 @@ export const RV_EVENTOS = [
       { id: 'ignorar', icon: '🤐', name: 'Ignorar', desc: 'O boato corre solto.', fx: { img: -3.5 }, rv: { forca: 2 } },
     ],
   },
+  ...RV_EVENTOS_35,
 ]
 
 // eventos automáticos (sem escolha): trocar de partido, defender você, trair, voltar do exílio
@@ -71,4 +73,5 @@ export const RV_AUTO = {
 export const RV_ACOES = [
   { id: 'trégua', icon: '🤝', name: 'Propor trégua', desc: 'Oferecer uma conversa reservada. Funciona melhor se ele ainda não te odeia.' },
   { id: 'atacar', icon: '📣', name: 'Atacar em público', desc: 'Desgasta o rival na eleição, mas arranha sua imagem e aumenta o ódio.' },
+  ...RV_ACOES_35,
 ]

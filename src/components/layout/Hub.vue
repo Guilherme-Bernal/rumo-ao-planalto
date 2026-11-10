@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, defineAsyncComponent, h } from 'vue'
-import { game, stageInfo, targetOffice } from '../../game/engine'
+import { game, stageInfo, targetOffice, pendenciasNow } from '../../game/engine'
 import GamePanel from '../game/GamePanel.vue'
 import GuiaAba from './GuiaAba.vue'
 import Tips from './Tips.vue'
@@ -40,17 +40,21 @@ const cur = computed(() => (locked.value ? 'agenda' : tab.value))
 const dica = computed(() => (locked.value ? null : dicaPendente(cur.value)))
 const pending = computed(() => game.phase === 'event' || game.phase === 'outcome')
 
+const pend = computed(() => (locked.value ? [] : pendenciasNow()))
+const pendTab = (id) => pend.value.filter((x) => x.tab === id && x.tipo === 'acao').reduce((a, x) => a + (x.n || 1), 0)
+const nDec = computed(() => pend.value.filter((x) => x.tipo === 'decisao').length)
+const pendAberto = ref(false)
 const tabs = computed(() => [
-  { id: 'agenda', label: '📋 Agenda', dot: pending.value && tab.value !== 'agenda' },
+  { id: 'agenda', label: '📋 Agenda', dot: (pending.value || nDec.value > 0) && tab.value !== 'agenda' },
   { id: 'disputa', label: '🗳️ Disputa' },
   { id: 'redes', label: '📱 Redes' },
   { id: 'ideias', label: '💡 Ideias' },
-  { id: 'contatos', label: '👥 Contatos', badge: game.approach && !game.approach.done ? 1 : 0 },
+  { id: 'contatos', label: '👥 Contatos', badge: pendTab('contatos') },
   { id: 'orcamento', label: '💰 Orçamento' },
-  { id: 'partido', label: '🎗️ Partido', badge: game.invites.length },
+  { id: 'partido', label: '🎗️ Partido', badge: pendTab('partido') },
   { id: 'plano', label: '📜 Plano' },
   { id: 'mundo', label: '🌍 Mundo', badge: game.world && game.world.wars.length ? game.world.wars.length : 0 },
-  { id: 'leis', label: '⚖️ Leis' },
+  { id: 'leis', label: '⚖️ Leis', badge: pendTab('leis') },
   { id: 'mapa', label: '🗺️ Mapa' },
 ])
 
@@ -106,6 +110,15 @@ const todo = computed(() => {
         <span>{{ todo }}</span>
       </div>
     </div>
+    <details v-if="pend.length && game.total > 0" class="pendbox" :open="pendAberto" @toggle="pendAberto = $event.target.open">
+      <summary>📌 Pendências ({{ pend.length }}){{ nDec ? ` · ${nDec} decisão(ões) com prazo` : '' }}</summary>
+      <ul>
+        <li v-for="x in pend" :key="x.id" :class="x.tipo">
+          <span>{{ x.icon }} {{ x.txt }}<small v-if="x.tipo === 'decisao' && x.left"> · {{ x.left }} rodada(s)</small></span>
+          <button v-if="x.tab && x.tab !== cur" type="button" class="mini" @click="tab = x.tab">Ir</button>
+        </li>
+      </ul>
+    </details>
     <details v-if="game.total === 0 && game.phase === 'event'" :open="!narrow" class="howto">
       <summary>Como jogar (fechar)</summary>
       <ul>
@@ -148,3 +161,12 @@ const todo = computed(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.pendbox { margin: 6px 0; padding: 6px 10px; border-radius: 10px; font-size: 0.88rem; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14); }
+.pendbox summary { cursor: pointer; font-weight: 600; }
+.pendbox ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.pendbox li { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.pendbox li.decisao { color: var(--warn); }
+.pendbox .mini { padding: 2px 8px; font-size: 0.8rem; }
+</style>

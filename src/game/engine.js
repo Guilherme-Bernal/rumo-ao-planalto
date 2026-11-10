@@ -24,6 +24,7 @@ import { randomLook } from './look'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
 import { finalOf, saveFinal } from './finais'
 import { ARCOS } from './arcos34'
+import { FAM_ORIGENS, PRESS_EVENTOS } from './bloco35'
 import { AGENDAS, STATUS, COAL_ACOES, COAL_EVENTOS, LEGADO_EVENTOS } from './coalizao33'
 import { MIS_INTRO, MIS_PISTAS, MIS_PEND, MIS_ACOES, MIS_FIM, HIST_EVENTOS } from './misterio32'
 import { MIN_BASE, MIN_AGENDAS, MIN_EVENTOS, MIN_SAIDA, PAUTAS, ONDAS, ONDA_RESP, MISSOES } from './bastidores'
@@ -1344,7 +1345,7 @@ export function baseScore() {
   const sphere = clamp((game.fame[electionSphere()] - s.pop) * 0.12, -3, 3)
   const ideas = (game.ideas.force - 50) * 0.025
   const ticket = game.election?.ticketBonus || 0
-  return coalVoto() + aliancaBonus() + ticket + tv + focoBonus() - boatosDano() + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
+  return coalVoto() + famVoto() + aliancaBonus() + ticket + tv + focoBonus() - boatosDano() + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
 }
 
 const toShare = (score, rival) => clamp(50 + (score - rival) * 0.9, 30, 70)
@@ -2150,7 +2151,8 @@ export const lawHas = (temaId, ousId) => game.world.laws.some((l) => l.name === 
 export function lawChance(temaId, ousId) {
   const co = coalition()
   const peer = fedDefs().find((d) => d.dir === 'peer')
-  let p = 0.3 + (game.stats.cong - 50) / 130 + co.votes * 0.05 - (co.angry ? 0.12 : 0) - (ousId - 1) * 0.13
+  const cb = coalNow() ? (coalBasePct() - 45) / 320 : 0
+  let p = 0.28 + (game.stats.cong - 50) / 130 + co.votes * 0.05 + cb - (co.angry ? 0.12 : 0) - (ousId - 1) * 0.13
   if (peer) p += ((game.world.fed[peer.id] ?? 50) - 50) / 250
   p += comissaoBonus(temaId)
   return Math.min(0.92, Math.max(0.06, p))
@@ -4254,6 +4256,68 @@ export function roundAvancos() {
   roundCoalizao()
   roundLegado()
   roundArcos()
+  roundPressao()
+}
+
+/* ---------- BLOCO 35: pressão do Congresso ---------- */
+function pressBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.press) p.press = { pend: null, last: -9 }
+  return p.press
+}
+export const pressPendNow = () => {
+  const s = game.poder && game.poder.press
+  if (!s || !s.pend) return null
+  const d = PRESS_EVENTOS[s.pend.id]
+  return d ? { id: s.pend.id, d, left: s.pend.left } : null
+}
+export function pressMotivo(op) {
+  const pn = pressPendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.d.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function pressAplicar(s, d, opId, auto) {
+  const o = d.ops.find((x) => x.id === opId) || d.ops[d.ops.length - 1]
+  const fx = { ...o.fx }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  applyFx(fx, true)
+  timelineAdd(d.icon, `${d.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, 'flat')
+  s.pend = null
+  s.last = game.total
+  cnt('pressao')
+  return o
+}
+export function pressEscolher(op) {
+  if (pressMotivo(op)) return null
+  const s = pressBase()
+  const d = PRESS_EVENTOS[s.pend.id]
+  const o = pressAplicar(s, d, op, false)
+  save()
+  return { txt: `${d.titulo}: ${o.name.toLowerCase()}.` }
+}
+// quanto mais fraca a base, mais o Congresso aperta; o mandato longo também cobra
+function roundPressao() {
+  if (!game.world || game.total < 3) return
+  const s = pressBase()
+  if (s.pend) {
+    s.pend.left--
+    if (s.pend.left < 0) pressAplicar(s, PRESS_EVENTOS[s.pend.id], PRESS_EVENTOS[s.pend.id].padrao, true)
+    return
+  }
+  if (game.total - s.last < 3) return
+  const exec = isExec()
+  const fraca = exec ? (50 - coalBasePct()) / 250 : (55 - game.stats.cong) / 250
+  const p = clamp(0.14 + fraca + ((game.term || 1) - 1) * 0.02 + (game.heat || 0) / 500, 0.08, 0.4)
+  if (R() > p) return
+  const pool = Object.keys(PRESS_EVENTOS).filter((id) => PRESS_EVENTOS[id].grupo === (exec ? 'exec' : 'leg'))
+  const id = pool[Math.floor(R() * pool.length)]
+  s.pend = { id, left: 2 }
+  s.last = game.total
+  toast(PRESS_EVENTOS[id].icon, PRESS_EVENTOS[id].titulo)
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -5198,7 +5262,7 @@ export function vidaEscolher(op) {
 }
 
 /* ---------- BLOCO 26: família, biografia, laços e sucessão ---------- */
-const famBase = () => ({ harmonia: 65, pais: null, conjuge: null, filhos: [], pend: null, used: false, prox: 0 })
+const famBase = () => ({ origem: null, harmonia: 65, pais: null, conjuge: null, filhos: [], pend: null, used: false, prox: 0 })
 export const familiaNow = () => (game.poder && game.poder.familia) || famBase()
 function famEnsure() {
   ensurePoder()
@@ -5206,9 +5270,32 @@ function famEnsure() {
   if (!p.familia || !p.familia.filhos) p.familia = { ...famBase(), ...(p.familia || {}) }
   const f = p.familia
   if (!f.pais) f.pais = { mae: candName(R), pai: candName(R) }
+  if (!f.origem) {
+    // origem escolhida na criação do personagem; jogos antigos só ganham o rótulo, sem mexer na família
+    f.origem = (game.traits && game.traits.familia) || 'solteiro'
+    const o = FAM_ORIGENS[f.origem]
+    if (o && game.total <= 1 && !f.conjuge && !f.filhos.length) {
+      f.harmonia = o.h
+      if (o.conjuge) f.conjuge = { nome: candName(R), perfil: PERFIS_CONJUGE[Math.floor(R() * PERFIS_CONJUGE.length)].id, look: randomLook(), casado: true, apoio: 60 }
+      for (let i = 0; i < o.filhos; i++) f.filhos.push({ nome: candName(R).split(' ')[0], look: { ...randomLook(), age: 'jovem', headwear: 'nenhum', beard: 'nenhuma', glasses: 'nenhum' }, nasc: 0 })
+    }
+  }
   return f
 }
-export const famAcoes = () => FAM_ACOES
+// a família conta na urna: casa em paz, cônjuge atuante e filhos ajudam; casa em crise pesa
+function famVoto() {
+  const f = game.poder && game.poder.familia
+  if (!f) return 0
+  let v = (f.harmonia - 50) * 0.02
+  if (f.conjuge && f.conjuge.casado) v += f.conjuge.perfil === 'atuante' ? 0.6 : f.conjuge.perfil === 'empresario' ? -0.2 : 0.2
+  if (f.filhos.length) v += 0.3
+  return clamp(v, -1.5, 1.5)
+}
+export const famAcoes = () => {
+  const f = familiaNow()
+  const o = f.origem || (game.traits && game.traits.familia) || 'solteiro'
+  return FAM_ACOES.filter((a) => (!a.orig || a.orig.includes(o)) && (!a.casado || (f.conjuge && f.conjuge.casado)) && (!a.filhos || f.filhos.length) && (!a.solteiro || !f.conjuge))
+}
 export const famEventoDef = (tipo) => FAM_EVENTOS[tipo]
 export const perfisConjuge = () => PERFIS_CONJUGE
 export const famPend = () => {
@@ -5223,7 +5310,8 @@ function roundFamilia() {
   const f = famEnsure()
   f.used = false
   const cargo = officeId()
-  f.harmonia = clamp(f.harmonia - (cargo === 'presidente' ? 2.5 : cargo === 'governador' ? 2 : 1.5))
+  const orig = FAM_ORIGENS[f.origem] || {}
+  f.harmonia = clamp(f.harmonia - (cargo === 'presidente' ? 2.5 : cargo === 'governador' ? 2 : 1.5) - (orig.decai || 0) - (f.filhos.length ? 0.2 : 0))
   if (f.harmonia >= 70) applyFx({ img: 0.15 })
   else if (f.harmonia <= 25) applyFx({ img: -0.3, pop: -0.1 })
   if (f.pend) {
@@ -5231,8 +5319,8 @@ function roundFamilia() {
     if (f.pend.left < 0) { f.harmonia = clamp(f.harmonia - 8); applyFx({ img: -0.3 }, true); f.pend = null }
     return
   }
-  if (game.total < 3 || --f.prox > 0 || R() > 0.18) return
-  f.prox = 3
+  if (game.total < 2 || --f.prox > 0 || R() > 0.26) return
+  f.prox = 2
   const c = f.conjuge
   const pool = []
   if (!c && game.total >= 4) pool.push('noivado')
@@ -5240,6 +5328,12 @@ function roundFamilia() {
   if (c && f.harmonia < 45) pool.push('reclama', 'reclama')
   if (f.filhos.length) pool.push('polemica')
   if (game.total >= 5) pool.push('favor')
+  if (game.total >= 3 && f.pais) pool.push('pais_idosos')
+  if (f.filhos.length) pool.push('escola')
+  if (f.origem === 'dinastia') pool.push('cla', 'cla')
+  if (f.origem === 'divorciado' && !f.conjuge) pool.push('ex')
+  if (f.origem === 'empresarial') pool.push('negocio', 'negocio')
+  if (f.origem === 'humilde') pool.push('vizinhanca', 'vizinhanca')
   if (!pool.length) return
   const tipo = pool[Math.floor(R() * pool.length)]
   if (tipo === 'noivado') {
@@ -5735,7 +5829,7 @@ function roundRival() {
     }
     return
   }
-  if (game.total - r.last < 3) return
+  if (game.total - r.last < 2) return
   if (r.estagio === 'aliado') {
     if (R() < 0.09) {
       applyFx({ cong: 1.5, img: 0.8 }, true)
@@ -5754,8 +5848,9 @@ function roundRival() {
     r.last = game.total
     return
   }
-  if (R() > 0.14) return
-  const elig = RV_EVENTOS.filter((e) => e.est.includes(r.estagio) && (e.id !== 'trégua' || r.odio < 80))
+  if (R() > (r.estagio === 'inimigo' ? 0.38 : 0.26)) return
+  const cb = coalNow() && coalNow().partidos.some((x) => x.status === 'base' && !x.own)
+  const elig = RV_EVENTOS.filter((e) => e.est.includes(r.estagio) && (e.id !== 'trégua' || r.odio < 80) && (e.id !== 'cooptar' || r.estima >= 20 || r.estagio === 'queda') && (e.id !== 'coalizao' || cb))
   if (!elig.length) return
   const ev = elig[Math.floor(R() * elig.length)]
   r.pend = { id: ev.id, left: 2 }
@@ -5786,6 +5881,11 @@ function rvAplicar(r, d, opId, auto) {
     game.termDirty++
     game.heat = clamp((game.heat || 0) + 6)
   }
+  if (o.h) { const f = famEnsure(); f.harmonia = clamp(f.harmonia + o.h) }
+  if (o.coal != null) {
+    const bs = (coalNow() ? coalNow().partidos : []).filter((x) => x.status === 'base' && !x.own)
+    if (bs.length) { const x = bs[Math.floor(R() * bs.length)]; x.humor = clamp(x.humor + o.coal) }
+  }
   r.pend = null
   rvLog(r, d.icon, `${d.titulo(r)}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`)
   rvDelta(r, o.rv || {})
@@ -5804,7 +5904,12 @@ export function rvAcaoMotivo(id) {
   const r = game.poder && game.poder.rv
   if (!r) return 'Ainda não há rival definido.'
   if (r.estagio === 'exilio') return 'Ele está afastado da política.'
-  if (game.total - (r.acao ?? -9) < 3) return 'Espere algumas rodadas.'
+  if (game.total - (r.acao ?? -9) < 2) return 'Espere algumas rodadas.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  const custo = { espionar: 1, cooptar: 2 }[id] || 0
+  if (custo && game.stats.cash < custo) return `Sem caixa (${custo}).`
+  if (id === 'cooptar' && r.estima < 30) return 'Ele precisa ter alguma estima por você.'
+  if ((id === 'cooptar' || id === 'debate' || id === 'espionar') && r.estagio === 'aliado') return 'Ele já é seu aliado.'
   if (id === 'trégua' && r.estagio === 'aliado') return 'Ele já é seu aliado.'
   if (id === 'atacar' && r.estagio === 'aliado') return 'Atacar um aliado? Melhor não.'
   return ''
@@ -5823,6 +5928,40 @@ export function rvAcao(id) {
     } else {
       rvDelta(r, { odio: 3 })
       txt = `${r.nome} não quis conversa. A porta ficou entreaberta, mas por pouco.`
+    }
+  } else if (id === 'debate') {
+    const p = clamp(0.35 + (game.stats.img - 50) / 180 + (game.stats.pop - 50) / 300 - (r.forca - 50) / 200 + (r.trait === 'orgulhoso' ? 0.08 : 0), 0.1, 0.85)
+    if (R() < p) {
+      applyFx({ pop: 2, img: 1 }, true)
+      rvDelta(r, { forca: -6, odio: 4, estima: -2 })
+      txt = `Você desafiou ${r.nome} para um debate e saiu na frente. A plateia foi sua.`
+    } else {
+      applyFx({ pop: -1.5, img: -0.5 }, true)
+      rvDelta(r, { forca: 3, odio: 4 })
+      txt = `${r.nome} aceitou o debate e levou a melhor. Os cortes viralizaram contra você.`
+    }
+  } else if (id === 'espionar') {
+    applyFx({ cash: -1 }, true)
+    const x = R()
+    if (x < 0.45) {
+      if (!r.pend) r.pend = { id: 'escandalo', left: 2 }
+      txt = `Sua equipe levantou um dossiê sobre ${r.nome}. Agora a decisão é sua.`
+    } else if (x < 0.7) {
+      applyFx({ img: -1.5 }, true)
+      game.heat = clamp((game.heat || 0) + 3)
+      rvDelta(r, { odio: 8 })
+      txt = `A investigação sobre ${r.nome} vazou. Quem foi pego foi você.`
+    } else txt = `Nada de concreto sobre ${r.nome}. O dinheiro da apuração foi embora.`
+  } else if (id === 'cooptar') {
+    applyFx({ cash: -2 }, true)
+    if (R() < clamp(0.2 + r.estima / 150, 0.1, 0.8)) {
+      r.estagio = 'aliado'
+      applyFx({ cong: 1.5 }, true)
+      rvLog(r, '🤝', RV_AUTO.aliado(r), 'up')
+      txt = `${r.nome} aceitou o convite e passou para o seu lado.`
+    } else {
+      rvDelta(r, { odio: 2 })
+      txt = `${r.nome} recusou o cargo e ainda contou para a imprensa.`
     }
   } else {
     applyFx({ img: -1.5, pop: 0.5 }, true)
@@ -6634,7 +6773,7 @@ function roundCoalizao() {
   }
   const pct = coalBasePct()
   const own = c.partidos.find((x) => x.own)
-  applyFx({ cong: (pct - 38) * 0.02 + (own && own.humor < 30 ? -0.4 : 0) }, true)
+  applyFx({ cong: (pct - 45) * 0.025 + (own && own.humor < 30 ? -0.4 : 0) }, true)
   if (c.pend) {
     if (--c.pend.left < 0) coalAplicar(c, COAL_EVENTOS[c.pend.tipo].padrao, true)
     return
@@ -6864,4 +7003,46 @@ function roundArcos() {
   a.pend = { arc: id, ev: ev.id, left: 2 }
   it.last = game.total
   toast(ev.icon, ev.titulo(arcoFig(id).nome))
+}
+
+/* ---------- BLOCO 35: central de pendências ---------- */
+// tipo 'decisao': tem prazo e uma opção padrão se você deixar passar. tipo 'acao': oportunidade da rodada que se perde se você avançar sem usar.
+export function pendenciasNow() {
+  const out = []
+  const dec = (id, icon, txt, left) => out.push({ id, icon, txt, left: left + 1, tab: 'agenda', tipo: 'decisao', n: 1 })
+  const acao = (id, icon, txt, tab, n = 1) => out.push({ id, icon, txt, tab, tipo: 'acao', n })
+  if (!game.world) return out
+  const v = vidaNow()
+  if (v.pend) {
+    const e = eventoDef(v.pend.tipo)
+    const f = figurasNow().find((x) => x.id === v.pend.fig)
+    if (e && f) dec('vida', e.icon, e.titulo(f), v.pend.left)
+  }
+  const fm = famPend(); if (fm) dec('fam', fm.e.icon, fm.titulo, fm.left)
+  const rv = rvPendNow(); if (rv) dec('rv', rv.e.icon, rv.e.titulo(rv.r), rv.left)
+  const mi = minPendNow(); if (mi) dec('min', mi.e.icon, mi.titulo, mi.left)
+  const ms = missaoView(); if (ms && ms.passo) dec('missao', ms.d.icon, `Missão: ${ms.d.titulo}`, ms.m.left)
+  const mp = misPendNow(); if (mp) dec('mis', '🔎', mp.titulo, mp.left)
+  const hp = histPendNow(); if (hp) dec('hist', hp.e.icon, hp.e.nome, hp.left)
+  const cp = coalPendNow(); if (cp) dec('coal', cp.e.icon, cp.titulo, cp.left)
+  const lp = legadoPendNow(); if (lp) dec('leg', lp.e.icon, lp.titulo, lp.left)
+  const ap = arcoPendNow(); if (ap) dec('arco', ap.e.icon, ap.titulo, ap.left)
+  const pr = pressPendNow(); if (pr) dec('press', pr.d.icon, pr.d.titulo, pr.left)
+  if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
+  const cv = convitesNow()
+  if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })
+  if (game.invites && game.invites.length) acao('partido', '🎗️', `${game.invites.length} convite(s) de partido`, 'partido', game.invites.length)
+  if (game.phase !== 'actions') return out
+  if (game.ap > 0) acao('ap', '📋', `${game.ap} ação(ões) do calendário por marcar`, 'agenda', game.ap)
+  const resto = isExec() ? exeLeft() : legLeft()
+  if (resto > 0) acao('poder', '⚖️', `${resto} ação(ões) de ${isExec() ? 'governo (nomear, emendas, decreto)' : 'mandato (fiscalizar, relatar, emendar)'}`, 'leis', resto)
+  if (!game.world.lawUsed && game.stats.cash >= 5) acao('lei', '📜', 'Você ainda pode propor uma lei', 'leis')
+  if (game.approach && !game.approach.done) acao('contato', '👥', 'Há um contato esperando abordagem', 'contatos')
+  const f = familiaNow()
+  if (!f.used && f.harmonia < 50) acao('familia', '👨‍👩‍👧', `Harmonia da família em ${Math.round(f.harmonia)}: dedique um tempo`, 'contatos')
+  const r = game.poder && game.poder.rv
+  if (r && game.total >= 2 && r.estagio !== 'exilio' && (r.forca >= 62 || r.odio >= 65) && !rvAcaoMotivo('atacar')) acao('rival', '🥊', `${r.nome} está forte: há ações contra o rival`, 'contatos')
+  const c = coalNow()
+  if (c && coalBasePct() < 45) acao('base', '🏛️', `Base no Congresso em ${coalBasePct()}%, abaixo do confortável`, 'partido')
+  return out
 }

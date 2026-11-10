@@ -3,6 +3,8 @@
 // axis (ideologia): em qual linha os partidos te enxergam: esquerda | centro | direita | independente
 // Stats: pop, cong (base), eco, cash (caixa), soc (saúde e educação), seg, img
 
+import { TRAIT_FAMILIA } from '../bloco35'
+
 export const brasilTraits = [
   {
     id: 'ideologia',
@@ -39,6 +41,7 @@ export const brasilTraits = [
       { id: 'outra', icon: '🕉️', name: 'Outra fé ou espiritualidade', desc: 'Budista, judaica, islâmica, de outro caminho. Comunidade pequena, mas fiel.', fx: { img: 2, cong: 1 }, gain: { img: 1.05 } },
     ],
   },
+  TRAIT_FAMILIA,
   {
     id: 'formacao',
     label: 'Formação',

@@ -1,3 +1,4 @@
+import { FAM_ACOES_35, FAM_EVENTOS_35 } from './bloco35'
 // BLOCO 26: família, biografia, laços com mentor e rival, sucessão jogável.
 export const PERFIS_CONJUGE = [
   { id: 'discreto', icon: '🤫', name: 'discreto(a)', desc: 'Evita holofotes e protege a vida privada.' },
@@ -9,10 +10,12 @@ export const FAM_ACOES = [
   { id: 'jantar', icon: '🍝', name: 'Jantar em família', desc: 'Harmonia +10.', cash: 0, h: 10 },
   { id: 'viagem', icon: '🏖️', name: 'Viagem de férias', desc: 'Harmonia +22. Custa 2 de Caixa e rende notícia.', cash: 2, h: 22, fx: { pop: -0.3 } },
   { id: 'campanha', icon: '📣', name: 'Cônjuge na agenda pública', desc: 'Popularidade +1, harmonia -5. Exige cônjuge atuante.', cash: 0, h: -5, fx: { pop: 1 }, req: 'atuante' },
+  ...FAM_ACOES_35,
 ]
 
 // Eventos de família. Cada opção: fx, h (harmonia), cash.
 export const FAM_EVENTOS = {
+  ...FAM_EVENTOS_35,
   noivado: {
     icon: '💍', titulo: (f) => `${f.nome} pede você em casamento`,
     texto: (f) => `${f.nome}, ${f.perfilTxt}, quer oficializar a união.`,
