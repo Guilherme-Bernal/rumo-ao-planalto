@@ -24,6 +24,9 @@ const novo = (office = 'presidente') => {
   E.game.stats.cong = 90
   E.game.poder.exe = { used: [] }
   E.game.poder.leg = { used: [] }
+  E.game.poder.prot = null
+  E.game.world.ameacas = []
+  E.game.world.guerraDef = null
   E.game.world.pts = 4; E.game.world.ptsM = 2; E.game.world.ptsP = 2
 }
 

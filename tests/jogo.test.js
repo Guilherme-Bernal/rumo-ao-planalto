@@ -505,6 +505,7 @@ describe('defesa, golpes e guerra civil', () => {
   it('GLO resolve protesto e fica indisponível sem motivo', () => {
     novo()
     E.game.stats.seg = 80
+    E.game.poder.prot = null
     expect(E.gloPossivel()).toBe(false)
     E.game.poder.prot = { kind: 'protesto', name: 'Protestos nas ruas', round: 1 }
     expect(E.gloPossivel()).toBe(true)
