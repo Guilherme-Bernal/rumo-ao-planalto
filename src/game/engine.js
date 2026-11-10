@@ -14,6 +14,9 @@ import { PARTIES } from './countries/brasil-parties'
 import { DAY_FLAVOR, ACTION_ICON, holidayOf, makePost, slug, GENERIC_TAGS, candName } from './social'
 import { MORE_FLAVOR } from './flavor'
 import { BIG, bigWhen, BIG_TAGS } from './bigevents'
+import { CRISES, CRISE_RESP, EMB, VIAGEM, SANCAO, ESPIO_ACOES } from './mundo24'
+import { SETORES, SETOR_ACOES, MOVIMENTOS, MOV_RESP, VEICULOS, LINHAS, MIDIA_ACOES, CATASTROFES, CATAST_RESP } from './sociedade'
+import { INIMIGOS, AMEACAS, GUERRA_ACOES } from './ameacas'
 import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS } from './reunioes'
 import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
 import { makeContacts, ensureContacts, SCRIPTS, ROLES, KIND, ASKS, CHAT, LIGAR } from './contacts'
@@ -72,7 +75,7 @@ const R = () => {
 const rnd = (a, b) => a + R() * (b - a)
 
 function blankWorld() {
-  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50, india: 50, japao: 50, afr: 52, lat: 52, onu: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], blocos: [], tratados: [], ops: [], pactos: [], tech: { done: [], prog: {}, foco: null }, fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
+  return { rel: { eua: 50, china: 50, ue: 50, arg: 55, rus: 45, ori: 50, india: 50, japao: 50, afr: 52, lat: 52, onu: 50 }, wars: [], pending: null, fa: 55, nuc: { angra: 0, sub: 0, enr: 0 }, nucDone: [], blocos: [], tratados: [], ops: [], pactos: [], ameacas: [], guerraDef: null, tech: { done: [], prog: {}, foco: null }, fed: {}, laws: [], pts: 2, lawUsed: false, last: null }
 }
 
 const blank = () => ({
@@ -1930,7 +1933,7 @@ export const worldReady = (pool = 'pts') => game.phase === 'actions' && ptsOf(po
 function ensureWorld() {
   const b = blankWorld()
   const old = game.world || {}
-  game.world = { ...b, ...old, rel: { ...b.rel, ...(old.rel || {}) }, nuc: { ...b.nuc, ...(old.nuc || {}) }, tech: { ...b.tech, ...(old.tech || {}), done: [...((old.tech && old.tech.done) || [])], prog: { ...((old.tech && old.tech.prog) || {}) } }, blocos: [...(old.blocos || [])], tratados: [...(old.tratados || [])], ops: [...(old.ops || [])], pactos: [...(old.pactos || [])], fed: { ...(old.fed || {}) } }
+  game.world = { ...b, ...old, rel: { ...b.rel, ...(old.rel || {}) }, nuc: { ...b.nuc, ...(old.nuc || {}) }, tech: { ...b.tech, ...(old.tech || {}), done: [...((old.tech && old.tech.done) || [])], prog: { ...((old.tech && old.tech.prog) || {}) } }, blocos: [...(old.blocos || [])], tratados: [...(old.tratados || [])], ops: [...(old.ops || [])], pactos: [...(old.pactos || [])], ameacas: [...(old.ameacas || [])], guerraDef: old.guerraDef || null, fed: { ...(old.fed || {}) } }
   for (const d of fedDefs()) if (typeof game.world.fed[d.id] !== 'number') game.world.fed[d.id] = 50
 }
 
@@ -3723,7 +3726,7 @@ function estadoOk(id) {
   const s = game.stats
   const prot = !!p.prot
   if (id === 'defesa') return prot || s.seg < 50
-  if (id === 'sitio') return !!(guerraCivil() || plotAtual() || (prot && s.seg < 40))
+  if (id === 'sitio') return !!(guerraCivil() || plotAtual() || (game.world && game.world.guerraDef) || (prot && s.seg < 40))
   if (id === 'intervencao') return s.seg < 50 || (p.pol != null && p.pol < 35) || prot
   return false
 }
@@ -4131,6 +4134,9 @@ export function roundAvancos() {
   roundAgenda()
   roundElenco()
   roundReunioes()
+  roundAmeacas()
+  roundSociedade()
+  roundMundo24()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -4305,4 +4311,641 @@ export const reuniaoTitulo = (r) => {
   if (r.partner) t += ` · ${partnerName(r.partner)}`
   if (r.fict) t += ` · ${r.fict}`
   return t
+}
+
+/* ---------- BLOCO 22: ameaças externas e guerra defensiva ---------- */
+export const ameacasNow = () => (game.world && game.world.ameacas) || []
+export const guerraDefNow = () => (game.world && game.world.guerraDef) || null
+export const ameacaDef = (tipo) => AMEACAS[tipo]
+export const guerraAcoes = () => GUERRA_ACOES
+const inimigoNome = (id) => (INIMIGOS.find((x) => x.id === id) || { name: id }).name
+export const ameacaTitulo = (a) => AMEACAS[a.tipo].nome(inimigoNome(a.quem))
+export const ameacaDesc = (a) => AMEACAS[a.tipo].desc(inimigoNome(a.quem))
+
+function guerraPoder() {
+  const w = game.world
+  const g = w.guerraDef
+  const tf = (id) => (w.tech.done.includes(id) ? 1 : 0)
+  return Math.round(20 + w.fa * 0.3 + tf('def1') * 8 + tf('def2') * 8 + tf('def3') * 10 + tf('def4') * 6 + g.aliados * 15 + g.mobil * 8 + (g.estado ? 10 : 0))
+}
+export const guerraPoderNow = () => (guerraDefNow() ? guerraPoder() : 0)
+
+function ameacaChance() {
+  const w = game.world
+  let p = 0.09
+  if (w.fa < 30) p += 0.05
+  p -= w.pactos.filter((x) => x.tipo === 'defesa').length * 0.03
+  if (w.tech.done.includes('def4')) p -= 0.04
+  if (w.tech.done.includes('def3')) p -= 0.02
+  return Math.max(0.02, p)
+}
+function iniciarInvasao(quem) {
+  const w = game.world
+  w.ameacas = []
+  w.guerraDef = { quem, E: 60, left: 7, aliados: 0, mobil: 0, estado: false, round: 0 }
+  w.fa = clamp(w.fa + 4)
+  applyFx({ pop: 1, seg: -2.5 }, true)
+  timelineAdd('💥', `${inimigoNome(quem)} invade o território brasileiro`, 'down')
+  toast('💥', `${inimigoNome(quem)} invadiu o país! Veja a aba Mundo.`)
+  cnt('invasao')
+}
+function roundAmeacas() {
+  if (!isPresident()) return
+  const w = game.world
+  const g = w.guerraDef
+  if (g) {
+    g.round++
+    g.left--
+    const mp = guerraPoder()
+    g.E = Math.max(0, Math.min(100, g.E - (mp - 35) / 5))
+    applyFx({ pop: g.round <= 2 ? 0.4 : -0.6, cash: -0.5, seg: -0.4, eco: -0.3 })
+    if (g.E <= 0) return encerrarGuerra('vitoria')
+    if (g.left <= 0) return encerrarGuerra(g.E <= 35 ? 'vitoria' : 'armisticio')
+    return
+  }
+  for (const a of w.ameacas) {
+    a.left--
+    applyFx(AMEACAS[a.tipo].ongoing)
+  }
+  for (const a of w.ameacas.filter((x) => x.left <= 0)) {
+    if (a.tipo === 'ultimato') {
+      iniciarInvasao(a.quem)
+      return
+    }
+    applyFx({ eco: -2, img: -1.5 }, true)
+    toast('⚠️', `${ameacaTitulo(a)} terminou deixando estragos.`)
+  }
+  w.ameacas = w.ameacas.filter((x) => x.left > 0)
+  if (w.ameacas.length || game.total < 6 || R() > ameacaChance()) return
+  const tipo = ['ultimato', 'ultimato', 'ciber', 'bloqueio'][Math.floor(R() * 4)]
+  const q = INIMIGOS[Math.floor(R() * INIMIGOS.length)].id
+  w.ameacas.push({ tipo, quem: q, left: AMEACAS[tipo].left })
+  toast(AMEACAS[tipo].icon, `${ameacaTitulo(w.ameacas[0])}! Responda na aba Mundo.`)
+  timelineAdd(AMEACAS[tipo].icon, ameacaTitulo(w.ameacas[0]), 'down')
+}
+function encerrarGuerra(res) {
+  const w = game.world
+  const g = w.guerraDef
+  w.guerraDef = null
+  if (res === 'vitoria') {
+    applyFx({ pop: 4, img: 3, seg: 2 }, true)
+    w.fa = clamp(w.fa + 6)
+    timelineAdd('🏅', `O Brasil repele a invasão de ${inimigoNome(g.quem)}`, 'up')
+    toast('🏅', 'A invasão foi repelida. Vitória!')
+    cnt('guerravit')
+  } else if (res === 'paz') {
+    applyFx({ pop: 1, img: 1.5, seg: 0.5 }, true)
+    timelineAdd('🕊️', `Cessar-fogo com ${inimigoNome(g.quem)}`, 'flat')
+    toast('🕊️', 'Cessar-fogo assinado.')
+    cnt('guerravit')
+  } else {
+    applyFx({ pop: -3, img: -3, seg: -2 }, true)
+    timelineAdd('📉', `Armistício desfavorável com ${inimigoNome(g.quem)}`, 'down')
+    toast('📉', 'A guerra terminou num armistício desfavorável.')
+  }
+  game.poder.press.push({ icon: '🪖', text: 'O conflito armado chegou ao fim.' })
+  game.poder.press = game.poder.press.slice(-4)
+  save()
+}
+export function ameacaMotivo(idx, respId) {
+  const a = ameacasNow()[idx]
+  const r = a && AMEACAS[a.tipo].resp.find((x) => x.id === respId)
+  const w = game.world
+  if (!r) return 'Indisponível.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (ptsOf('ptsM') < 1) return 'Sem pontos de defesa nesta rodada.'
+  if (r.cash && game.stats.cash < r.cash) return `Sem caixa (${r.cash}).`
+  if (r.need && r.need.fa && w.fa < r.need.fa) return `Relação com as Forças Armadas precisa de ${r.need.fa}.`
+  if (r.need && r.need.tech && !w.tech.done.includes(r.need.tech)) return 'Exige a ciberdefesa nacional (aba de pesquisa).'
+  return ''
+}
+export function responderAmeaca(idx, respId) {
+  if (ameacaMotivo(idx, respId)) return null
+  const w = game.world
+  const a = w.ameacas[idx]
+  const r = AMEACAS[a.tipo].resp.find((x) => x.id === respId)
+  let p = r.p + (r.pFa ? (w.fa - 50) * r.pFa : 0)
+  for (const [k, v] of Object.entries(r.pRel || {})) p += (w.rel[k] - 50) * v
+  for (const [k, v] of Object.entries(r.pTech || {})) if (w.tech.done.includes(k)) p += v
+  p = Math.max(0.1, Math.min(0.95, p))
+  const ok = R() < p
+  const o = ok ? r.ok : r.bad || r.ok
+  spendWorld({ ...o.fx, cash: (o.fx.cash || 0) - (r.cash || 0) }, `${r.name}: ${o.t}`, o.t, 'ptsM')
+  w.last.ok = ok
+  if (o.fa) w.fa = clamp(w.fa + o.fa)
+  if (ok || !r.bad) {
+    w.ameacas.splice(idx, 1)
+    cnt('ameacaok')
+  } else if (r.bad.escalate) {
+    if (a.tipo === 'ultimato') iniciarInvasao(a.quem)
+    else {
+      w.ameacas.splice(idx, 1)
+      applyFx({ eco: -1, pop: -1 }, true)
+    }
+  }
+  save()
+  return { ok, txt: o.t }
+}
+export function guerraMotivo(id) {
+  const g = guerraDefNow()
+  const w = game.world
+  const def = GUERRA_ACOES.find((x) => x.id === id)
+  if (!g || !def) return 'Indisponível.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (ptsOf('ptsM') < 1) return 'Sem pontos de defesa nesta rodada.'
+  if (def.cash && game.stats.cash < def.cash) return `Sem caixa (${def.cash}).`
+  if (id === 'mobilizar' && g.mobil >= 3) return 'As reservas já estão todas mobilizadas.'
+  if (id === 'aliados' && g.aliados > 0) return 'Os aliados já chegaram.'
+  if (id === 'aliados' && g.onu) return 'A ONU já foi acionada.'
+  if (id === 'estado' && g.estado) return 'O estado de guerra já está em vigor.'
+  if (id === 'contra' && guerraPoder() < g.E + 5) return 'Sem força suficiente para uma contra-ofensiva.'
+  void w
+  return ''
+}
+export function agirGuerra(id) {
+  if (guerraMotivo(id)) return null
+  const g = game.world.guerraDef
+  const def = GUERRA_ACOES.find((x) => x.id === id)
+  const w = game.world
+  let txt = ''
+  let fx = { cash: -(def.cash || 0) }
+  if (id === 'mobilizar') {
+    g.mobil++
+    fx = { ...fx, pop: -0.5, eco: -0.3 }
+    txt = 'Reservistas mobilizados: a linha de frente ficou mais forte.'
+  } else if (id === 'aliados') {
+    const al = w.pactos.filter((x) => x.tipo === 'defesa')
+    if (al.length) {
+      g.aliados = al.length
+      for (const x of al) shiftRel(x.partner, 4)
+      fx = { ...fx, img: 1.5 }
+      txt = `${al.length} aliado(s) do pacto de defesa chegaram para ajudar.`
+    } else {
+      g.onu = true
+      shiftRel('onu', 4)
+      if (R() < 0.5) {
+        g.E = Math.max(0, g.E - 6)
+        txt = 'A ONU enviou observadores e a pressão sobre o agressor aumentou.'
+      } else txt = 'Sem aliados formais, a ONU só emitiu notas de preocupação.'
+    }
+  } else if (id === 'estado') {
+    const ok = R() < Math.max(0.15, Math.min(0.92, 0.35 + (game.stats.cong - 30) / 80))
+    if (ok) {
+      g.estado = true
+      fx = { ...fx, pop: 1, cong: -1 }
+      txt = 'O Congresso autorizou o estado de guerra. O país inteiro entra em esforço de guerra.'
+    } else {
+      fx = { ...fx, cong: -2, img: -1 }
+      txt = 'O Congresso negou o estado de guerra e a oposição acusou exagero.'
+    }
+  } else if (id === 'contra') {
+    const p = Math.max(0.2, Math.min(0.85, 0.5 + (guerraPoder() - g.E) / 100))
+    if (R() < p) {
+      g.E = Math.max(0, g.E - 15)
+      fx = { ...fx, pop: 1.5, img: 1 }
+      txt = 'A contra-ofensiva avançou e tomou a iniciativa.'
+    } else {
+      fx = { ...fx, pop: -2, seg: -1 }
+      w.fa = clamp(w.fa - 3)
+      txt = 'A contra-ofensiva falhou e houve muitas baixas.'
+    }
+  } else if (id === 'paz') {
+    const p = Math.max(0.15, Math.min(0.9, 0.9 - g.E / 100))
+    if (R() < p) {
+      spendWorld(fx, `Cessar-fogo com ${inimigoNome(g.quem)}.`, 'O cessar-fogo foi aceito.', 'ptsM')
+      encerrarGuerra(g.E <= 45 ? 'paz' : 'armisticio')
+      return { txt: 'O cessar-fogo foi aceito.' }
+    }
+    fx = { ...fx, img: -0.5 }
+    txt = 'O agressor recusou o cessar-fogo: ainda se sente forte.'
+  }
+  spendWorld(fx, `${def.name}: ${txt}`, txt, 'ptsM')
+  save()
+  return { txt }
+}
+
+/* ---------- BLOCO 23: economia e sociedade ---------- */
+const socBase = () => ({
+  setores: Object.fromEntries(SETORES.map((x) => [x.id, 50])),
+  midia: Object.fromEntries(VEICULOS.map((v, i) => [v.id, { rel: [38, 50, 55, 45, 30][i], verbas: 0, calado: 0 }])),
+  movs: [], volta: null, catast: null, used: {},
+})
+export const socNow = () => (game.poder && game.poder.soc) || socBase()
+function socEnsure() {
+  ensurePoder()
+  if (!game.poder.soc || !game.poder.soc.setores || !game.poder.soc.midia) game.poder.soc = { ...socBase(), ...(game.poder.soc || {}) }
+  return game.poder.soc
+}
+export const setoresDef = () => SETORES
+export const setorAcoes = () => SETOR_ACOES
+export const movDef = (id) => MOVIMENTOS.find((x) => x.id === id)
+export const movResp = () => MOV_RESP
+export const veiculos = () => VEICULOS
+export const midiaAcoes = () => MIDIA_ACOES
+export const catastDef = (id) => CATASTROFES.find((x) => x.id === id)
+export const catastResp = () => CATAST_RESP
+export const linhaDe = (rel) => (rel < 35 ? LINHAS.oposicao : rel > 65 ? LINHAS.governista : LINHAS.neutra)
+export const setorHumor = (v) => (v >= 70 ? 'satisfeito' : v >= 45 ? 'neutro' : v >= 30 ? 'insatisfeito' : 'em revolta')
+const pick = (a) => a[Math.floor(R() * a.length)]
+function socCusto(cash) {
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (cash && game.stats.cash < cash) return `Sem caixa (${cash}).`
+  return ''
+}
+function roundSociedade() {
+  const sc = socEnsure()
+  sc.used = {}
+  // setores: satisfação e efeitos
+  const eco = game.stats.eco
+  for (const st of SETORES) {
+    let v = sc.setores[st.id]
+    v = clamp(v + (eco - 50) / 60 - (v - 50) * 0.05)
+    sc.setores[st.id] = v
+    if (v >= 65) {
+      const k = (v - 50) / 50
+      const fx = {}
+      for (const a in st.pass) fx[a] = st.pass[a] * k
+      applyFx(fx)
+    } else if (v <= 30) {
+      applyFx({ cong: -0.5, eco: -0.3 })
+      if (R() < 0.15) toast('📢', `${st.bancada} ataca o governo no plenário.`)
+    }
+  }
+  // mídia
+  for (const vc of VEICULOS) {
+    const m = sc.midia[vc.id]
+    if (m.calado > 0) { m.calado--; continue }
+    m.rel = clamp(m.rel + (game.stats.pop - 50) / 80)
+    const k = vc.aud / 60
+    if (m.rel < 35) applyFx({ pop: -0.2 * k })
+    else if (m.rel > 65) applyFx({ pop: 0.12 * k })
+    if (m.verbas > 0 && R() < 0.05 * m.verbas) {
+      applyFx({ img: -4, pop: -1.5 }, true)
+      m.verbas = 0
+      m.rel = clamp(m.rel - 25)
+      timelineAdd('🗞️', `Vaza esquema de verbas ao ${vc.name}`, 'down')
+      toast('🗞️', `Escândalo: verbas publicitárias ao ${vc.name} vieram à tona.`)
+    }
+  }
+  // movimento social
+  if (sc.volta && --sc.volta.in <= 0) {
+    const d = movDef(sc.volta.id)
+    sc.movs.push({ id: d.id, quem: sc.volta.quem, left: d.left, volta: true })
+    toast(d.icon, `${d.name} volta mais forte, liderada por ${sc.volta.quem}.`)
+    sc.volta = null
+  }
+  for (const mv of sc.movs) { mv.left--; applyFx(movDef(mv.id).ongoing) }
+  for (const mv of sc.movs.filter((x) => x.left <= 0)) {
+    applyFx({ pop: -1.5, img: -1 }, true)
+    toast('📉', `${movDef(mv.id).name} se desgastou, mas deixou marcas.`)
+  }
+  sc.movs = sc.movs.filter((x) => x.left > 0)
+  if (!sc.movs.length && game.total >= 4 && R() < 0.1) {
+    const d = pick(MOVIMENTOS)
+    const quem = pick(d.quem)
+    sc.movs.push({ id: d.id, quem, left: d.left })
+    toast(d.icon, `${d.name}, liderada por ${quem}. Veja a aba Mundo.`)
+    timelineAdd(d.icon, `${d.name} liderada por ${quem}`, 'down')
+  }
+  // catástrofe
+  if (sc.catast) {
+    sc.catast.left--
+    applyFx(catastDef(sc.catast.id).ongoing)
+    if (sc.catast.left <= 0) {
+      applyFx({ img: -1, pop: -1 }, true)
+      toast('⚠️', `${catastDef(sc.catast.id).name} terminou sem resposta do governo.`)
+      sc.catast = null
+    }
+  } else if (game.total >= 3 && R() < 0.07) {
+    const d = pick(CATASTROFES)
+    sc.catast = { id: d.id, left: d.left }
+    toast(d.icon, `${d.name}! Responda na aba Mundo.`)
+    timelineAdd(d.icon, d.name, 'down')
+  }
+}
+export function setorMotivo(id, acao) {
+  const a = SETOR_ACOES.find((x) => x.id === acao)
+  if (!a) return 'Indisponível.'
+  if (socNow().used['s:' + id]) return 'O setor já foi tratado nesta rodada.'
+  return socCusto(a.cash)
+}
+export function setorAgir(id, acao) {
+  if (setorMotivo(id, acao)) return null
+  const sc = socEnsure()
+  const st = SETORES.find((x) => x.id === id)
+  const a = SETOR_ACOES.find((x) => x.id === acao)
+  sc.used['s:' + id] = 1
+  let txt = ''
+  const fx = { cash: -(a.cash || 0) }
+  if (acao === 'agradar') {
+    sc.setores[id] = clamp(sc.setores[id] + 18)
+    for (const o of SETORES) if (o.id !== id) sc.setores[o.id] = clamp(sc.setores[o.id] - 3)
+    txt = `${st.name}: você atendeu o pedido (${st.agrada.toLowerCase()}).`
+  } else if (acao === 'regular') {
+    sc.setores[id] = clamp(sc.setores[id] - 15)
+    fx.img = 1; fx.cong = -1
+    txt = `${st.name}: regras mais duras irritaram o setor.`
+  } else {
+    sc.setores[id] = clamp(sc.setores[id] + 6)
+    fx.cong = 2
+    txt = `${st.bancada} saiu da reunião mais próxima do governo.`
+  }
+  applyFx(fx, true)
+  game.poder.press.push({ icon: st.icon, text: txt })
+  game.poder.press = game.poder.press.slice(-4)
+  cnt('setor')
+  save()
+  return { txt }
+}
+export function movMotivo(idx, resp) {
+  const r = MOV_RESP.find((x) => x.id === resp)
+  if (!r || !socNow().movs[idx]) return 'Indisponível.'
+  if (socNow().used['m' + idx]) return 'Você já respondeu a este movimento nesta rodada.'
+  return socCusto(r.cash)
+}
+export function movAgir(idx, resp) {
+  if (movMotivo(idx, resp)) return null
+  const sc = socEnsure()
+  const mv = sc.movs[idx]
+  const d = movDef(mv.id)
+  const r = MOV_RESP.find((x) => x.id === resp)
+  sc.used['m' + idx] = 1
+  let ok = true
+  if (r.p) ok = R() < r.p
+  const o = ok ? r.ok : r.bad
+  applyFx({ ...o, cash: -(r.cash || 0) }, true)
+  let txt
+  if (r.skip) txt = `Você preferiu esperar. ${mv.quem} segue mobilizando.`
+  else if (resp === 'dialogar' && !ok) txt = `${mv.quem} saiu da reunião sem acordo.`
+  else {
+    sc.movs.splice(idx, 1)
+    if (r.crescer) { sc.volta = { id: mv.id, quem: mv.quem, in: 2 }; txt = `A repressão encerrou o ato, mas ${mv.quem} promete voltar.` }
+    else txt = resp === 'negociar' ? `Acordo com ${mv.quem}: a pauta (${d.pauta.toLowerCase()}) foi atendida em parte.` : `${mv.quem} aceitou desmobilizar após a conversa.`
+    if (resp === 'dialogar') agendar('greve')
+  }
+  timelineAdd(d.icon, txt, ok && !r.crescer ? 'up' : 'flat')
+  save()
+  return { ok, txt }
+}
+export function midiaMotivo(id, acao) {
+  const a = MIDIA_ACOES.find((x) => x.id === acao)
+  if (!a || !VEICULOS.find((v) => v.id === id)) return 'Indisponível.'
+  if (socNow().used['v:' + id]) return 'O veículo já foi tratado nesta rodada.'
+  return socCusto(a.cash)
+}
+export function midiaAgir(id, acao) {
+  if (midiaMotivo(id, acao)) return null
+  const sc = socEnsure()
+  const v = VEICULOS.find((x) => x.id === id)
+  const m = sc.midia[id]
+  sc.used['v:' + id] = 1
+  const a = MIDIA_ACOES.find((x) => x.id === acao)
+  const fx = { cash: -(a.cash || 0) }
+  let txt = ''
+  if (acao === 'verba') { m.rel = clamp(m.rel + 18); m.verbas++; txt = `${v.name} recebeu verba publicitária e amaciou a cobertura.` }
+  else if (acao === 'entrevista') {
+    if (R() < 0.7) { m.rel = clamp(m.rel + 8); fx.pop = 0.8; txt = `A entrevista ao ${v.name} foi bem recebida.` }
+    else { m.rel = clamp(m.rel - 6); fx.img = -0.7; txt = `Você escorregou numa pergunta do ${v.name}.` }
+  } else { m.calado = 3; m.rel = clamp(m.rel - 10); fx.img = -2; txt = `${v.name} foi processado e ficou calado por 3 rodadas, mas a fama de censor pesa.` }
+  applyFx(fx, true)
+  cnt('midia')
+  save()
+  return { txt }
+}
+export function catastMotivo(resp) {
+  const r = CATAST_RESP.find((x) => x.id === resp)
+  if (!r || !socNow().catast) return 'Indisponível.'
+  if (socNow().used.c) return 'Você já respondeu a esta catástrofe nesta rodada.'
+  return socCusto(r.cash)
+}
+export function catastAgir(resp) {
+  if (catastMotivo(resp)) return null
+  const sc = socEnsure()
+  sc.used.c = 1
+  const d = catastDef(sc.catast.id)
+  const r = CATAST_RESP.find((x) => x.id === resp)
+  const ok = R() < r.p
+  applyFx({ ...(ok ? r.ok : r.bad), cash: -(r.cash || 0) }, true)
+  const txt = ok ? `${d.name}: ${r.name} deu resultado.` : `${d.name}: ${r.name} não convenceu.`
+  if (ok) { sc.catast = null; cnt('catastok') }
+  else sc.catast.left = Math.max(1, sc.catast.left)
+  timelineAdd(d.icon, txt, ok ? 'up' : 'down')
+  save()
+  return { ok, txt }
+}
+
+/* ---------- BLOCO 24: crises globais, diplomacia avançada, espionagem ---------- */
+const m24Base = () => ({ crise: null, emb: {}, sancoes: [], embargo: null, espio: { rede: 0, contra: 20 }, eleicao: null, viagem: {}, used: {}, prox: 8 })
+export const m24Now = () => (game.world && game.world.m24) || m24Base()
+function m24() {
+  const w = game.world
+  if (!w.m24 || !w.m24.espio) w.m24 = { ...m24Base(), ...(w.m24 || {}) }
+  return w.m24
+}
+export const criseDef = (id) => CRISES.find((x) => x.id === id)
+export const criseResp = () => CRISE_RESP
+export const embDefs = () => EMB
+export const espioAcoes = () => ESPIO_ACOES
+export const viagemInfo = () => VIAGEM
+const partnerNome = (id) => (PARTNERS.find((x) => x.id === id) || { name: id }).name
+const gate = (pool = 'pts', cash = 0) => {
+  if (!isPresident()) return 'Só o presidente conduz a política externa.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (ptsOf(pool) < 1) return pool === 'ptsM' ? 'Sem pontos de defesa nesta rodada.' : 'Sem pontos de diplomacia nesta rodada.'
+  if (cash && game.stats.cash < cash) return `Sem caixa (${cash}).`
+  return ''
+}
+function roundMundo24() {
+  if (!isPresident()) return
+  const w = game.world
+  const m = m24()
+  m.used = {}
+  const p = game.poder
+  // embaixadores
+  for (const [pid, e] of Object.entries(m.emb)) {
+    const d = EMB.find((x) => x.id === e)
+    shiftRel(pid, d.rel)
+    if (d.gafe && R() < d.gafe) { shiftRel(pid, -4); applyFx({ img: -0.8 }, true); toast('🎙️', `Gafe do embaixador em ${partnerNome(pid)}.`) }
+  }
+  for (const k in m.viagem) if (m.viagem[k] > 0) m.viagem[k]--
+  // sanções impostas
+  for (const x of m.sancoes) { x.left--; shiftRel(x.alvo, -1.2); applyFx({ eco: -0.25 }) }
+  m.sancoes = m.sancoes.filter((x) => x.left > 0)
+  // embargo sofrido
+  if (m.embargo) {
+    m.embargo.left--
+    applyFx({ eco: -0.8, cash: -0.3 })
+    if (m.embargo.left <= 0) { toast('🚢', 'O embargo foi levantado.'); m.embargo = null }
+  } else if (game.total >= 6 && !m.crise) {
+    const cands = PARTNERS.filter((x) => w.rel[x.id] < 28 && x.id !== 'onu')
+    if (cands.length && R() < 0.1) {
+      const c = cands[Math.floor(R() * cands.length)]
+      m.embargo = { quem: c.id, left: 3 }
+      toast('🚢', `${c.name} decreta embargo contra o Brasil.`)
+      timelineAdd('🚢', `Embargo de ${c.name}`, 'down')
+    }
+  }
+  // espionagem
+  m.espio.rede = Math.max(0, m.espio.rede - 2)
+  if (game.total >= 5 && R() < 0.08) {
+    if (R() * 100 < m.espio.contra + 15) { applyFx({ img: 1.5 }, true); toast('🛡️', 'A contraespionagem pegou um agente estrangeiro.'); timelineAdd('🛡️', 'Espião estrangeiro capturado', 'up') }
+    else { applyFx({ img: -2, seg: -1, eco: -0.5 }, true); toast('🕵️', 'Vazamento: segredos do governo foram roubados.'); timelineAdd('🕵️', 'Segredos vazados por espionagem', 'down') }
+  }
+  // crise global
+  if (m.crise) {
+    m.crise.left--
+    applyFx(criseDef(m.crise.id).ongoing)
+    if (m.crise.left <= 0) { applyFx({ img: -1, eco: -1 }, true); toast('⚠️', `${criseDef(m.crise.id).name} passou sem uma resposta do governo.`); m.crise = null }
+  } else if (game.total >= 5 && R() < 0.06) {
+    const d = CRISES[Math.floor(R() * CRISES.length)]
+    m.crise = { id: d.id, left: d.left }
+    toast(d.icon, `${d.name}! Responda na aba Mundo.`)
+    timelineAdd(d.icon, d.name, 'down')
+  }
+  // eleição em outro país
+  if (m.eleicao) {
+    const el = m.eleicao
+    if (--el.left <= 0) {
+      const aliadoVence = R() < 0.5 + (el.apoio === 'aliado' ? 0.2 : el.apoio === 'oposto' ? -0.2 : 0)
+      let d = aliadoVence ? 3 : -3
+      if (el.apoio === 'aliado') d = aliadoVence ? 8 : -8
+      if (el.apoio === 'oposto') d = aliadoVence ? -6 : 6
+      shiftRel(el.pais, d)
+      timelineAdd('🗳️', `${aliadoVence ? 'Candidato aliado' : 'Candidato opositor'} vence eleição em ${partnerNome(el.pais)}`, d > 0 ? 'up' : 'down')
+      toast('🗳️', `${partnerNome(el.pais)}: ${aliadoVence ? 'candidato amigo do Brasil' : 'candidato crítico ao Brasil'} venceu.`)
+      m.eleicao = null
+    }
+  } else if (--m.prox <= 0 && game.total >= 4) {
+    const c = PARTNERS.filter((x) => x.id !== 'onu')
+    m.eleicao = { pais: c[Math.floor(R() * c.length)].id, left: 2, apoio: null }
+    m.prox = 8
+    toast('🗳️', `Eleição em ${partnerNome(m.eleicao.pais)}: você pode apoiar um lado.`)
+  }
+  void p
+}
+export function criseMotivo(id) {
+  const r = CRISE_RESP.find((x) => x.id === id)
+  if (!r || !m24Now().crise) return 'Indisponível.'
+  return gate('pts', r.cash)
+}
+export function criseAgir(id) {
+  if (criseMotivo(id)) return null
+  const r = CRISE_RESP.find((x) => x.id === id)
+  const m = m24()
+  const d = criseDef(m.crise.id)
+  const p = Math.max(0.15, Math.min(0.92, r.base + (r.rel ? (game.world.rel[r.rel] - 50) / 200 : 0)))
+  const ok = R() < p
+  const o = ok ? r.ok : r.bad
+  spendWorld({ ...o, cash: -(r.cash || 0) }, `${d.name}: ${r.name}`, ok ? `${r.name}: deu resultado.` : `${r.name}: não deu certo.`)
+  if (ok) { m.crise = null; cnt('criseok') }
+  timelineAdd(d.icon, ok ? `${d.name}: ${r.name} funcionou` : `${d.name}: ${r.name} falhou`, ok ? 'up' : 'down')
+  return { ok, txt: game.world.last.text }
+}
+export function embMotivo(pid, tipo) {
+  const d = EMB.find((x) => x.id === tipo)
+  if (!d) return 'Indisponível.'
+  if (m24Now().emb[pid] === tipo) return 'Já é o embaixador atual.'
+  return gate('pts', d.cash)
+}
+export function nomearEmb(pid, tipo) {
+  if (embMotivo(pid, tipo)) return null
+  const d = EMB.find((x) => x.id === tipo)
+  m24().emb[pid] = tipo
+  spendWorld({ cash: -d.cash }, `Embaixada em ${partnerNome(pid)}: ${d.name}`, `${d.name} nomeado para ${partnerNome(pid)}.`)
+  return { txt: game.world.last.text }
+}
+export function viagemMotivo(pid) {
+  if ((m24Now().viagem[pid] || 0) > 0) return `Nova viagem em ${m24Now().viagem[pid]} rodada(s).`
+  return gate('pts', VIAGEM.cash)
+}
+export function viajar(pid) {
+  if (viagemMotivo(pid)) return null
+  const rel = game.world.rel[pid]
+  const ok = R() < Math.max(0.2, Math.min(0.92, 0.55 + (rel - 50) / 150))
+  m24().viagem[pid] = VIAGEM.cooldown
+  if (ok) {
+    spendWorld({ img: 1.2, pop: 0.6, eco: 0.5, cash: -VIAGEM.cash }, `Visita oficial a ${partnerNome(pid)}`, `Visita a ${partnerNome(pid)} rendeu acordos e fotos boas.`)
+    shiftRel(pid, 8)
+  } else {
+    spendWorld({ img: -1, cash: -VIAGEM.cash }, `Visita oficial a ${partnerNome(pid)}`, `A visita a ${partnerNome(pid)} terminou em constrangimento.`)
+    shiftRel(pid, -3)
+  }
+  game.world.last.ok = ok
+  return { ok, txt: game.world.last.text }
+}
+export function sancaoMotivo(pid) {
+  if (m24Now().sancoes.some((x) => x.alvo === pid)) return 'Já há sanção em vigor.'
+  if (pid === 'onu') return 'Não se sanciona o organismo multilateral.'
+  return gate('pts', 0)
+}
+export function sancionar(pid) {
+  if (sancaoMotivo(pid)) return null
+  m24().sancoes.push({ alvo: pid, left: SANCAO.left })
+  spendWorld({ img: 0.8 }, `Sanções a ${partnerNome(pid)}`, `Sanções impostas a ${partnerNome(pid)}: a relação esfria e o comércio sente.`)
+  shiftRel(pid, -10)
+  return { txt: game.world.last.text }
+}
+export function embargoMotivo(id) {
+  const m = m24Now()
+  if (!m.embargo) return 'Indisponível.'
+  if (id === 'negociar') return gate('pts', 2)
+  return gate('pts', 0)
+}
+export function resolverEmbargo(id) {
+  if (embargoMotivo(id)) return null
+  const m = m24()
+  const q = m.embargo.quem
+  if (id === 'negociar') {
+    spendWorld({ cash: -2, eco: 1 }, `Fim do embargo de ${partnerNome(q)}`, 'Você negociou e o embargo caiu.')
+    shiftRel(q, 10)
+    m.embargo = null
+  } else {
+    const ok = R() < 0.4 + (game.world.rel.onu - 50) / 200
+    spendWorld({ img: ok ? 1.5 : -0.5 }, `Embargo de ${partnerNome(q)} levado à OMC`, ok ? 'A OMC deu razão ao Brasil e o embargo foi suspenso.' : 'A OMC demora e o embargo segue.')
+    if (ok) m.embargo = null
+  }
+  return { txt: game.world.last.text }
+}
+export function espioMotivo(id, alvo) {
+  const a = ESPIO_ACOES.find((x) => x.id === id)
+  if (!a) return 'Indisponível.'
+  if (id === 'missao' && m24Now().espio.rede < 30) return 'Exige rede de agentes 30+.'
+  if (id === 'missao' && !alvo) return 'Escolha um país.'
+  return gate('ptsM', a.cash)
+}
+export function espiar(id, alvo) {
+  if (espioMotivo(id, alvo)) return null
+  const a = ESPIO_ACOES.find((x) => x.id === id)
+  const e = m24().espio
+  let say
+  if (id === 'rede') { e.rede = clamp(e.rede + 20); say = 'Rede de agentes ampliada.' }
+  else if (id === 'contra') { e.contra = clamp(e.contra + 20); say = 'Contraespionagem reforçada.' }
+  else {
+    const ok = R() < Math.max(0.2, Math.min(0.9, 0.3 + e.rede / 150))
+    e.rede = Math.max(0, e.rede - 10)
+    if (ok) {
+      spendWorld({ eco: 1.2, img: 0.5, cash: -a.cash }, `Missão secreta em ${partnerNome(alvo)}`, `A missão em ${partnerNome(alvo)} trouxe um segredo valioso.`, 'ptsM')
+      cnt('espiaok')
+    } else {
+      spendWorld({ img: -3, cash: -a.cash }, `Missão secreta em ${partnerNome(alvo)}`, `Agente flagrado em ${partnerNome(alvo)}: crise diplomática.`, 'ptsM')
+      shiftRel(alvo, -12)
+    }
+    game.world.last.ok = ok
+    return { ok, txt: game.world.last.text }
+  }
+  spendWorld({ cash: -a.cash }, say, say, 'ptsM')
+  return { txt: say }
+}
+export function eleicaoMotivo() {
+  const el = m24Now().eleicao
+  if (!el) return 'Indisponível.'
+  if (el.apoio) return 'Você já definiu sua posição.'
+  return gate('pts', 1)
+}
+export function apoiarEleicao(lado) {
+  if (eleicaoMotivo()) return null
+  const m = m24()
+  m.eleicao.apoio = lado
+  spendWorld({ cash: -1 }, `Posição na eleição de ${partnerNome(m.eleicao.pais)}`, lado === 'neutro' ? 'Você manteve neutralidade.' : `Você apoiou o candidato ${lado === 'aliado' ? 'amigo' : 'da oposição'}.`)
+  return { txt: game.world.last.text }
 }

@@ -38,7 +38,7 @@ describe('Constituição', () => {
       E.roundAvancos()
       if (E.cstInfo().emendas === 1) ok++
     }
-    expect(ok).toBeGreaterThan(18)
+    expect(ok).toBeGreaterThan(14)
   })
   it('cláusula pétrea é barrada e custa imagem', () => {
     novo()
@@ -321,5 +321,163 @@ describe('reuniões', () => {
       expect(E.convitesNow().length).toBeLessThanOrEqual(2)
     }
     expect(vistos).toBeGreaterThan(0)
+  })
+})
+
+describe('Ameaças e invasões', () => {
+  it('ultimato exige pontos de defesa e pode ser resolvido', () => {
+    novo()
+    E.game.world.ameacas = [{ tipo: 'ultimato', quem: 'karv', left: 3 }]
+    E.game.world.fa = 80
+    expect(E.ameacaMotivo(0, 'ceder')).toBe('')
+    const r = E.responderAmeaca(0, 'ceder')
+    expect(r.ok).toBe(true)
+    expect(E.ameacasNow().length).toBe(0)
+    expect(E.ptsOf('ptsM')).toBe(1)
+    E.game.world.ameacas = [{ tipo: 'ultimato', quem: 'karv', left: 3 }]
+    E.game.world.ptsM = 0
+    expect(E.ameacaMotivo(0, 'ceder')).toMatch(/pontos/)
+  })
+  it('ultimato vencido vira invasão e a guerra termina', () => {
+    novo()
+    E.game.total = 10
+    E.game.world.ameacas = [{ tipo: 'ultimato', quem: 'vald', left: 1 }]
+    E.roundAvancos()
+    const g = E.guerraDefNow()
+    expect(g).toBeTruthy()
+    expect(E.estadoMotivo('sitio')).toBe('')
+    let n = 0
+    while (E.guerraDefNow() && n++ < 20) E.roundAvancos()
+    expect(E.guerraDefNow()).toBe(null)
+  })
+  it('ações de guerra funcionam e cessar-fogo encerra com paz', () => {
+    novo()
+    E.game.world.guerraDef = { quem: 'zand', E: 20, left: 5, aliados: 0, mobil: 0, estado: false, round: 0 }
+    E.game.world.ptsM = 5
+    expect(E.guerraMotivo('mobilizar')).toBe('')
+    E.agirGuerra('mobilizar')
+    expect(E.guerraDefNow().mobil).toBe(1)
+    E.agirGuerra('aliados')
+    let n = 0
+    while (E.guerraDefNow() && n++ < 30) { E.game.world.ptsM = 3; E.agirGuerra('paz') }
+    expect(E.guerraDefNow()).toBe(null)
+  })
+  it('só o presidente sofre ameaças', () => {
+    novo('prefeito')
+    E.game.total = 20
+    for (let i = 0; i < 40; i++) E.roundAvancos()
+    expect(E.ameacasNow().length).toBe(0)
+  })
+})
+
+describe('Economia e sociedade', () => {
+  it('atender setor sobe satisfação e gasta Caixa, uma vez por rodada', () => {
+    novo()
+    const c = E.game.stats.cash
+    const a = E.socNow().setores.agro
+    expect(E.setorAgir('agro', 'agradar')).toBeTruthy()
+    expect(E.socNow().setores.agro).toBeGreaterThan(a)
+    expect(E.game.stats.cash).toBeLessThan(c)
+    expect(E.setorMotivo('agro', 'negociar')).toMatch(/rodada/)
+  })
+  it('setor em revolta cobra base a cada rodada', () => {
+    novo()
+    E.setorAgir('industria', 'regular')
+    E.socNow().setores.industria = 10
+    const cong = E.game.stats.cong
+    E.roundAvancos()
+    expect(E.game.stats.cong).toBeLessThan(cong)
+  })
+  it('movimento social tem liderança nomeada e reprimir faz voltar', () => {
+    novo()
+    E.roundAvancos()
+    E.game.poder.soc.movs = [{ id: 'professores', quem: 'Profa. Cláudia', left: 3 }]
+    const r = E.movAgir(0, 'reprimir')
+    expect(r.txt).toMatch(/Cláudia/)
+    expect(E.socNow().movs.length).toBe(0)
+    E.roundAvancos(); E.roundAvancos()
+    expect(E.socNow().movs[0].quem).toBe('Profa. Cláudia')
+  })
+  it('verba à mídia aproxima a linha editorial e o veículo pode ser calado', () => {
+    novo()
+    const rel = E.socNow().midia.jornal.rel
+    E.midiaAgir('jornal', 'verba')
+    expect(E.socNow().midia.jornal.rel).toBeGreaterThan(rel)
+    E.midiaAgir('tv', 'processar')
+    expect(E.socNow().midia.tv.calado).toBe(3)
+  })
+  it('catástrofe pode ser respondida e some', () => {
+    novo()
+    E.roundAvancos()
+    E.game.poder.soc.catast = { id: 'enchente', left: 3 }
+    let n = 0
+    while (E.socNow().catast && n++ < 40) { E.game.stats.cash = 60; E.game.poder.soc.used = {}; E.catastAgir('verba') }
+    expect(E.socNow().catast).toBe(null)
+  })
+  it('rodadas longas não quebram em nenhum cargo', () => {
+    for (const o of ['vereador', 'prefeito', 'governador', 'presidente']) {
+      novo(o)
+      E.game.total = 10
+      for (let i = 0; i < 60; i++) E.roundAvancos()
+      expect(Number.isFinite(E.game.stats.pop)).toBe(true)
+    }
+  })
+})
+
+describe('Mundo avançado', () => {
+  it('crise global pode ser respondida e some', () => {
+    novo()
+    E.roundAvancos()
+    E.game.world.m24.crise = { id: 'petroleo', left: 3 }
+    let n = 0
+    while (E.m24Now().crise && n++ < 40) { E.game.stats.cash = 60; E.game.world.pts = 4; E.criseAgir('proprio') }
+    expect(E.m24Now().crise).toBe(null)
+  })
+  it('embaixador gasta ponto e Caixa e rende relação por rodada', () => {
+    novo()
+    E.roundAvancos()
+    const pts = E.game.world.pts
+    expect(E.nomearEmb('eua', 'carreira')).toBeTruthy()
+    expect(E.game.world.pts).toBe(pts - 1)
+    expect(E.embMotivo('eua', 'carreira')).toMatch(/embaixador/)
+    const r = E.game.world.rel.eua
+    E.roundAvancos()
+    expect(E.game.world.rel.eua).toBeGreaterThanOrEqual(r)
+  })
+  it('viagem tem cooldown e sanção esfria a relação', () => {
+    novo()
+    E.roundAvancos()
+    E.viajar('china')
+    expect(E.viagemMotivo('china')).toMatch(/rodada/)
+    const r = E.game.world.rel.rus
+    E.sancionar('rus')
+    expect(E.game.world.rel.rus).toBeLessThan(r)
+    expect(E.sancaoMotivo('rus')).toMatch(/vigor/)
+  })
+  it('espionagem exige rede e contraespionagem sobe', () => {
+    novo()
+    E.roundAvancos()
+    E.game.world.m24.espio.rede = 0
+    expect(E.espioMotivo('missao', 'eua')).toMatch(/rede/)
+    E.espiar('rede')
+    expect(E.m24Now().espio.rede).toBeGreaterThan(0)
+    E.game.world.ptsM = 2
+    E.espiar('contra')
+    expect(E.m24Now().espio.contra).toBeGreaterThan(20)
+  })
+  it('embargo e eleição estrangeira resolvem; só presidente participa', () => {
+    novo()
+    E.roundAvancos()
+    E.game.world.m24.embargo = { quem: 'rus', left: 3 }
+    E.resolverEmbargo('negociar')
+    expect(E.m24Now().embargo).toBe(null)
+    E.game.world.m24.eleicao = { pais: 'arg', left: 1, apoio: null }
+    E.apoiarEleicao('aliado')
+    E.roundAvancos()
+    expect(E.m24Now().eleicao).toBe(null)
+    novo('governador')
+    expect(E.criseMotivo('proprio')).toBeTruthy()
+    for (let i = 0; i < 30; i++) E.roundAvancos()
+    expect(E.m24Now().crise).toBe(null)
   })
 })

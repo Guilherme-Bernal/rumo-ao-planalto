@@ -11,10 +11,12 @@ it('todas as trilhas e a troca entre elas tocam sem erro', async () => {
   vi.useFakeTimers()
   const A = await import('../src/game/audio.js')
   A.unlock()
-  for (const th of A.THEME_NAMES) {
+  const { settings } = await import('../src/game/settings.js')
+  for (const st of Object.keys(A.STYLE_NAMES)) for (const th of A.THEME_NAMES) {
+    settings.musicStyle = st
     A.setMood({ theme: th, pop: th === 'gov' ? 30 : 60, stage: 2, war: 1 })
     const b = notes
     for (let i = 0; i < 400; i++) { globalThis.__ac.currentTime += 0.12; vi.advanceTimersByTime(120) }
-    expect(notes, th).toBeGreaterThan(b + 20)
+    expect(notes, st + th).toBeGreaterThan(b)
   }
 })

@@ -57,7 +57,7 @@ function ensure() {
   const fb = ctx.createGain()
   fb.gain.value = 0.35
   const wet = ctx.createGain()
-  wet.gain.value = 0.28
+  wet.gain.value = 0.14
   musicBus.connect(lp)
   lp.connect(master)
   lp.connect(dly)
@@ -78,16 +78,23 @@ function applyVolumes() {
   sfxBus.gain.setTargetAtTime(settings.sfx ? settings.volume * 0.5 : 0, t, 0.05)
 }
 
-function tone(freq, t, dur, { type = 'sine', gain = 0.3, attack = 0.01, release = 0.3, dest = musicBus } = {}) {
+function tone(freq, t, dur, { type = 'sine', gain = 0.3, attack = 0.01, release = 0.3, dest = musicBus, lp = 0, detune = 0 } = {}) {
   const o = ctx.createOscillator()
   const g = ctx.createGain()
+  if (detune) o.detune.value = detune
   o.type = type
   o.frequency.setValueAtTime(freq, t)
   g.gain.setValueAtTime(0.0001, t)
   g.gain.linearRampToValueAtTime(gain, t + attack)
   g.gain.setValueAtTime(gain, Math.max(t + attack, t + dur - release))
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
-  o.connect(g)
+  if (lp) {
+    const f = ctx.createBiquadFilter()
+    f.type = 'lowpass'
+    f.frequency.value = lp
+    o.connect(f)
+    f.connect(g)
+  } else o.connect(g)
   g.connect(dest)
   o.start(t)
   o.stop(t + dur + 0.05)
@@ -150,59 +157,97 @@ function makePhrase(th) {
   return bars
 }
 
-function scheduleStep(t, s) {
-  const th = themeNow()
+// ---------- estilos: cada um toca a mesma harmonia (escala + progressão da trilha) com outros instrumentos ----------
+export const STYLE_NAMES = { auto: 'Automático (muda com a situação)', bossa: 'Bossa e samba', synth: 'Synthwave', cinema: 'Cinematográfico', jazz: 'Jazz de salão', ambiente: 'Ambiente (calmo)' }
+const AUTO_STYLE = { menu: 'ambiente', gov: 'bossa', campanha: 'synth', apuracao: 'synth', crise: 'cinema', guerra: 'cinema', tribunal: 'jazz', vitoria: 'bossa', derrota: 'ambiente' }
+const styleNow = () => (settings.musicStyle && settings.musicStyle !== 'auto' ? settings.musicStyle : AUTO_STYLE[mood.theme] || 'bossa')
+
+function harmony(th) {
   const minor = mood.theme === 'gov' && mood.pop < 45
   const scale = minor ? th.minor : th.scale
   const prog = minor ? th.progMinor : th.prog
   const root = ROOTS[Math.min(3, Math.max(0, mood.stage))] + (mood.theme === 'menu' ? 3 : 0)
   const d = prog[bar % prog.length]
-  const tri = [deg(scale, d), deg(scale, d + 2), deg(scale, d + 4)]
-  const ch = th.seventh ? [...tri, deg(scale, d + 6)] : tri
+  return { scale, root, d, c7: [deg(scale, d), deg(scale, d + 2), deg(scale, d + 4), deg(scale, d + 6)] }
+}
+function lead(th, h, t, s, sd, opts) {
+  const note = phrase[bar % 4][s]
+  if (note == null || th.lead <= 0) return
+  tone(midi(h.root + deg(h.scale, note) + 12), t + Math.random() * 0.012, sd * (s % 8 === 0 ? 5 : 3), opts)
+}
+
+const STYLE = {
+  // violão de bossa, baixo sincopado, chocalho e aro: leve e brasileiro
+  bossa(th, h, t, s, sd) {
+    const bs = [0, 6, 8, 14]
+    if (bs.includes(s)) tone(midi(h.root + h.c7[s === 6 || s === 14 ? 2 : 0] - 12), t, sd * 3.2, { type: 'triangle', gain: 0.26, release: 0.2 })
+    if ([0, 3, 6, 10, 12].includes(s)) for (const n of h.c7.slice(1)) tone(midi(h.root + n), t + (n % 3) * 0.006, sd * 2.4, { type: 'triangle', gain: 0.045, attack: 0.004, release: 0.3 })
+    if (th.drums) {
+      if (s % 2 === 0) noise(t, 0.035, { type: 'highpass', freq: 8000, gain: s % 4 === 2 ? 0.035 : 0.02 })
+      if ([3, 6, 10, 12].includes(s)) noise(t, 0.05, { type: 'bandpass', freq: 2600, gain: 0.05, q: 1.2 })
+      if (s === 0 || s === 8) kick(t, 0.22)
+    }
+    lead(th, h, t, s, sd, { type: 'sine', gain: 0.1, attack: 0.04, release: 0.6 })
+  },
+  // synthwave: baixo serrilhado em colcheias, arpejo quadrado, caixa grande
+  synth(th, h, t, s, sd) {
+    if (s === 0) for (const n of h.c7.slice(0, 3)) { tone(midi(h.root + n), t, sd * 16, { type: 'sawtooth', gain: 0.05, attack: 0.3, release: 1.2, lp: 900 }); tone(midi(h.root + n), t, sd * 16, { type: 'sawtooth', gain: 0.04, attack: 0.3, release: 1.2, lp: 900, detune: 9 }) }
+    if (s % 2 === 0) tone(midi(h.root + h.c7[0] - 12 + (s % 8 === 6 ? 12 : 0)), t, sd * 1.8, { type: 'sawtooth', gain: 0.16, attack: 0.005, release: 0.1, lp: 500 })
+    tone(midi(h.root + h.c7[(s >> 1) % 4] + 12), t, sd * 1.4, { type: 'square', gain: 0.025, attack: 0.003, release: 0.15, lp: 3200 })
+    if (th.drums) {
+      if (s % 4 === 0) kick(t, 0.42)
+      if (s === 4 || s === 12) { snare(t, 0.2); noise(t, 0.3, { type: 'highpass', freq: 3000, gain: 0.05 }) }
+      if (s % 4 === 2) hat(t, 0.05)
+    }
+    lead(th, h, t, s, sd, { type: 'sawtooth', gain: 0.045, attack: 0.01, release: 0.4, lp: 2200 })
+  },
+  // cordas lentas, tímpanos graves, metais na guerra: trilha de filme
+  cinema(th, h, t, s, sd) {
+    if (s === 0) {
+      for (const n of h.c7.slice(0, 3)) {
+        tone(midi(h.root + n - 12), t, sd * 16, { type: 'sawtooth', gain: 0.05, attack: 2, release: 2, lp: 600 })
+        tone(midi(h.root + n), t, sd * 16, { type: 'sawtooth', gain: 0.03, attack: 2.4, release: 2, lp: 800, detune: 7 })
+      }
+      tone(midi(h.root + h.c7[0] - 24), t, sd * 16, { type: 'sine', gain: 0.3, attack: 0.6, release: 2 })
+    }
+    if ((mood.theme === 'guerra' || mood.theme === 'crise') && (s === 0 || s === 8 || (mood.theme === 'guerra' && s === 14))) kick(t, 0.65)
+    if (mood.theme === 'guerra' && s % 4 === 0) tone(midi(h.root + h.c7[s % 8 ? 2 : 0]), t, sd * 3, { type: 'sawtooth', gain: 0.05, attack: 0.05, release: 0.4, lp: 1100 })
+    if (mood.theme === 'vitoria' && s % 8 === 0) tone(midi(h.root + h.c7[s ? 2 : 0] + 12), t, sd * 6, { type: 'sawtooth', gain: 0.05, attack: 0.06, release: 0.8, lp: 1600 })
+    if (th.drums === 3 && (s === 4 || s === 12 || s === 15)) snare(t, 0.13)
+    lead(th, h, t, s, sd, { type: 'triangle', gain: 0.07, attack: 0.05, release: 1.4 })
+  },
+  // contrabaixo andando, vassourinha, acordes com nonas: bar de jazz
+  jazz(th, h, t, s, sd) {
+    if (s % 4 === 0) tone(midi(h.root + deg(h.scale, h.d + [0, 2, 4, 5][(s / 4) % 4]) - 12), t, sd * 3.6, { type: 'triangle', gain: 0.3, attack: 0.01, release: 0.18 })
+    if (s === 3 || s === 10) for (const n of [...h.c7.slice(1), deg(h.scale, h.d + 8)]) tone(midi(h.root + n), t, sd * 2.2, { type: 'triangle', gain: 0.05, attack: 0.004, release: 0.35 })
+    if (th.drums) {
+      if ([0, 4, 6, 8, 12, 14].includes(s)) noise(t, 0.06, { type: 'highpass', freq: 6500, gain: s % 4 === 0 ? 0.045 : 0.03 })
+      if (s === 4 || s === 12) noise(t, 0.12, { type: 'bandpass', freq: 1500, gain: 0.05, q: 0.7 })
+    }
+    lead(th, h, t, s, sd, { type: 'triangle', gain: 0.1, attack: 0.006, release: 0.7 })
+  },
+  // quase só textura: notas longas e sinos esparsos
+  ambiente(th, h, t, s, sd) {
+    if (s === 0) {
+      for (const n of [h.c7[0], h.c7[2]]) tone(midi(h.root + n), t, sd * 16, { type: 'sine', gain: 0.09, attack: 2.2, release: 2.4 })
+      tone(midi(h.root + h.c7[0] - 24), t, sd * 16, { type: 'sine', gain: 0.18, attack: 1.5, release: 2.4 })
+    }
+    if ((s === 0 || s === 6 || s === 10) && Math.random() < 0.35) tone(midi(h.root + deg(h.scale, h.d + [0, 2, 4, 7][Math.floor(Math.random() * 4)]) + 24), t, sd * 6, { type: 'sine', gain: 0.07, attack: 0.01, release: 2.2 })
+  },
+}
+
+function scheduleStep(t, s) {
+  const th = themeNow()
+  const h = harmony(th)
   const sd = stepDur()
   if (phraseTheme !== mood.theme || !phrase) {
     phrase = makePhrase(th)
     phraseTheme = mood.theme
   }
-  if (s === 0) {
-    for (const n of ch) tone(midi(root + n), t, sd * 16, { type: th.saw ? 'sawtooth' : 'triangle', gain: (th.saw ? 0.05 : 0.14) * th.pad, attack: 1, release: 1.6 })
-    if (th.drone || mood.war > 0) tone(midi(root - 24), t, sd * 16, { type: 'sawtooth', gain: 0.06, attack: 1.2, release: 1.8 })
-    if (bar % 16 === 15) phrase = makePhrase(th)
-  }
-  // baixo
-  const b0 = root + deg(scale, d) - 12
-  if (th.bass === 'long' && s === 0) tone(midi(b0), t, sd * 8, { type: 'sine', gain: 0.3, attack: 0.04, release: 0.8 })
-  if (th.bass === 'eighth' && s % 2 === 0) tone(midi(b0 + (s % 8 === 6 ? 7 : 0)), t, sd * 1.8, { type: 'triangle', gain: 0.24, attack: 0.01, release: 0.12 })
-  if (th.bass === 'walk' && s % 4 === 0) tone(midi(b0 + [0, 7, 12, 7][(s / 4) % 4]), t, sd * 3.6, { type: 'triangle', gain: 0.26, attack: 0.01, release: 0.15 })
-  // arpejo
-  if ((th.arp === 'eighth' && s % 2 === 0) || th.arp === 'sixteenth') {
-    const k = th.arp === 'eighth' ? s / 2 : s
-    tone(midi(root + ch[k % ch.length] + 12), t, sd * 2, { type: 'triangle', gain: 0.07, attack: 0.005, release: 0.4 })
-  }
-  // acordes picados (campanha e vitória)
-  if (th.pluck && (s === 4 || s === 12)) for (const n of tri) tone(midi(root + n + 12), t, sd * 1.5, { type: 'square', gain: 0.025, attack: 0.005, release: 0.2 })
-  // estocadas tensas
-  if (th.stab && s === 10 && bar % 2 === 1) for (const n of [tri[0], tri[0] + 6, tri[0] + 12]) tone(midi(root + n + 12), t, sd * 1.2, { type: 'sawtooth', gain: 0.03, attack: 0.01, release: 0.4 })
-  // sinos do tribunal
-  if (th.bell && (s === 0 || s === 8) && Math.random() < 0.6) tone(midi(root + pick(ch) + 24), t, sd * 6, { type: 'sine', gain: 0.1, attack: 0.005, release: 2 })
-  // melodia
-  const note = phrase[bar % 4][s]
-  if (note != null && th.lead > 0) tone(midi(root + deg(scale, note) + 12), t + Math.random() * 0.015, sd * (s % 8 === 0 ? 5 : 3), { type: th.leadType, gain: th.leadType === 'square' ? 0.05 : th.leadType === 'sawtooth' ? 0.045 : 0.11, attack: 0.02, release: 0.5 })
-  // percussão
-  if (th.drums === 1) {
-    if (s === 0 || s === 8) kick(t, 0.28)
-    if (s % 4 === 2) hat(t, 0.03)
-  } else if (th.drums === 2) {
-    if (s % 4 === 0) kick(t, 0.36)
-    if (s === 4 || s === 12) snare(t, 0.12)
-    if (s % 2 === 0) hat(t, 0.04)
-  } else if (th.drums === 3) {
-    if (s === 0 || s === 8) kick(t, 0.5)
-    if (s === 4 || s === 12 || s === 14 || s === 15) snare(t, 0.14)
-  } else if (th.drums === 4) {
-    if (s === 0 || s === 5) kick(t, 0.5)
-  }
-  if (th.tick && s % 2 === 0) hat(t, 0.045)
+  if (s === 0 && bar % 16 === 15) phrase = makePhrase(th)
+  if (s === 0 && (th.drone || mood.war > 0)) tone(midi(h.root - 24), t, sd * 16, { type: 'sawtooth', gain: 0.05, attack: 1.2, release: 1.8, lp: 400 })
+  if (th.tick && s % 2 === 0) hat(t, 0.04)
+  ;(STYLE[styleNow()] || STYLE.bossa)(th, h, t, s, sd)
 }
 
 function tick() {

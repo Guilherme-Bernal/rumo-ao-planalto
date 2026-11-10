@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { settings, DIFFICULTIES } from '../../game/settings'
-import { unlock, sfx } from '../../game/audio'
+import { unlock, sfx, STYLE_NAMES } from '../../game/audio'
 
 const open = ref(false)
 const toggle = () => {
@@ -28,6 +28,12 @@ const FONTS = [
 
     <div class="cfg-grp">Som</div>
     <label class="cfg-row"><span>🎵 Música</span><input v-model="settings.music" type="checkbox" /></label>
+    <label class="cfg-row">
+      <span>🎼 Estilo da música</span>
+      <select v-model="settings.musicStyle">
+        <option v-for="(n, k) in STYLE_NAMES" :key="k" :value="k">{{ n }}</option>
+      </select>
+    </label>
     <label class="cfg-row"><span>🔔 Efeitos</span><input v-model="settings.sfx" type="checkbox" @change="testSfx" /></label>
     <label class="cfg-row"><span>🔊 Volume</span><input v-model.number="settings.volume" type="range" min="0" max="1" step="0.05" /></label>
 

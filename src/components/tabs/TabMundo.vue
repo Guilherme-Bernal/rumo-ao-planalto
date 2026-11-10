@@ -1,6 +1,9 @@
 <script setup>
 import { computed } from 'vue'
 import SecTecnologia from './SecTecnologia.vue'
+import SecAmeacas from './SecAmeacas.vue'
+import SecSociedade from './SecSociedade.vue'
+import SecMundo24 from './SecMundo24.vue'
 import { game, ptsOf, STATS, officeInfo, worldPartners, worldWars, worldNuc, worldStances, diploActions, defActions, fedDefs, fedActions, isPresident, canDiplo, worldReady, diplo, defAct, nucInvest, fedAct, diploChance, askChance } from '../../game/engine'
 
 const w = computed(() => game.world)
@@ -125,7 +128,10 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
     </template>
     <p v-else class="legend">Diplomacia, Forças Armadas e energia nuclear ficam com o cargo de Presidente da República.</p>
 
+    <SecAmeacas />
     <SecTecnologia />
+    <SecMundo24 />
+    <SecSociedade />
   </div>
 </template>
 

@@ -8,6 +8,7 @@ const DEFAULTS = {
   music: true,
   sfx: true,
   volume: 0.5, // 0 a 1
+  musicStyle: 'auto', // auto | bossa | synth | cinema | jazz | ambiente
   quality: 'auto', // auto | high | low (qualidade do 3D)
   fontScale: 1, // 1 | 1.12 | 1.25
   contrast: false,
