@@ -23,6 +23,7 @@ import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOE
 import { randomLook } from './look'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
 import { finalOf, saveFinal } from './finais'
+import { ARCOS } from './arcos34'
 import { AGENDAS, STATUS, COAL_ACOES, COAL_EVENTOS, LEGADO_EVENTOS } from './coalizao33'
 import { MIS_INTRO, MIS_PISTAS, MIS_PEND, MIS_ACOES, MIS_FIM, HIST_EVENTOS } from './misterio32'
 import { MIN_BASE, MIN_AGENDAS, MIN_EVENTOS, MIN_SAIDA, PAUTAS, ONDAS, ONDA_RESP, MISSOES } from './bastidores'
@@ -776,7 +777,7 @@ function serieAdd() {
   const p = game.poder
   p.serie = p.serie || []
   const st = game.stats
-  p.serie.push({ st: game.stage, tm: game.term, t: game.turn, pop: Math.round(st.pop), eco: Math.round(st.eco), cash: Math.round(st.cash), soc: Math.round(st.soc), seg: Math.round(st.seg), img: Math.round(st.img), cong: Math.round(st.cong) })
+  p.serie.push({ r: game.total, st: game.stage, tm: game.term, t: game.turn, pop: Math.round(st.pop), eco: Math.round(st.eco), cash: Math.round(st.cash), soc: Math.round(st.soc), seg: Math.round(st.seg), img: Math.round(st.img), cong: Math.round(st.cong) })
   if (p.serie.length > 120) p.serie.splice(0, p.serie.length - 120)
 }
 export const serieNow = () => (game.poder && game.poder.serie) || []
@@ -1595,6 +1596,8 @@ export function chooseRunoff(id) {
 export function continueAfterResult() {
   const e = game.election
   rvResultado(e.result.won)
+  ensurePoder()
+  graficoMarca('eleicao', `${e.result.won ? 'Vitória' : 'Derrota'} (${(e.result.h2h ?? e.result.share).toFixed(1)}%)`, { ok: !!e.result.won })
   if (!e.result.won) {
     game.over = {
       title: 'Derrota nas urnas',
@@ -2557,11 +2560,19 @@ function ensurePoder() {
 export function timelineAdd(icon, text, tn = 'flat') {
   ensurePoder()
   game.poder.timeline.unshift({ r: game.total, icon, text, tone: tn })
+  if (tn === 'down' && /escândalo|denúncia|CPI|dossiê|inquérito|conspira|caiu|vazam|vazou/i.test(text)) graficoMarca('escandalo', text)
   game.poder.timeline = game.poder.timeline.slice(0, 40)
   if (!game.poder.bio) game.poder.bio = { marcos: [] }
   game.poder.bio.marcos.push({ r: game.total, icon, text, tone: tn, cargo: officeId() })
   if (game.poder.bio.marcos.length > 80) game.poder.bio.marcos.splice(0, game.poder.bio.marcos.length - 80)
 }
+function graficoMarca(tipo, txt, extra = {}) {
+  const p = game.poder
+  p.marcas = p.marcas || []
+  p.marcas.push({ r: game.total, tipo, txt: String(txt).slice(0, 80), ...extra })
+  if (p.marcas.length > 60) p.marcas.splice(0, p.marcas.length - 60)
+}
+export const marcasNow = () => (game.poder && game.poder.marcas) || []
 function enactStatute(bill, how, k = 1) {
   ensurePoder()
   if (bill.edu) eduAdd(bill.edu * k)
@@ -4205,6 +4216,7 @@ export function roundAvancos() {
   roundHist()
   roundCoalizao()
   roundLegado()
+  roundArcos()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -6682,4 +6694,137 @@ function roundLegado() {
   if (l.seen.length >= 5) l.seen = []
   l.last = game.total
   toast(LEGADO_EVENTOS[id].icon, LEGADO_EVENTOS[id].titulo(u))
+}
+
+/* ---------- BLOCO 34: arcos do mentor, do colunista e do banqueiro ---------- */
+export const ARCO_IDS = Object.keys(ARCOS)
+export const arcoDef = (id) => ARCOS[id]
+export const arcosNow = () => (game.poder && game.poder.arcos) || null
+function arcosEnsure() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.arcos || !p.arcos.itens) {
+    p.arcos = { itens: {}, pend: null }
+  }
+  for (const id of ARCO_IDS) if (!p.arcos.itens[id]) p.arcos.itens[id] = { estagio: 0, laco: 50, last: game.total, desde: game.total, fim: null, hist: [] }
+  return p.arcos
+}
+const arcoFig = (id) => figurasNow().find((f) => f.id === ARCOS[id].fig)
+export function arcosView() {
+  const a = arcosNow()
+  if (!a) return []
+  return ARCO_IDS.map((id) => {
+    const it = a.itens[id]
+    const f = arcoFig(id)
+    const d = ARCOS[id]
+    return it && f ? { id, d, it, f, estagio: d.estagios[it.estagio], fim: it.fim ? d.finais[it.fim] : null } : null
+  }).filter(Boolean)
+}
+export function arcoPendNow() {
+  const a = arcosNow()
+  if (!a || !a.pend) return null
+  const d = ARCOS[a.pend.arc]
+  const e = d.eventos.find((x) => x.id === a.pend.ev)
+  const f = arcoFig(a.pend.arc)
+  return e && f ? { d, e, f, left: a.pend.left, titulo: e.titulo(f.nome), texto: e.texto(f.nome) } : null
+}
+export function arcoMotivo(opId) {
+  const pn = arcoPendNow()
+  if (!pn) return 'Nada pendente.'
+  const o = pn.e.ops.find((x) => x.id === opId)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function arcoLog(it, f, txt, icon, tom = 'flat') {
+  it.hist.unshift({ r: game.total, t: txt })
+  it.hist = it.hist.slice(0, 6)
+  timelineAdd(icon, txt, tom)
+}
+function arcoAplicar(a, opId, auto) {
+  const id = a.pend.arc
+  const d = ARCOS[id]
+  const e = d.eventos.find((x) => x.id === a.pend.ev)
+  const o = e.ops.find((x) => x.id === opId) || e.ops.find((x) => x.id === e.padrao)
+  const it = a.itens[id]
+  const f = arcoFig(id)
+  const fx = { ...(o.fx || {}) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  if (o.risco) {
+    const ruim = R() < o.risco.p
+    const extra = ruim ? o.risco.fx : o.ganho || {}
+    for (const k in extra) fx[k] = (fx[k] || 0) + extra[k]
+  }
+  applyFx(fx, true)
+  if (o.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp((game.heat || 0) + 5)
+  }
+  it.laco = clamp(it.laco + (o.laco || 0))
+  it.last = game.total
+  if (f) f.laco = Math.round(it.laco)
+  a.pend = null
+  if (o.avanca && it.estagio < 2) {
+    it.estagio++
+    it.desde = game.total
+  }
+  arcoLog(it, f, `${e.titulo(f ? f.nome : d.titulo)}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, e.icon)
+  if (o.fim) {
+    it.fim = o.fim
+    it.estagio = 3
+    arcoLog(it, f, d.finais[o.fim], d.icon, ['rompido', 'inimigo', 'ruptura'].includes(o.fim) ? 'down' : 'up')
+  }
+  cnt('arco')
+  return o
+}
+export function arcoEscolher(opId) {
+  if (arcoMotivo(opId)) return null
+  const pn = arcoPendNow()
+  const o = arcoAplicar(game.poder.arcos, opId, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+function roundArcos() {
+  if (!game.world || game.total < 3) return
+  const a = arcosEnsure()
+  for (const id of ARCO_IDS) {
+    const it = a.itens[id]
+    const d = ARCOS[id]
+    const f = arcoFig(id)
+    if (!f) continue
+    if (!it.fim && f.estado !== 'ativa') {
+      it.fim = f.estado === 'falecida' ? 'falecido' : 'aposentado'
+      it.estagio = 3
+      if (it.laco >= 60) applyFx({ img: 0.8, cong: id === 'mentor' ? 1 : 0 }, true)
+      arcoLog(it, f, d.finais[it.fim], d.icon)
+      if (a.pend && a.pend.arc === id) a.pend = null
+      continue
+    }
+    if (it.fim) continue
+    const p = it.laco >= 60 ? d.passivo.alto : it.laco <= 30 ? d.passivo.baixo : null
+    if (p) applyFx(p, true)
+    it.laco = clamp(it.laco + (50 - it.laco) * 0.01)
+    f.laco = Math.round(it.laco)
+    // o tempo também empurra o arco para a frente
+    if (game.total - it.desde >= 14 && it.estagio < 2) {
+      it.estagio++
+      it.desde = game.total
+    }
+  }
+  if (a.pend) {
+    if (--a.pend.left < 0) arcoAplicar(a, ARCOS[a.pend.arc].eventos.find((x) => x.id === a.pend.ev).padrao, true)
+    return
+  }
+  if (game.total < 5 || R() > 0.12) return
+  const ids = ARCO_IDS.filter((id) => !a.itens[id].fim && game.total - a.itens[id].last >= 5 && arcoFig(id))
+  if (!ids.length) return
+  const id = ids[Math.floor(R() * ids.length)]
+  const it = a.itens[id]
+  const evs = ARCOS[id].eventos.filter((e) => e.est.includes(it.estagio))
+  if (!evs.length) return
+  const ev = evs[Math.floor(R() * evs.length)]
+  a.pend = { arc: id, ev: ev.id, left: 2 }
+  it.last = game.total
+  toast(ev.icon, ev.titulo(arcoFig(id).nome))
 }

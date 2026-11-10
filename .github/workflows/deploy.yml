@@ -20,8 +20,32 @@ jobs:
       # simula partidas e confere os dados do jogo; se falhar, o site NÃO é publicado
       - run: npm test
       - run: npm run build
+  # abre o jogo num navegador de verdade, joga pela interface e falha se aparecer erro de página ou de console
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Jogar pela interface (E2E)
+        run: |
+          npx vite preview --port 4173 --host 127.0.0.1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4173/ > /dev/null && break; sleep 1; done
+          node tools/e2e.mjs http://127.0.0.1:4173/ 200 1
+          node tools/e2e.mjs http://127.0.0.1:4173/ 200 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-falha
+          path: e2e-falha.png
+          if-no-files-found: ignore
   build:
-    needs: test
+    needs: [test, e2e]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:

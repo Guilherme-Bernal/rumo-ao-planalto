@@ -1,5 +1,6 @@
 <script setup>
 import SerieChart from '../game/SerieChart.vue'
+import CarreiraLinha from '../game/CarreiraLinha.vue'
 import { ref } from 'vue'
 import { game, STATS, resetGame, country, officeId, ageNow } from '../../game/engine'
 import { ACHIEVEMENTS, loadHall, weeklyNow } from '../../game/extras'
@@ -86,6 +87,7 @@ async function share() {
       <p v-if="!game.history.length" class="muted">Nenhuma eleição vencida.</p>
       <p v-for="(h, i) in game.history" :key="i" class="muted">✔ {{ h.office }} ({{ h.share.toFixed(1) }}% dos votos)</p>
 
+      <CarreiraLinha style="margin-top: 12px" />
       <SerieChart escopo="carreira" titulo="📊 Sua carreira em números" />
 
       <h3 style="margin: 12px 0 6px">Estado final</h3>

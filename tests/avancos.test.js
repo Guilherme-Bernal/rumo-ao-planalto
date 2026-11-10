@@ -1255,3 +1255,80 @@ describe('BLOCO 33 — coalizão, alianças e legado', () => {
     expect(E.game.poder.legado.pend).toBeNull()
   })
 })
+
+describe('BLOCO 34 — arcos e gráfico da carreira', () => {
+  const comArcos = () => {
+    novo('presidente')
+    E.game.total = 8
+    E.roundAvancos()
+    E.roundAvancos()
+  }
+  it('mentor, colunista e banqueiro ganham arco com laço e fase', () => {
+    comArcos()
+    const v = E.arcosView()
+    expect(v.map((x) => x.id).sort()).toEqual(['banqueiro', 'colunista', 'mentor'])
+    for (const x of v) expect(x.it.laco).toBeGreaterThan(0)
+  })
+  it('decisão do arco muda o laço, avança a fase e cai na opção padrão se ignorada', () => {
+    comArcos()
+    const a = E.arcosNow()
+    a.itens.mentor.estagio = 0
+    a.pend = { arc: 'mentor', ev: 'cafe', left: 2 }
+    E.game.stats.cash = 20
+    const antes = a.itens.mentor.laco
+    expect(E.arcoPendNow().titulo).toMatch(/café/)
+    expect(E.arcoEscolher('formal')).toBeTruthy()
+    expect(a.itens.mentor.laco).toBeGreaterThan(antes - 1)
+    expect(a.itens.mentor.estagio).toBe(1)
+    a.pend = { arc: 'colunista', ev: 'critica', left: 0 }
+    a.itens.colunista.estagio = 0
+    E.roundAvancos()
+    expect(a.pend === null || a.pend.arc !== 'colunista' || a.pend.ev !== 'critica').toBe(true)
+  })
+  it('evento final encerra o arco com um desfecho', () => {
+    comArcos()
+    const a = E.arcosNow()
+    a.itens.banqueiro.estagio = 2
+    a.pend = { arc: 'banqueiro', ev: 'conta', left: 2 }
+    E.game.stats.cash = 20
+    E.arcoEscolher('romper')
+    expect(a.itens.banqueiro.fim).toBe('ruptura')
+    expect(a.itens.banqueiro.estagio).toBe(3)
+  })
+  it('se o personagem some da vida, o arco termina sozinho', () => {
+    comArcos()
+    const a = E.arcosNow()
+    E.figurasNow().find((f) => f.id === 'mentor').estado = 'falecida'
+    E.roundAvancos()
+    expect(a.itens.mentor.fim).toBe('falecido')
+  })
+  it('todos os arcos têm eventos por fase, um final por opção e textos', async () => {
+    const A = await import('../src/game/arcos34.js')
+    for (const [id, d] of Object.entries(A.ARCOS)) {
+      expect(d.estagios.length).toBe(4)
+      const fins = d.eventos.filter((e) => e.fim)
+      expect(fins.length).toBeGreaterThanOrEqual(1)
+      for (const e of d.eventos) {
+        expect(e.ops.some((o) => o.id === e.padrao)).toBe(true)
+        expect(e.titulo('X') && e.texto('X')).toBeTruthy()
+        for (const o of e.ops) if (o.fim) expect(d.finais[o.fim]).toBeTruthy()
+      }
+      for (const est of [0, 1, 2]) expect(d.eventos.some((e) => e.est.includes(est))).toBe(true)
+      expect(id).toBeTruthy()
+    }
+  })
+  it('o gráfico da carreira recebe marcas de eleição e de escândalo', () => {
+    novo('presidente')
+    E.game.total = 12
+    E.timelineAdd('🚨', 'Escândalo atinge o ministro', 'down')
+    E.timelineAdd('🏛️', 'Lei sancionada', 'up')
+    E.game.election = { rival: 0, target: 'presidente', result: { won: true, share: 55, h2h: 55 }, rivalArc: false, aliancas: [] }
+    E.game.history = []
+    E.continueAfterResult()
+    const m = E.marcasNow()
+    expect(m.filter((x) => x.tipo === 'escandalo').length).toBe(1)
+    expect(m.filter((x) => x.tipo === 'eleicao')[0].ok).toBe(true)
+    E.roundAvancos()
+    expect(E.serieNow().some((r) => r.r != null)).toBe(true)
+  })
+})

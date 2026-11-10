@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher, arcoPendNow, arcoMotivo, arcoEscolher } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -25,6 +25,7 @@ const mis = computed(() => misPendNow())
 const hist = computed(() => histPendNow())
 const coal = computed(() => coalPendNow())
 const leg = computed(() => legadoPendNow())
+const arco = computed(() => arcoPendNow())
 const missao = computed(() => { const v = missaoView(); return v && v.passo ? v : null })
 const cadeia = computed(() => {
   const c = cadeiaNow()
@@ -107,6 +108,13 @@ const cadeia = computed(() => {
       <br /><small>{{ leg.texto }}</small>
       <span class="ops">
         <button v-for="o in leg.e.ops" :key="o.id" type="button" class="mini" :disabled="!!legadoMotivo(o.id)" :title="o.desc" @click="legadoEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="arco" class="aviso conv">
+      {{ arco.e.icon }} <b>{{ arco.titulo }}</b> <small>({{ arco.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ arco.texto }}</small>
+      <span class="ops">
+        <button v-for="o in arco.e.ops" :key="o.id" type="button" class="mini" :disabled="!!arcoMotivo(o.id)" :title="o.desc" @click="arcoEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
       </span>
     </div>
     <p v-if="inds.length" class="aviso">🏭 Em operação: {{ inds.map((x) => x.nome).join(' · ') }}.</p>
