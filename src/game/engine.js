@@ -23,6 +23,7 @@ import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOE
 import { randomLook } from './look'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
 import { finalOf, saveFinal } from './finais'
+import { MIN_BASE, MIN_AGENDAS, MIN_EVENTOS, MIN_SAIDA, PAUTAS, ONDAS, ONDA_RESP, MISSOES } from './bastidores'
 import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS, CADEIAS } from './reunioes'
 import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
 import { makeContacts, ensureContacts, SCRIPTS, ROLES, KIND, ASKS, CHAT, LIGAR } from './contacts'
@@ -4191,6 +4192,9 @@ export function roundAvancos() {
   roundVida()
   roundFamilia()
   roundRival()
+  roundMinistros()
+  roundRedes()
+  roundMissao()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -5798,4 +5802,363 @@ function rvResultado(won) {
   }
   r.hist = r.hist.slice(0, 12)
   game.rival = r.nome
+}
+
+/* ---------- BLOCO 31: ministros vivos ---------- */
+const pastaName = (id) => (PASTAS.find((x) => x.id === id) || { name: id }).name
+export const minDef = (id) => MIN_EVENTOS[id]
+function minEnsure(a) {
+  if (a.lealdade == null) {
+    const b = MIN_BASE[a.perfil] || MIN_BASE.tecnico
+    const ag = MIN_AGENDAS[a.pasta] || ['sua agenda']
+    a.lealdade = Math.round(b.lealdade + R() * 12 - 6)
+    a.amb = Math.max(0.05, b.amb + R() * 0.3 - 0.15)
+    a.agenda = ag[Math.floor(R() * ag.length)]
+    a.last = -9
+    a.entregas = 0
+  }
+  return a
+}
+export const minNow = (pasta) => {
+  const a = nomeadoDe(pasta)
+  if (!a || a.stage !== game.stage) return null
+  return a.lealdade == null ? { ...a, lealdade: (MIN_BASE[a.perfil] || MIN_BASE.tecnico).lealdade, amb: 0.3, agenda: (MIN_AGENDAS[pasta] || ['—'])[0] } : a
+}
+export const minPendNow = () => {
+  const mp = game.poder && game.poder.minpend
+  if (!mp) return null
+  const a = nomeadoDe(mp.pasta)
+  const e = MIN_EVENTOS[mp.id]
+  if (!a || !e || a.stage !== game.stage) return null
+  return { e, m: a, pasta: mp.pasta, left: mp.left, titulo: e.titulo(a, pastaName(mp.pasta)), texto: e.texto(a) }
+}
+function minAplicar(mp, opId, auto) {
+  const a = nomeadoDe(mp.pasta)
+  const e = MIN_EVENTOS[mp.id]
+  const o = e.ops.find((x) => x.id === opId) || e.ops[e.ops.length - 1]
+  const fx = { ...(o.fx || {}) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  let leal = o.leal || 0
+  if (o.sorte) {
+    const ok = R() < o.sorte.p
+    const b = ok ? o.sorte.ok : o.sorte.fail
+    leal += b.leal || 0
+    for (const k in b.fx || {}) fx[k] = (fx[k] || 0) + b.fx[k]
+  }
+  applyFx(fx, true)
+  if (o.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp((game.heat || 0) + 5)
+  }
+  game.poder.minpend = null
+  a.last = game.total
+  a.lealdade = clamp((a.lealdade || 50) + leal)
+  if (o.stat) a.entregas = (a.entregas || 0) + 1
+  const pa = PASTAS.find((x) => x.id === mp.pasta)
+  if (o.stat && pa) applyFx({ [pa.stat]: o.stat }, true)
+  timelineAdd(e.icon, `${e.titulo(a, pastaName(mp.pasta))}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, leal >= 0 ? 'up' : 'down')
+  if (o.sai) minSai(mp.pasta, a, o.sai)
+  cnt('ministro')
+  return o
+}
+function minSai(pasta, a, tipo) {
+  let sai = MIN_SAIDA[tipo]
+  if (tipo === 'discurso') sai = MIN_SAIDA.discurso[a.perfil] || MIN_SAIDA.discurso.tecnico
+  const pa = PASTAS.find((x) => x.id === pasta)
+  delete game.poder.cab[pasta]
+  applyFx(sai.fx || {}, true)
+  const txt = sai.t(a)
+  timelineAdd(tipo === 'aliado' ? '🤝' : '🚪', txt, tipo === 'aliado' ? 'up' : 'down')
+  toast('🚪', `${a.nome} deixou ${pa ? pa.name : 'a pasta'}.`)
+  if (tipo === 'rival') {
+    const r = rvEnsure()
+    r.nome = a.nome
+    r.estagio = 'inimigo'
+    r.odio = 72
+    r.estima = 8
+    r.forca = clamp(52 + (game.poder.rv.forca > 60 ? 0 : 4))
+    r.hist.unshift({ r: game.total, t: txt })
+    game.rival = a.nome
+  } else if (tipo === 'aliado') {
+    const r = game.poder.rv
+    if (r && r.nome === a.nome) r.estagio = 'aliado'
+  }
+}
+export function minMotivo(opId) {
+  const pn = minPendNow()
+  if (!pn) return 'Nada pendente.'
+  const o = pn.e.ops.find((x) => x.id === opId)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+export function minEscolher(opId) {
+  if (minMotivo(opId)) return null
+  const mp = game.poder.minpend
+  const pn = minPendNow()
+  const o = minAplicar(mp, opId, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+function roundMinistros() {
+  if (!isExec()) return
+  const cab = (game.poder && game.poder.cab) || {}
+  const lista = Object.keys(cab).filter((k) => cab[k] && cab[k].stage === game.stage)
+  for (const k of lista) {
+    const a = minEnsure(cab[k])
+    const alvo = (a.perfil === 'politico' ? 40 + game.stats.cong * 0.4 : 55 + game.stats.img * 0.3) + (a.entregas || 0) * 2
+    a.lealdade = clamp(a.lealdade + (alvo - a.lealdade) * 0.06 - (game.heat > 60 ? 0.8 : 0))
+  }
+  const mp = game.poder.minpend
+  if (mp) {
+    if (!minPendNow()) {
+      game.poder.minpend = null
+      return
+    }
+    mp.left--
+    if (mp.left < 0) minAplicar(mp, MIN_EVENTOS[mp.id].padrao, true)
+    return
+  }
+  if (game.total < 3 || !lista.length || R() > 0.12) return
+  const k = lista[Math.floor(R() * lista.length)]
+  const a = cab[k]
+  if (game.total - a.last < 4) return
+  const elig = Object.keys(MIN_EVENTOS).filter((id) => MIN_EVENTOS[id].min(a))
+  const id = elig[Math.floor(R() * elig.length)]
+  if (!id) return
+  // quem entrega, às vezes só pede apoio; quem desanda, sai
+  game.poder.minpend = { pasta: k, id, left: 2 }
+  a.last = game.total
+  toast(MIN_EVENTOS[id].icon, MIN_EVENTOS[id].titulo(a, pastaName(k)))
+}
+
+/* ---------- BLOCO 31: redes e boatos ---------- */
+const redesBase = () => ({ humor: 50, pautaLast: -9, onda: null, ondasFeitas: 0, ondasVencidas: 0, hist: [] })
+export const redesNow = () => (game.poder && game.poder.redes) || redesBase()
+export const redesPautas = () => PAUTAS
+export const redesOndaResps = () => ONDA_RESP
+export const redesOndaDef = (id) => ONDAS.find((x) => x.id === id)
+export function redesEnsure() {
+  ensurePoder()
+  if (!game.poder.redes || !game.poder.redes.hist) game.poder.redes = { ...redesBase(), ...(game.poder.redes || {}) }
+  return game.poder.redes
+}
+function redesLog(r, icon, txt, tone = 'flat') {
+  r.hist.unshift({ r: game.total, icon, t: txt })
+  r.hist = r.hist.slice(0, 10)
+  timelineAdd(icon, txt, tone)
+}
+export function redesPautaMotivo(id) {
+  const p = PAUTAS.find((x) => x.id === id)
+  if (!p) return 'Pauta inválida.'
+  if (game.total - redesNow().pautaLast < 2) return 'Espere algumas rodadas para lançar outra pauta.'
+  if (p.cash && game.stats.cash < p.cash) return `Sem caixa (${p.cash}).`
+  if (p.abafa && !redesNow().onda) return 'Não há onda para abafar.'
+  return ''
+}
+export function redesPauta(id) {
+  if (redesPautaMotivo(id)) return null
+  const p = PAUTAS.find((x) => x.id === id)
+  const r = redesEnsure()
+  r.pautaLast = game.total
+  game.delta = {}
+  const chance = clamp((p.p + (r.humor - 50) / 200 + ((game.stats[p.stat] || 50) - 50) * 0.002), 0.15, 0.9)
+  const ok = R() < chance
+  const fx = { ...(ok ? p.ok : p.fail) }
+  if (p.cash) fx.cash = (fx.cash || 0) - p.cash
+  applyFx(fx, true)
+  r.humor = clamp(r.humor + (ok ? p.humor : -Math.abs(p.humor) * 0.4))
+  if (p.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp((game.heat || 0) + 4)
+  }
+  if (p.abafa && r.onda) {
+    r.onda.forca = Math.max(0, r.onda.forca - (ok ? 40 : 10))
+    if (r.onda.forca <= 0) {
+      r.ondasVencidas++
+      r.onda = null
+    }
+  }
+  const txt = ok ? `${p.name} emplacou nas redes.` : `${p.name} não pegou e ainda rendeu crítica.`
+  redesLog(r, p.icon, txt, ok ? 'up' : 'down')
+  cnt('redes')
+  save()
+  return { ok, txt }
+}
+export function redesRespMotivo(id) {
+  const r = redesNow()
+  if (!r.onda) return 'Não há onda ativa.'
+  const o = ONDA_RESP.find((x) => x.id === id)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+export function redesResponder(id) {
+  if (redesRespMotivo(id)) return null
+  const o = ONDA_RESP.find((x) => x.id === id)
+  const r = redesEnsure()
+  game.delta = {}
+  let p = o.p
+  if (o.humor) p += r.humor >= o.humor ? 0.1 : -0.25
+  const ok = R() < clamp(p, 0.05, 0.95)
+  const b = ok ? o.ok : o.fail
+  const fx = { ...(b.fx || {}) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  applyFx(fx, true)
+  r.onda.forca = Math.max(0, r.onda.forca + (b.forca || 0))
+  const def = redesOndaDef(r.onda.id)
+  let txt = `${def.nome}: ${o.name.toLowerCase()} ${ok ? 'funcionou' : 'não funcionou'}.`
+  if (r.onda.forca <= 0) {
+    r.ondasVencidas++
+    r.humor = clamp(r.humor + 6)
+    r.onda = null
+    txt += ' A onda se desfez.'
+  }
+  redesLog(r, def.icon, txt, ok ? 'up' : 'down')
+  cnt('redes')
+  save()
+  return { ok, txt }
+}
+function roundRedes() {
+  if (game.total < 2) return
+  const r = redesEnsure()
+  const alvo = 50 + (game.stats.pop - 50) * 0.5 + (game.stats.img - 50) * 0.3
+  r.humor = clamp(r.humor + (alvo - r.humor) * 0.15)
+  if (r.humor >= 72) applyFx({ pop: 0.3 }, true)
+  else if (r.humor <= 28) applyFx({ pop: -0.3 }, true)
+  if (r.onda) {
+    const o = r.onda
+    o.forca = Math.min(100, o.forca + 4)
+    o.left--
+    applyFx({ img: -(o.forca / 100) * 0.9, pop: -(o.forca / 100) * 0.5 }, true)
+    r.humor = clamp(r.humor - o.forca / 40)
+    if (o.left <= 0) {
+      const def = redesOndaDef(o.id)
+      r.onda = null
+      redesLog(r, def.icon, `${def.nome} perdeu força e saiu do ar.`)
+    }
+    return
+  }
+  if (R() < 0.07 + (game.heat || 0) / 900 + (r.humor < 40 ? 0.04 : 0)) {
+    const def = ONDAS[Math.floor(R() * ONDAS.length)]
+    r.onda = { id: def.id, forca: Math.round(45 + R() * 25), left: 5 }
+    r.ondasFeitas++
+    toast(def.icon, `${def.nome}: ${def.texto}`)
+    timelineAdd(def.icon, def.texto, 'down')
+  }
+}
+
+/* ---------- BLOCO 31: missões de bastidor ---------- */
+export const missaoDef = (id) => MISSOES.find((x) => x.id === id)
+export const missaoNow = () => (game.poder && game.poder.missao) || null
+export function missaoView() {
+  const m = missaoNow()
+  if (!m) return null
+  const d = missaoDef(m.id)
+  if (!d) return null
+  const fim = m.passo >= d.passos.length
+  const passo = fim ? null : d.passos[m.passo]
+  return { m, d, passo, texto: passo ? passo.t(m.ctx) : '', intro: d.intro(m.ctx), total: d.passos.length }
+}
+const missaoCond = (d) => {
+  const s = game.stats
+  switch (d.cond) {
+    case 'heat': return (game.heat || 0) >= 15
+    case 'cong': return s.cong < 55
+    case 'exec': return isExec()
+    case 'caixa': return s.cash <= 6 && isExec()
+    default: return true
+  }
+}
+function missaoChance(o) {
+  return clamp(o.p + ((game.stats[o.bonus] || 50) - 50) * 0.003, 0.1, 0.9)
+}
+export function missaoMotivo(opId) {
+  const v = missaoView()
+  if (!v || !v.passo) return 'Sem missão em andamento.'
+  const o = v.passo.ops.find((x) => x.id === opId)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+export const missaoChanceOf = (o) => Math.round(missaoChance(o) * 100)
+function missaoAvancar(m, o, auto) {
+  const d = missaoDef(m.id)
+  const ok = auto ? false : R() < missaoChance(o)
+  const fx = {}
+  if (o.cash) fx.cash = -o.cash
+  if (!ok && o.failFx) Object.assign(fx, o.failFx)
+  if (Object.keys(fx).length) applyFx(fx, true)
+  if (o.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp((game.heat || 0) + 4)
+  }
+  if (ok) m.ok++
+  m.log.push({ icon: o.icon, name: o.name, ok, t: ok ? o.ok : o.fail })
+  m.passo++
+  m.left = 3
+  if (m.passo >= d.passos.length) missaoFim(m, d)
+  return ok
+}
+function missaoFim(m, d) {
+  const f = d.fim.find((x) => m.ok >= x.min) || d.fim[d.fim.length - 1]
+  const fx = { ...(f.fx || {}) }
+  if (f.cash) fx.cash = f.cash
+  applyFx(fx, true)
+  if (f.heat) game.heat = clamp((game.heat || 0) + f.heat)
+  m.fim = { titulo: f.titulo, txt: f.txt, ok: m.ok, total: d.passos.length }
+  timelineAdd(d.icon, `${d.titulo}: ${f.titulo}. ${f.txt}`, m.ok >= 2 ? 'up' : 'down')
+  toast(d.icon, `${d.titulo}: ${f.titulo}.`)
+  const ms = game.poder.missoes || (game.poder.missoes = { done: [], last: -9, certas: 0 })
+  ms.done.push(d.id)
+  if (ms.done.length > 12) ms.done.shift()
+  ms.last = game.total
+  if (m.ok >= 2) ms.certas++
+  cnt('missao')
+}
+export function missaoEscolher(opId) {
+  if (missaoMotivo(opId)) return null
+  const v = missaoView()
+  const o = v.passo.ops.find((x) => x.id === opId)
+  game.delta = {}
+  const ok = missaoAvancar(v.m, o, false)
+  save()
+  return { ok, txt: ok ? o.ok : o.fail }
+}
+export function missaoFechar() {
+  const m = missaoNow()
+  if (m && m.fim) {
+    game.poder.missao = null
+    save()
+  }
+}
+function roundMissao() {
+  ensurePoder()
+  const m = game.poder.missao
+  if (m) {
+    if (m.fim) {
+      if (--m.vista < 0) game.poder.missao = null
+      return
+    }
+    if (--m.left < 0) {
+      const d = missaoDef(m.id)
+      const o = d.passos[m.passo].ops[0]
+      missaoAvancar(m, o, true)
+      toast('⏱️', `${d.titulo}: o tempo passou e o passo foi perdido.`)
+    }
+    return
+  }
+  if (game.total < 3) return
+  const ms = game.poder.missoes || { done: [], last: -9, certas: 0 }
+  if (game.total - ms.last < 5 || R() > 0.1) return
+  const elig = MISSOES.filter((d) => missaoCond(d) && !ms.done.slice(-3).includes(d.id))
+  if (!elig.length) return
+  const d = elig[Math.floor(R() * elig.length)]
+  const ctx = {}
+  for (const k of d.pers) ctx[k] = candName(R)
+  game.poder.missao = { id: d.id, passo: 0, ok: 0, ctx, log: [], left: 3, vista: 3, fim: null }
+  toast(d.icon, `Missão de bastidor: ${d.titulo}`)
 }

@@ -981,3 +981,102 @@ describe('BLOCO 30 — finais múltiplos', () => {
     expect(e.join(' ')).toMatch(/voltou para/)
   })
 })
+
+describe('BLOCO 31 — ministros, redes e missões', () => {
+  const nomeia = () => {
+    novo('presidente')
+    E.game.total = 6
+    E.game.poder.cab = { economia: { nome: 'Dra. Alfa', perfil: 'politico', pasta: 'economia', stage: E.game.stage, pass: {}, risk: 0 } }
+  }
+  it('ministro ganha lealdade e agenda e pode ter pedido com opção padrão', () => {
+    nomeia()
+    E.roundAvancos()
+    const m = E.minNow('economia')
+    const antes = m.lealdade
+    expect(m.lealdade).toBeGreaterThan(0)
+    expect(m.agenda).toBeTruthy()
+    E.game.poder.minpend = { pasta: 'economia', id: 'pedido', left: 0 }
+    expect(E.minPendNow().titulo).toMatch(/Dra. Alfa/)
+    E.game.stats.cash = 20
+    E.minEscolher('atender')
+    expect(E.game.poder.minpend).toBeNull()
+    expect(E.minNow('economia').lealdade).toBeGreaterThan(antes)
+  })
+  it('sem resposta a decisão cai na opção padrão', () => {
+    nomeia()
+    E.roundAvancos()
+    E.game.poder.minpend = { pasta: 'economia', id: 'pedido', left: 0 }
+    E.roundAvancos()
+    expect(E.game.poder.minpend).toBeNull()
+  })
+  it('barrar a candidatura vira rival e aceitar a saída vaga a pasta', () => {
+    nomeia()
+    E.roundAvancos()
+    E.game.poder.minpend = { pasta: 'economia', id: 'candidatura', left: 2 }
+    E.minEscolher('barrar')
+    expect(E.game.poder.cab.economia).toBeUndefined()
+    expect(E.game.poder.rv.nome).toBe('Dra. Alfa')
+    expect(E.game.poder.rv.estagio).toBe('inimigo')
+    nomeia()
+    E.roundAvancos()
+    E.game.poder.minpend = { pasta: 'economia', id: 'demissao', left: 2 }
+    E.minEscolher('aceitar')
+    expect(E.game.poder.cab.economia).toBeUndefined()
+  })
+  it('redes: pauta respeita intervalo e custo; onda pode ser desmentida', () => {
+    novo('governador')
+    E.game.total = 5
+    E.game.stats.cash = 10
+    const r = E.redesPauta('nacional')
+    expect(r).toBeTruthy()
+    expect(E.redesPautaMotivo('emprego')).toMatch(/Espere/)
+    expect(E.redesPautaMotivo('cortina')).toBeTruthy()
+    E.redesEnsure().onda = { id: 'fake', forca: 20, left: 4 }
+    let ok = false
+    for (let i = 0; i < 40 && E.redesNow().onda; i++) { E.game.stats.cash = 10; E.redesResponder('checar'); ok = true }
+    expect(ok).toBe(true)
+    expect(E.redesNow().onda).toBeNull()
+  })
+  it('onda ativa corrói imagem a cada rodada e expira', () => {
+    novo('prefeito')
+    E.game.total = 5
+    E.game.stats.img = 60
+    E.redesEnsure().onda = { id: 'robo', forca: 80, left: 1 }
+    E.roundAvancos()
+    expect(E.game.stats.img).toBeLessThan(60)
+    expect(E.redesNow().onda).toBeNull()
+  })
+  it('missão: três passos, desfecho por acertos e fechamento', () => {
+    novo('presidente')
+    E.game.total = 8
+    E.game.poder.missao = { id: 'cpi', passo: 0, ok: 0, ctx: { relator: 'A', lider: 'B' }, log: [], left: 3, vista: 3, fim: null }
+    E.game.stats.cash = 30
+    for (let i = 0; i < 3; i++) {
+      expect(E.missaoView().passo).toBeTruthy()
+      expect(E.missaoEscolher('a')).toBeTruthy()
+    }
+    const m = E.missaoNow()
+    expect(m.fim.titulo).toBeTruthy()
+    expect(m.log.length).toBe(3)
+    E.missaoFechar()
+    expect(E.missaoNow()).toBeNull()
+  })
+  it('missão sem resposta perde o passo e termina sozinha', () => {
+    novo('presidente')
+    E.game.total = 8
+    E.game.poder.missao = { id: 'pec', passo: 0, ok: 0, ctx: { lider: 'B', indeciso: 'C' }, log: [], left: 0, vista: 0, fim: null }
+    for (let i = 0; i < 12 && E.missaoNow(); i++) E.roundAvancos()
+    expect(E.game.poder.missao === null || E.game.poder.missao.fim).toBeTruthy()
+  })
+  it('todas as missões têm três passos com opções e finais ordenados', async () => {
+    const B = await import('../src/game/bastidores.js')
+    expect(B.MISSOES.length).toBeGreaterThanOrEqual(6)
+    for (const d of B.MISSOES) {
+      expect(d.passos.length).toBe(3)
+      for (const p of d.passos) expect(p.ops.length).toBeGreaterThanOrEqual(2)
+      expect(d.fim[d.fim.length - 1].min).toBe(0)
+      const ctx = Object.fromEntries(d.pers.map((k) => [k, 'X']))
+      expect(d.intro(ctx)).toBeTruthy()
+    }
+  })
+})

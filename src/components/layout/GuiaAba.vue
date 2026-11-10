@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -20,6 +20,8 @@ const pend = computed(() => {
 })
 const fam = computed(() => famPend())
 const rival = computed(() => rvPendNow())
+const mini = computed(() => minPendNow())
+const missao = computed(() => { const v = missaoView(); return v && v.passo ? v : null })
 const cadeia = computed(() => {
   const c = cadeiaNow()
   return c ? { ...cadeiaDef(c.id), passo: c.passo } : null
@@ -59,6 +61,20 @@ const cadeia = computed(() => {
       <br /><small>{{ rival.e.texto(rival.r) }}</small>
       <span class="ops">
         <button v-for="o in rival.e.ops" :key="o.id" type="button" class="mini" :disabled="!!rvMotivo(o.id)" :title="o.desc" @click="rvEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="mini" class="aviso conv">
+      {{ mini.e.icon }} <b>{{ mini.titulo }}</b> <small>({{ mini.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ mini.texto }}</small>
+      <span class="ops">
+        <button v-for="o in mini.e.ops" :key="o.id" type="button" class="mini" :disabled="!!minMotivo(o.id)" :title="o.desc" @click="minEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="missao" class="aviso conv">
+      {{ missao.d.icon }} <b>Missão: {{ missao.d.titulo }}</b> <small>(passo {{ missao.m.passo + 1 }}/{{ missao.total }}, {{ missao.m.left + 1 }} rodada(s))</small>
+      <br /><small>{{ missao.texto }}</small>
+      <span class="ops">
+        <button v-for="o in missao.passo.ops" :key="o.id" type="button" class="mini" :disabled="!!missaoMotivo(o.id)" :title="o.desc" @click="missaoEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
       </span>
     </div>
     <p v-if="inds.length" class="aviso">🏭 Em operação: {{ inds.map((x) => x.nome).join(' · ') }}.</p>

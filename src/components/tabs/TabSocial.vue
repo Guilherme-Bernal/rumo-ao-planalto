@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { ref } from 'vue'
 import { game, stageInfo, ageNow, officeId, POST_OPTS, doPost, canPost, reactsLeft } from '../../game/engine'
+import SecRedes from './SecRedes.vue'
 import PostCard from '../game/PostCard.vue'
 import { fmtNum } from '../../game/social'
 import Avatar from '../character/Avatar.vue'
@@ -40,6 +41,8 @@ const top = computed(() => Math.max(1, ...trends.value.map((t) => t.heat)))
         <div><b>{{ reactsLeft() }}</b><small>reações hoje</small></div>
       </div>
     </div>
+
+    <SecRedes />
 
     <div class="sn-box">
       <h3>🔥 Assuntos do momento</h3>

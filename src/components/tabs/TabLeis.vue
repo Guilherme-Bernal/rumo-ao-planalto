@@ -1,4 +1,5 @@
 <script setup>
+import SecMinistros from './SecMinistros.vue'
 import { computed, ref } from 'vue'
 import { billsOf } from '../../game/bills'
 import SecEducacao from './SecEducacao.vue'
@@ -94,6 +95,7 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
       <li v-for="g in goals" :key="g.id">{{ g.done ? '✅' : g.icon }} {{ g.text }} <small class="muted">· {{ Math.min(g.v, g.need) }}/{{ g.need }}{{ g.done ? ' · concluída' : '' }}</small></li>
     </ul>
 
+    <SecMinistros />
     <SecEducacao />
     <SecDefesa />
     <SecConstituicao />
