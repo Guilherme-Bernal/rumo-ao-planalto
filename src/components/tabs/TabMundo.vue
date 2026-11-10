@@ -1,10 +1,13 @@
 <script setup>
 import { computed } from 'vue'
 import SecTecnologia from './SecTecnologia.vue'
-import { game, STATS, officeInfo, worldPartners, worldWars, worldNuc, worldStances, diploActions, defActions, fedDefs, fedActions, isPresident, canDiplo, worldReady, diplo, defAct, nucInvest, fedAct, diploChance, askChance } from '../../game/engine'
+import { game, ptsOf, STATS, officeInfo, worldPartners, worldWars, worldNuc, worldStances, diploActions, defActions, fedDefs, fedActions, isPresident, canDiplo, worldReady, diplo, defAct, nucInvest, fedAct, diploChance, askChance } from '../../game/engine'
 
 const w = computed(() => game.world)
 const ready = computed(() => worldReady())
+const readyM = computed(() => worldReady('ptsM'))
+const whyM = computed(() => (game.phase === 'actions' ? (ptsOf('ptsM') > 0 ? '' : 'Sem pontos de defesa nesta rodada.') : 'Disponível na fase de ações da rodada.'))
+const maxPts = computed(() => (pres.value ? 4 : 3))
 const pres = computed(() => isPresident())
 const diploOk = computed(() => canDiplo())
 const color = (v) => (v < 30 ? 'var(--bad)' : v < 55 ? 'var(--warn)' : 'var(--good)')
@@ -25,8 +28,10 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
   <div>
     <h2>🌍 Mundo e relações</h2>
     <p class="muted">
-      Cada rodada você tem <b>2 pontos de agenda</b> para cuidar das relações. As boas relações rendem um pouco por rodada, e as ruins cobram a conta.
-      Pontos agora: <b class="pts">{{ '●'.repeat(w.pts) }}{{ '○'.repeat(Math.max(0, 2 - w.pts)) }}</b>
+      Cada rodada você tem 3 tipos de ponto: <b>diplomacia</b> ({{ maxPts }}: relações, blocos, tratados), <b>defesa</b> (2: Forças Armadas, programa nuclear, operações) e <b>pesquisa</b> (2: tecnologia). As boas relações rendem um pouco por rodada, e as ruins cobram a conta.
+      <br />Diplomacia: <b class="pts">{{ '●'.repeat(Math.max(0, w.pts)) }}{{ '○'.repeat(Math.max(0, maxPts - w.pts)) }}</b>
+      · Defesa: <b class="pts">{{ '●'.repeat(Math.max(0, ptsOf('ptsM'))) }}{{ '○'.repeat(Math.max(0, 2 - ptsOf('ptsM'))) }}</b>
+      · Pesquisa: <b class="pts">{{ '●'.repeat(Math.max(0, ptsOf('ptsP'))) }}{{ '○'.repeat(Math.max(0, 2 - ptsOf('ptsP'))) }}</b>
       <span v-if="why"> · {{ why }}</span>
     </p>
     <p v-if="w.last" class="sumbox" :style="{ marginTop: '8px', borderColor: w.last.ok ? 'var(--good)' : 'var(--bad)' }">{{ w.last.ok ? '✅' : '⚠️' }} {{ w.last.text }}</p>
@@ -95,7 +100,7 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
         <div class="bar"><i :style="{ width: w.fa + '%', background: color(w.fa) }"></i></div>
         <p v-if="w.fa < 25" class="legend" style="color: var(--bad)">⚠️ Os quartéis estão insatisfeitos: segurança e base caem a cada rodada. Com popularidade baixa, isso pode derrubar o governo.</p>
         <div class="acts">
-          <button v-for="a in defActions()" :key="a.id" type="button" :disabled="!ready || !afford(a.fx)" :title="!ready ? why : !afford(a.fx) ? 'Sem Caixa para isso.' : a.desc" @click="defAct(a.id)">
+          <button v-for="a in defActions()" :key="a.id" type="button" :disabled="!readyM || !afford(a.fx)" :title="!readyM ? whyM : !afford(a.fx) ? 'Sem Caixa para isso.' : a.desc" @click="defAct(a.id)">
             {{ a.name }}
             <small>
               <span v-for="c in chips(a.fx)" :key="c.t" :class="c.up ? 'u' : 'dn'">{{ c.t }} </span>
@@ -114,7 +119,7 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
         </div>
         <div class="bar"><i :style="{ width: w.nuc[n.id] + '%', background: 'var(--accent)' }"></i></div>
         <div class="acts">
-          <button type="button" :disabled="!ready || w.nuc[n.id] >= 100 || game.stats.cash < 3" @click="nucInvest(n.id)">Investir <small><span class="dn">-3 Caixa</span></small></button>
+          <button type="button" :disabled="!readyM || w.nuc[n.id] >= 100 || game.stats.cash < 3" @click="nucInvest(n.id)">Investir <small><span class="dn">-3 Caixa</span></small></button>
         </div>
       </div>
     </template>

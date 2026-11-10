@@ -24,7 +24,7 @@ const novo = (office = 'presidente') => {
   E.game.stats.cong = 90
   E.game.poder.exe = { used: [] }
   E.game.poder.leg = { used: [] }
-  E.game.world.pts = 2
+  E.game.world.pts = 4; E.game.world.ptsM = 2; E.game.world.ptsP = 2
 }
 
 describe('Constituição', () => {
@@ -123,7 +123,7 @@ describe('internacional, pesquisa e armas', () => {
     E.game.stats.cong = 100
     let feito = false
     for (let i = 0; i < 12 && !feito; i++) {
-      E.game.world.pts = 2
+      E.game.world.pts = 4; E.game.world.ptsM = 2; E.game.world.ptsP = 2
       const r = E.firmarTratado('tlcUe')
       feito = !!(r && r.ok)
     }
@@ -216,5 +216,21 @@ describe('consequências, elenco e partidos', () => {
     expect(t).toMatch(/golpe/i)
     expect(t).toMatch(/pacto de paz/)
     expect(t).toMatch(/emenda/)
+  })
+})
+
+describe('pontos separados', () => {
+  it('diplomacia, defesa e pesquisa têm reservas próprias', () => {
+    novo()
+    E.game.world.fa = 80
+    E.game.world.rel.arg = 70
+    expect(E.iniciarOp('paz')).toBe(true)
+    expect(E.game.world.ptsM).toBe(1)
+    expect(E.game.world.pts).toBe(4)
+    expect(E.techPush('ia1')).toBe(true)
+    expect(E.game.world.ptsP).toBe(1)
+    expect(E.entrarBloco('mercosul')).toBe(true)
+    expect(E.game.world.pts).toBe(3)
+    expect(E.ptsOf('ptsM')).toBe(1)
   })
 })

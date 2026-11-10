@@ -25,7 +25,7 @@ void officeId
   <div v-if="techOn()">
     <h3 class="sub">🔬 Pesquisa, tecnologia e armas</h3>
     <p class="legend">
-      Escolha um <b>foco</b>: ele avança sozinho um pouco a cada rodada. Para acelerar, financie com 1 ponto de agenda e Caixa (+34%).
+      Escolha um <b>foco</b>: ele avança sozinho um pouco a cada rodada. Para acelerar, financie com 1 ponto de pesquisa e Caixa (+34%).
       Cada tecnologia dá um bônus permanente por rodada. <template v-if="!pres">Governos de estado só pesquisam as áreas civis.</template>
     </p>
     <div v-for="r in ramos" :key="r.id" class="ramo">
@@ -47,7 +47,7 @@ void officeId
 
   <div v-if="pres">
     <h3 class="sub">🌐 Blocos internacionais</h3>
-    <p class="legend">Entrar custa 1 ponto de agenda e Caixa, exige boa relação com os parceiros e rende um bônus por rodada. Algumas adesões irritam outros países.</p>
+    <p class="legend">Entrar custa 1 ponto de diplomacia e Caixa, exige boa relação com os parceiros e rende um bônus por rodada. Algumas adesões irritam outros países.</p>
     <div v-for="b in BLOCOS" :key="b.id" class="rel">
       <div class="row"><span>{{ b.icon }} <b>{{ b.name }}</b> <small class="muted">{{ b.desc }}</small></span><span>{{ w.blocos.includes(b.id) ? '✅ membro' : '' }}</span></div>
       <small class="muted">Bônus: {{ chips(b.passive) }}</small>

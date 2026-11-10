@@ -1923,7 +1923,8 @@ export const worldTemas = () => TEMAS
 export const worldOusadia = () => OUSADIA
 export const isPresident = () => officeId() === 'presidente'
 export const canDiplo = () => ['presidente', 'governador', 'senador'].includes(officeId())
-export const worldReady = () => game.phase === 'actions' && game.world.pts > 0
+export const ptsOf = (pool = 'pts') => (game.world && typeof game.world[pool] === 'number' ? game.world[pool] : 2)
+export const worldReady = (pool = 'pts') => game.phase === 'actions' && ptsOf(pool) > 0
 
 function ensureWorld() {
   const b = blankWorld()
@@ -1952,8 +1953,8 @@ function warLabel() {
 }
 
 // Gasta um ponto de agenda e aplica os efeitos
-function spendWorld(fx, text, say) {
-  game.world.pts--
+function spendWorld(fx, text, say, pool = 'pts') {
+  game.world[pool] = ptsOf(pool) - 1
   game.delta = {}
   curSphere = STAGE_SPHERE[game.stage]
   applyFx(fx || {}, true)
@@ -1990,21 +1991,21 @@ export function diplo(partnerId, actionId) {
 }
 
 export function defAct(id) {
-  if (!isPresident() || !worldReady()) return false
+  if (!isPresident() || !worldReady('ptsM')) return false
   const a = DEF_ACTIONS.find((x) => x.id === id)
   if (!a || !canPay(a.fx)) return false
-  spendWorld(a.fx, `Forças Armadas: ${a.name}.`, `${a.name}: feito.`)
+  spendWorld(a.fx, `Forças Armadas: ${a.name}.`, `${a.name}: feito.`, 'ptsM')
   game.world.fa = clamp(game.world.fa + a.fa)
   for (const [k, d] of Object.entries(a.rel || {})) shiftRel(k, d)
   return true
 }
 
 export function nucInvest(id) {
-  if (!isPresident() || !worldReady()) return false
+  if (!isPresident() || !worldReady('ptsM')) return false
   const n = NUC.find((x) => x.id === id)
   const w = game.world
   if (!n || w.nuc[id] >= 100 || !canPay({ cash: -3 })) return false
-  spendWorld({ cash: -3 }, `Programa nuclear: investimento em ${n.name}.`, `Mais um passo em: ${n.name}.`)
+  spendWorld({ cash: -3 }, `Programa nuclear: investimento em ${n.name}.`, `Mais um passo em: ${n.name}.`, 'ptsM')
   w.nuc[id] = Math.min(100, w.nuc[id] + 25)
   if (w.nuc[id] >= 100 && !w.nucDone.includes(id)) {
     w.nucDone.push(id)
@@ -2105,7 +2106,9 @@ function tickWorld() {
   ensureWorld()
   const w = game.world
   const pres = officeId() === 'presidente'
-  w.pts = 2
+  w.pts = pres ? 4 : 3
+  w.ptsM = 2
+  w.ptsP = 2
   w.lawUsed = false
   w.lawN = 0
   w.last = null
@@ -2237,6 +2240,8 @@ export function devWorld(what) {
     for (const k of Object.keys(w.fed)) w.fed[k] = 85
   } else if (what === 'pts') {
     w.pts = 9
+    w.ptsM = 9
+    w.ptsP = 9
     w.lawUsed = false
     w.lawN = 0
   }
@@ -3851,7 +3856,7 @@ export function blocoMotivo(id) {
   if (!isPresident()) return 'Só a presidência negocia blocos.'
   if (w.blocos.includes(id)) return 'O país já faz parte.'
   if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
-  if (w.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  if (w.pts < 1) return 'Sem pontos de diplomacia nesta rodada.'
   for (const [k, v] of Object.entries(b.need)) if ((w.rel[k] ?? 50) < v) return `Relação insuficiente com ${(PARTNERS.find((x) => x.id === k) || { name: k }).name} (precisa de ${v}).`
   if (game.stats.cash < b.cash) return `Sem caixa (${b.cash}).`
   return ''
@@ -3873,7 +3878,7 @@ export function tratadoMotivo(id) {
   if (!isPresident()) return 'Só a presidência firma tratados.'
   if (w.tratados.includes(id)) return 'Tratado já em vigor.'
   if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
-  if (w.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  if (w.pts < 1) return 'Sem pontos de diplomacia nesta rodada.'
   if ((w.rel[t.partner] ?? 50) < t.need) return `Relação com o parceiro precisa de ${t.need}.`
   if (game.stats.cash < t.cost) return `Sem caixa (${t.cost}).`
   return ''
@@ -3903,7 +3908,7 @@ export function opMotivo(id) {
   if (w.ops.some((x) => x.id === id)) return 'Operação em andamento.'
   if (w.ops.length >= 2) return 'Há operações demais em curso.'
   if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
-  if (w.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  if (ptsOf('ptsM') < 1) return 'Sem pontos de defesa nesta rodada.'
   if (o.need.fa && w.fa < o.need.fa) return `Relação com as Forças Armadas precisa de ${o.need.fa}.`
   if (o.need.tech && !techFeita('def1')) return 'Exige a indústria nacional de defesa (aba de pesquisa).'
   if (o.war && game.stats.cong < 45) return 'O Congresso precisa autorizar: base acima de 45.'
@@ -3913,7 +3918,7 @@ export function opMotivo(id) {
 export function iniciarOp(id) {
   if (opMotivo(id)) return false
   const o = OPS.find((x) => x.id === id)
-  spendWorld({ cash: -o.cost }, `Operação: ${o.name}.`, `${o.name} começou.`)
+  spendWorld({ cash: -o.cost }, `Operação: ${o.name}.`, `${o.name} começou.`, 'ptsM')
   game.world.ops.push({ id, left: o.left })
   for (const [k, d] of Object.entries(o.rel)) shiftRel(k, d * 0.3)
   timelineAdd(o.icon, `${game.name} ordena: ${o.name}`, 'flat')
@@ -3962,7 +3967,7 @@ export function techPushMotivo(id) {
   if (m) return m
   const t = TECHS.find((x) => x.id === id)
   if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
-  if (game.world.pts < 1) return 'Sem pontos de agenda nesta rodada.'
+  if (ptsOf('ptsP') < 1) return 'Sem pontos de pesquisa nesta rodada.'
   if (game.stats.cash < t.cost) return `Sem caixa (${t.cost}).`
   return ''
 }
@@ -3975,7 +3980,7 @@ export function techFoco(id) {
 export function techPush(id) {
   if (techPushMotivo(id)) return false
   const t = TECHS.find((x) => x.id === id)
-  spendWorld({ cash: -t.cost }, `Pesquisa: investimento em ${t.name}.`, `${t.name}: mais um passo.`)
+  spendWorld({ cash: -t.cost }, `Pesquisa: investimento em ${t.name}.`, `${t.name}: mais um passo.`, 'ptsP')
   techAdd(id, TECH_PUSH)
   game.world.tech.foco = game.world.tech.foco || id
   return true

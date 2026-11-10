@@ -152,6 +152,6 @@ export const GUIAS = {
   leis: { t: 'Leis e poderes', txt: 'Leis, vetos, tribunal, metas do mandato e os instrumentos do seu cargo (como PEC e estados de exceção para quem está em Brasília). Ações só valem na fase de ações.' },
   ideias: { t: 'Ideias', txt: 'Defina a linha do seu mandato. Quanto mais você age nela, mais forte ela fica.' },
   partido: { t: 'Partido', txt: 'Troque de legenda ou aceite convites. Partidos novos surgem, se fundem, racham e morrem com o tempo, e o jornal comenta.' },
-  mundo: { t: 'Mundo', txt: 'Relações externas, blocos, tratados, pesquisa, armas e Forças Armadas (conforme o cargo). Cada rodada você tem 2 pontos de agenda.' },
+  mundo: { t: 'Mundo', txt: 'Relações externas, blocos, tratados, pesquisa, armas e Forças Armadas (conforme o cargo). Cada rodada você tem pontos de diplomacia, defesa e pesquisa.' },
 }
 export const FASES = { event: 'evento', outcome: 'resultado do evento', recap: 'resumo da rodada', campaign: 'campanha', result: 'apuração', runoff: 'segundo turno' }
