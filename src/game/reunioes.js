@@ -107,6 +107,26 @@ export const REUNIOES = [
     out: { acordo: { t: 'Vocês fizeram as pazes e a base agradeceu.', fx: { cong: 3, img: 1 } }, parcial: { t: 'Uma trégua frágil, sem foto juntos.', fx: { cong: 1 } }, fracasso: { t: 'A conversa vazou e piorou o clima entre os dois.', fx: { img: -2, cong: -1.5 } } } },
 ]
 
+// BLOCO 32: mais reuniões avulsas
+REUNIOES.push(
+  { id: 'u_universidade', icon: '🎓', title: 'Reitores e pesquisadores', tema: 'o orçamento das universidades e da pesquisa', offs: ['governador', 'presidente', 'dep_federal', 'senador'], parts: [P('Reitora', '🏫', 'idealista', 1, { nome: 'auto' }), P('Pesquisador sênior', '🔬', 'cauteloso', 0, { nome: 'auto' }), P('Secretário da Fazenda', '🧾', 'ganancioso', -1, { peso: 2, nome: 'auto' })],
+    out: { acordo: { t: 'O orçamento da pesquisa foi preservado e o meio acadêmico elogiou.', fx: { soc: 1.5, img: 1.5, cash: -1 } }, parcial: { t: 'Houve corte parcial, com promessa de recomposição.', fx: { soc: 0.5 } }, fracasso: { t: 'O corte saiu e as universidades protestaram.', fx: { soc: -1.5, img: -1 } } } },
+  { id: 'a_agro', icon: '🌾', title: 'Frente do agro', tema: 'crédito rural e a pauta de exportações', offs: ['governador', 'presidente', 'dep_federal', 'senador'], parts: [P('Presidente da federação rural', '🚜', 'ganancioso', 0, { peso: 2, nome: 'auto' }), P('Pequeno produtor', '🧑‍🌾', 'cauteloso', 0, { nome: 'auto' }), P('Ambientalista', '🌳', 'idealista', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'O pacote do crédito rural saiu com salvaguardas ambientais.', fx: { eco: 2.5, cong: 1.5, img: 0.5 } }, parcial: { t: 'Metade do pacote avançou.', fx: { eco: 1 } }, fracasso: { t: 'A frente rompeu e as exportações ficaram no ar.', fx: { eco: -1, cong: -1.5 } } } },
+  { id: 'h_hospital', icon: '🏥', title: 'Diretores de hospitais', tema: 'a fila de cirurgias e os leitos de UTI', offs: ['prefeito', 'governador', 'presidente'], parts: [P('Diretora de hospital', '🏥', 'idealista', 0, { nome: 'auto' }), P('Secretário de Saúde', '🩺', 'pragmatico', 0, { peso: 2, nome: 'auto' }), P('Representante dos médicos', '👨‍⚕️', 'orgulhoso', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'O mutirão de cirurgias foi acertado e a fila começou a cair.', fx: { soc: 2.5, pop: 1.5, cash: -1 } }, parcial: { t: 'Um mutirão menor foi aprovado.', fx: { soc: 1, pop: 0.5 } }, fracasso: { t: 'Os médicos ameaçaram paralisação e o diálogo travou.', fx: { soc: -2, pop: -1 } } } },
+  { id: 'r_religiosos', icon: '⛪', title: 'Lideranças religiosas', tema: 'ação social e o diálogo com as comunidades de fé', offs: 'all', parts: [P('Padre da paróquia', '⛪', 'cauteloso', 0, { nome: 'auto' }), P('Pastor de grande igreja', '🕊️', 'orgulhoso', 0, { peso: 2, nome: 'auto' }), P('Liderança de religião de matriz africana', '🕯️', 'idealista', 0, { nome: 'auto' })],
+    out: { acordo: { t: 'A parceria em ações sociais foi bem recebida por todas as comunidades.', fx: { pop: 2.5, soc: 1, img: 1 } }, parcial: { t: 'Cada comunidade saiu com uma promessa diferente.', fx: { pop: 1 } }, fracasso: { t: 'Uma fala mal colocada ofendeu uma das comunidades.', fx: { pop: -1.5, img: -1.5 } } } },
+  { id: 'j_juventude', icon: '🎒', title: 'Conselho da juventude', tema: 'emprego, primeiro trabalho e transporte', offs: 'all', parts: [P('Presidente do grêmio estudantil', '🎒', 'idealista', 1, { nome: 'auto' }), P('Jovem empreendedor', '💡', 'pragmatico', 0, { nome: 'auto' }), P('Jovem da periferia', '🏘️', 'cauteloso', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'O programa do primeiro emprego saiu com apoio dos jovens.', fx: { pop: 2, eco: 1, soc: 0.5 } }, parcial: { t: 'A conversa foi boa, mas ficou só no papel.', fx: { pop: 0.8 } }, fracasso: { t: 'Os jovens saíram achando que foi só foto.', fx: { pop: -1.5, img: -1 } } } },
+  { id: 'c_empreiteiras', icon: '🏗️', title: 'Empreiteiras e licitações', tema: 'as regras de uma grande obra pública', offs: ['prefeito', 'governador', 'presidente'], parts: [P('Dono de empreiteira', '🏗️', 'ganancioso', 0, { peso: 2, nome: 'auto' }), P('Procurador de contas', '📋', 'idealista', -1, { nome: 'auto' }), P('Secretário de obras', '🧱', 'pragmatico', 0, { nome: 'auto' })],
+    out: { acordo: { t: 'A licitação saiu limpa e com preço abaixo do previsto.', fx: { eco: 1.5, img: 2, cash: 1 } }, parcial: { t: 'A obra saiu, mas com aditivo suspeito.', fx: { eco: 1, img: -0.5 } }, fracasso: { t: 'A obra foi suspensa por suspeita de cartel.', fx: { img: -2.5, eco: -1 } } } },
+  { id: 'n_ongs', icon: '🤲', title: 'Organizações da sociedade civil', tema: 'parcerias e fiscalização de repasses', offs: 'all', parts: [P('Diretora de ONG', '🤲', 'idealista', 1, { nome: 'auto' }), P('Fiscal de contas', '🔍', 'cauteloso', 0, { nome: 'auto' }), P('Empresário apoiador', '💼', 'ganancioso', 0, { nome: 'auto' })],
+    out: { acordo: { t: 'As parcerias foram transparentes e viraram vitrine.', fx: { soc: 1.5, img: 1.5 } }, parcial: { t: 'Metade das parcerias seguiu.', fx: { soc: 0.5 } }, fracasso: { t: 'Uma ONG foi acusada de desvio e a imagem respingou.', fx: { img: -1.5, soc: -0.5 } } } },
+  { id: 'v_vizinho', icon: '🛂', title: 'Vizinhos pedem refúgio', tema: 'a política para refugiados na fronteira', offs: ['presidente', 'governador'], parts: [P('Representante da agência de refugiados', '🇺🇳', 'idealista', 1, { nome: 'auto' }), P('Prefeito de cidade de fronteira', '🏘️', 'cauteloso', -1, { nome: 'auto' }), P('Ministro da Segurança', '🛡️', 'pragmatico', 0, { peso: 2, nome: 'auto' })],
+    out: { acordo: { t: 'O acolhimento organizado foi elogiado e não houve caos.', fx: { img: 2, soc: 1, seg: 0.5 } }, parcial: { t: 'Um acolhimento limitado foi acertado.', fx: { img: 0.5 } }, fracasso: { t: 'A falta de plano gerou tensão nas fronteiras.', fx: { seg: -1.5, img: -1.5, pop: -0.5 } } } },
+)
+
 // BLOCO 25: crises em cadeia. Cada passo é uma reunião; o saldo de acordos decide o desfecho final.
 export const CADEIAS = {
   escandalo: {
@@ -125,6 +145,24 @@ export const CADEIAS = {
       bom: { t: 'O pacto social encerrou a greve e o país voltou a funcionar.', fx: { pop: 2, eco: 2, img: 1 } },
       medio: { t: 'A greve acabou sem acordo claro e o desgaste ficou.', fx: { eco: -1, pop: -1 } },
       ruim: { t: 'A greve geral paralisou o país e o governo saiu enfraquecido.', fx: { eco: -3, pop: -3, cong: -2 } },
+    },
+  },
+  apagao: {
+    icon: '💡', nome: 'Crise do apagão', gatilho: 'Um apagão atingiu várias regiões e vai passar pela empresa de energia, pela indústria e pelo Congresso.',
+    passos: ['c_ap_empresa', 'c_ap_industria', 'c_ap_congresso'],
+    fim: {
+      bom: { t: 'A energia voltou e você assumiu a coordenação da resposta.', fx: { eco: 1.5, img: 2, pop: 1 } },
+      medio: { t: 'O apagão foi contornado, mas as perdas ficaram.', fx: { eco: -1, img: -0.5 } },
+      ruim: { t: 'O apagão se repetiu e virou símbolo de má gestão.', fx: { eco: -3, img: -3, pop: -2 } },
+    },
+  },
+  conspiracao: {
+    icon: '🕸️', nome: 'Desdobramento da conspiração', gatilho: 'A conspiração foi exposta e a inteligência, o partido e o plenário querem explicações.',
+    passos: ['c_co_inteligencia', 'c_co_partido', 'c_co_plenario'],
+    fim: {
+      bom: { t: 'Os envolvidos foram afastados e a teia foi desmontada de vez.', fx: { img: 3, cong: 2 } },
+      medio: { t: 'A teia foi cortada, mas parte do grupo escapou.', fx: { img: 0.5 } },
+      ruim: { t: 'A defesa dos conspiradores virou o jogo e você foi acusado de perseguição.', fx: { img: -3, cong: -2 } },
     },
   },
 }
@@ -148,4 +186,26 @@ REUNIOES.push(
   { id: 'c_gg_congresso', cadeia: true, icon: '🏛️', title: 'Votação do pacote no Congresso', tema: 'o pacote que encerra a greve', offs: 'all',
     parts: [P('Presidente da Casa', '🎖️', 'orgulhoso', 0, { peso: 2, nome: 'auto' }), P('Líder da oposição', '🥊', 'idealista', -1, { nome: 'auto' }), P('Líder do centrão', '🤝', 'ganancioso', 0, { nome: 'auto' })],
     out: { acordo: { t: 'O Congresso aprovou o pacote em votação rápida.', fx: { cong: 1.5 } }, parcial: { t: 'O pacote passou desidratado.', fx: {} }, fracasso: { t: 'O pacote travou no plenário.', fx: { cong: -2 } } } },
+)
+
+// BLOCO 32: passos das cadeias do apagão e da conspiração
+REUNIOES.push(
+  { id: 'c_ap_empresa', cadeia: true, icon: '⚡', title: 'Reunião com a empresa de energia', tema: 'as causas do apagão e o plano de religação', offs: 'all',
+    parts: [P('Presidente da empresa de energia', '⚡', 'orgulhoso', -1, { peso: 2, nome: 'auto' }), P('Engenheiro-chefe', '🔧', 'cauteloso', 1, { nome: 'auto' }), P('Diretor de regulação', '📋', 'pragmatico', 0, { nome: 'auto' })],
+    out: { acordo: { t: 'A empresa assumiu o erro e religou as áreas mais críticas.', fx: { eco: 0.8, img: 1 } }, parcial: { t: 'A religação saiu, mas sem prazo claro.', fx: {} }, fracasso: { t: 'A empresa jogou a culpa no governo.', fx: { img: -1.5 } } } },
+  { id: 'c_ap_industria', cadeia: true, icon: '🏭', title: 'Reunião com a indústria', tema: 'as perdas das fábricas e o racionamento', offs: 'all',
+    parts: [P('Presidente da federação industrial', '🏭', 'ganancioso', 0, { peso: 2, nome: 'auto' }), P('Dono de siderúrgica', '🔩', 'orgulhoso', 0, { nome: 'auto' }), P('Líder sindical', '🔧', 'idealista', 1, { nome: 'auto' })],
+    out: { acordo: { t: 'A indústria aceitou um revezamento sem demissões.', fx: { eco: 1.2, pop: 0.8 } }, parcial: { t: 'O revezamento foi aceito com cobranças.', fx: { eco: 0.4 } }, fracasso: { t: 'As fábricas ameaçaram parar e demitir.', fx: { eco: -1.5, pop: -1 } } } },
+  { id: 'c_ap_congresso', cadeia: true, icon: '🏛️', title: 'Votação da medida emergencial', tema: 'o crédito extraordinário para a energia', offs: 'all',
+    parts: [P('Presidente da Casa', '🎖️', 'orgulhoso', 0, { peso: 2, nome: 'auto' }), P('Relator', '📜', 'pragmatico', 0, { nome: 'auto' }), P('Líder da oposição', '🥊', 'idealista', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'A medida foi aprovada em votação rápida.', fx: { cong: 1.5, eco: 0.5 } }, parcial: { t: 'A medida passou desidratada.', fx: { cong: 0.3 } }, fracasso: { t: 'A votação travou e o apagão voltou.', fx: { cong: -1.5, pop: -1 } } } },
+  { id: 'c_co_inteligencia', cadeia: true, icon: '🕶️', title: 'Reunião com a inteligência', tema: 'as provas contra a conspiração', offs: 'all',
+    parts: [P('Diretor da inteligência', '🕶️', 'cauteloso', 0, { peso: 2, nome: 'auto' }), P('Delegado da Polícia Federal', '🛂', 'idealista', 1, { nome: 'auto' }), P('Seu advogado', '🧑‍💼', 'pragmatico', 0, { nome: 'auto' })],
+    out: { acordo: { t: 'As provas foram consolidadas e a perícia confirmou tudo.', fx: { img: 1.5 } }, parcial: { t: 'Parte das provas foi aceita.', fx: {} }, fracasso: { t: 'Parte das provas foi anulada por irregularidade.', fx: { img: -1.5 } } } },
+  { id: 'c_co_partido', cadeia: true, icon: '🏢', title: 'Reunião com a cúpula do partido', tema: 'o afastamento dos envolvidos na conspiração', offs: 'all',
+    parts: [P('Presidente do partido', '🎙️', 'orgulhoso', 0, { peso: 2, nome: 'auto' }), P('Líder da bancada', '🏛️', 'pragmatico', 0, { nome: 'auto' }), P('Ala jovem', '🌱', 'idealista', 1, { nome: 'auto' })],
+    out: { acordo: { t: 'O partido afastou os envolvidos e fechou com você.', fx: { cong: 2, img: 1 } }, parcial: { t: 'O partido ficou dividido, mas sem rompimento.', fx: { cong: 0.5 } }, fracasso: { t: 'O partido protegeu os envolvidos.', fx: { cong: -2 } } } },
+  { id: 'c_co_plenario', cadeia: true, icon: '🏛️', title: 'Sessão no plenário', tema: 'a votação das medidas contra a conspiração', offs: 'all',
+    parts: [P('Presidente da Casa', '🎖️', 'orgulhoso', 0, { peso: 2, nome: 'auto' }), P('Relator', '📜', 'cauteloso', 0, { nome: 'auto' }), P('Líder da oposição', '🥊', 'idealista', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'O plenário aprovou as medidas por ampla maioria.', fx: { cong: 2, img: 1.5 } }, parcial: { t: 'As medidas passaram com ressalvas.', fx: { cong: 0.5 } }, fracasso: { t: 'O plenário rejeitou as medidas e o assunto ficou aberto.', fx: { cong: -1.5, img: -1 } } } },
 )

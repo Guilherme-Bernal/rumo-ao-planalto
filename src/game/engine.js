@@ -23,6 +23,7 @@ import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOE
 import { randomLook } from './look'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
 import { finalOf, saveFinal } from './finais'
+import { MIS_INTRO, MIS_PISTAS, MIS_PEND, MIS_ACOES, MIS_FIM, HIST_EVENTOS } from './misterio32'
 import { MIN_BASE, MIN_AGENDAS, MIN_EVENTOS, MIN_SAIDA, PAUTAS, ONDAS, ONDA_RESP, MISSOES } from './bastidores'
 import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS, CADEIAS } from './reunioes'
 import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
@@ -4195,6 +4196,8 @@ export function roundAvancos() {
   roundMinistros()
   roundRedes()
   roundMissao()
+  roundMisterio()
+  roundHist()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -4240,11 +4243,8 @@ function roundReunioes() {
   p.convites = p.convites.filter((c) => c.left >= 0)
   p.memoria = (p.memoria || []).filter((m) => game.total - m.r <= 14)
   if (!p.cadeia && !p.convites.length && game.total >= 5 && R() < (game.stats.img < 45 ? 0.1 : game.stats.pop < 40 ? 0.08 : 0.02)) {
-    const id = game.stats.img < 45 || R() < 0.5 ? 'escandalo' : 'greve'
-    p.cadeia = { id, passo: 0, pontos: 0 }
-    p.convites.push({ defId: CADEIAS[id].passos[0], left: 3, cadeia: id, passo: 0, pontos: 0 })
-    toast(CADEIAS[id].icon, CADEIAS[id].gatilho)
-    timelineAdd(CADEIAS[id].icon, CADEIAS[id].nome, 'down')
+    const id = game.stats.img < 45 || R() < 0.5 ? 'escandalo' : isExec() && R() < 0.5 ? 'apagao' : 'greve'
+    iniciarCadeia(id)
     return
   }
   if (p.convites.length >= 2 || R() > 0.45) return
@@ -5078,6 +5078,7 @@ export const figurasNow = () => vidaNow().figuras
 function roundVida() {
   if (!game.world) return
   const v = vidaEnsure()
+  for (const d of FIGURAS) if (!v.figuras.some((f) => f.id === d.id)) v.figuras.push({ id: d.id, icon: d.icon, label: d.label, nome: candName(R), idade: d.idade[0] + Math.floor(R() * (d.idade[1] - d.idade[0] + 1)), estado: 'ativa', casado: false })
   if (game.total % 4 === 0) for (const f of v.figuras) if (f.estado !== 'falecida') f.idade++
   const fp = {}
   for (const f of v.figuras) {
@@ -5102,6 +5103,8 @@ function roundVida() {
   if (f.idade >= 62) cands.push('aposentadoria')
   if (f.idade >= 68) cands.push('morte', 'morte')
   if (f.idade <= 62 && !f.casado) cands.push('casamento')
+  cands.push('favor')
+  if (R() < 0.5) cands.push('escandalo')
   if (!cands.length) return
   const tipo = cands[Math.floor(R() * cands.length)]
   v.pend = { tipo, fig: f.id, left: 2 }
@@ -6161,4 +6164,230 @@ function roundMissao() {
   for (const k of d.pers) ctx[k] = candName(R)
   game.poder.missao = { id: d.id, passo: 0, ok: 0, ctx, log: [], left: 3, vista: 3, fim: null }
   toast(d.icon, `Missão de bastidor: ${d.titulo}`)
+}
+
+/* ---------- BLOCO 32: conspiração de longo prazo ---------- */
+function iniciarCadeia(id) {
+  const p = game.poder
+  p.convites = p.convites || []
+  p.cadeia = { id, passo: 0, pontos: 0 }
+  p.convites.push({ defId: CADEIAS[id].passos[0], left: 3, cadeia: id, passo: 0, pontos: 0 })
+  toast(CADEIAS[id].icon, CADEIAS[id].gatilho)
+  timelineAdd(CADEIAS[id].icon, CADEIAS[id].nome, 'down')
+}
+export const misNow = () => (game.poder && game.poder.mist) || null
+export const misAcoes = () => MIS_ACOES
+export function misView() {
+  const m = misNow()
+  if (!m) return null
+  const c = m.ctx
+  return { m, intro: MIS_INTRO(c), pistas: m.pistas.map((i) => MIS_PISTAS[i](c)), total: MIS_PISTAS.length, fim: m.fim ? { ...MIS_FIM[m.fim.tipo], txt: MIS_FIM[m.fim.tipo].t(c) } : null }
+}
+function misRoundCtx(m) {
+  const cab = (game.poder && game.poder.cab) || {}
+  const ativos = Object.values(cab).filter((a) => a && a.stage === game.stage)
+  return ativos.length && R() < 0.6 ? ativos[Math.floor(R() * ativos.length)].nome : candName(R)
+}
+function roundMisterio() {
+  ensurePoder()
+  let m = game.poder.mist
+  if (!m) {
+    if (game.total < 6 || R() > 0.05) return
+    const ctx = { operador: candName(R), financista: candName(R), traidor: null }
+    ctx.traidor = misRoundCtx()
+    game.poder.mist = m = { ctx, avanco: 12, pistas: [], pend: null, last: game.total, acao: -9, fim: null }
+    toast('🕸️', 'Rumores de uma conspiração contra você começaram a circular.')
+    timelineAdd('🕸️', 'Surgem rumores de uma conspiração contra você.', 'down')
+    return
+  }
+  if (m.fim) return
+  m.avanco = clamp(m.avanco + 2.2 + (game.heat || 0) / 80 - m.pistas.length * 0.15)
+  if (m.avanco >= 50 && game.total % 2 === 0) applyFx({ img: -0.3, pop: -0.2 }, true)
+  if (m.avanco >= 100) {
+    misFechar(m, 'explodiu')
+    return
+  }
+  if (m.pend) {
+    m.pend.left--
+    if (m.pend.left < 0) misPendAplicar(m, 'ignorar', true)
+    return
+  }
+  if (m.pistas.length < MIS_PISTAS.length && game.total - m.last >= 3 && R() < 0.15) {
+    m.pend = { left: 2 }
+    m.last = game.total
+    toast('🔎', MIS_PEND.titulo(m.ctx))
+  }
+}
+function misDarPista(m) {
+  const i = m.pistas.length
+  if (i >= MIS_PISTAS.length) return null
+  m.pistas.push(i)
+  m.avanco = clamp(m.avanco - 3)
+  const t = MIS_PISTAS[i](m.ctx)
+  timelineAdd('🔎', t, 'up')
+  toast('🔎', t.length > 90 ? t.slice(0, 88) + '…' : t)
+  return t
+}
+function misFechar(m, tipo) {
+  m.fim = { tipo, vista: 3 }
+  const f = MIS_FIM[tipo]
+  applyFx(f.fx, true)
+  if (tipo === 'explodiu') game.heat = clamp((game.heat || 0) + 10)
+  if (tipo === 'calada') {
+    m.avanco = 25
+    m.fim = null
+    m.pistas = m.pistas.slice(0, 2)
+  }
+  timelineAdd(f.icon, f.t(m.ctx), tipo === 'exposta' ? 'up' : 'down')
+  toast(f.icon, f.t(m.ctx).slice(0, 90))
+  if (tipo === 'exposta') {
+    const cab = game.poder.cab || {}
+    for (const k of Object.keys(cab)) if (cab[k] && cab[k].nome === m.ctx.traidor) minSai(k, cab[k], 'demitido')
+    m.avanco = 0
+    if (!game.poder.cadeia) iniciarCadeia('conspiracao')
+  }
+  cnt('conspira')
+}
+export const misPendNow = () => {
+  const m = misNow()
+  if (!m || !m.pend || m.fim) return null
+  return { ...MIS_PEND, titulo: MIS_PEND.titulo(m.ctx), texto: MIS_PEND.texto(m.ctx), left: m.pend.left }
+}
+export function misPendMotivo(opId) {
+  const o = MIS_PEND.ops.find((x) => x.id === opId)
+  if (!misPendNow() || !o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function misPendAplicar(m, opId, auto) {
+  const o = MIS_PEND.ops.find((x) => x.id === opId)
+  m.pend = null
+  game.delta = {}
+  let txt
+  if (o.cash) applyFx({ cash: -o.cash }, true)
+  if (o.id === 'ignorar') {
+    m.avanco = clamp(m.avanco + 3)
+    txt = auto ? 'A ponta solta sumiu e a teia avançou.' : 'Você deixou passar. A teia avançou.'
+  } else if (R() < o.p + (m.pistas.length >= 3 ? 0.1 : 0)) txt = 'Deu certo: ' + (misDarPista(m) || 'não há mais pistas.')
+  else txt = 'A fonte não deu em nada desta vez.'
+  return txt
+}
+export function misPendEscolher(opId) {
+  if (misPendMotivo(opId)) return null
+  const txt = misPendAplicar(game.poder.mist, opId, false)
+  save()
+  return { txt }
+}
+export function misAcaoMotivo(id) {
+  const m = misNow()
+  const a = MIS_ACOES.find((x) => x.id === id)
+  if (!m || m.fim || !a) return 'Sem conspiração ativa.'
+  if (game.total - m.acao < 2) return 'Espere uma rodada.'
+  if (a.need && m.pistas.length < a.need) return `Precisa de ${a.need} pistas (você tem ${m.pistas.length}).`
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  if ((id === 'investigar' || id === 'infiltrar') && m.pistas.length >= MIS_PISTAS.length) return 'Você já tem todas as pistas.'
+  return ''
+}
+export function misAcao(id) {
+  if (misAcaoMotivo(id)) return null
+  const m = game.poder.mist
+  const a = MIS_ACOES.find((x) => x.id === id)
+  m.acao = game.total
+  game.delta = {}
+  if (a.cash) applyFx({ cash: -a.cash }, true)
+  if (a.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp((game.heat || 0) + (id === 'negociar' ? 8 : 5))
+  }
+  let txt
+  if (id === 'investigar' || id === 'infiltrar') {
+    const ok = R() < clamp(a.p + ((game.stats[a.bonus] || 50) - 50) * 0.003, 0.15, 0.9)
+    txt = ok ? 'Pista encontrada: ' + misDarPista(m) : 'A investigação não rendeu e deixou a teia mais atenta.'
+    if (!ok) m.avanco = clamp(m.avanco + 3)
+  } else if (id === 'negociar') {
+    misFechar(m, 'calada')
+    txt = MIS_FIM.calada.t(m.ctx)
+  } else {
+    const p = clamp(0.3 + (m.pistas.length - 4) * 0.22 + (game.stats.img - 50) * 0.002, 0.2, 0.95)
+    if (R() < p) {
+      misFechar(m, 'exposta')
+      txt = MIS_FIM.exposta.t(m.ctx)
+    } else {
+      applyFx({ img: -3, cong: -1 }, true)
+      m.avanco = clamp(m.avanco + 10)
+      m.pistas.pop()
+      txt = 'Faltaram provas: a denúncia foi desmentida e a teia ficou mais forte.'
+      timelineAdd('📣', txt, 'down')
+    }
+  }
+  cnt('conspira')
+  save()
+  return { txt }
+}
+
+/* ---------- BLOCO 32: eventos de fundo inspirados na história ---------- */
+const LEG = ['vereador', 'dep_estadual', 'dep_federal', 'senador']
+const histGrupo = () => (isExec() ? 'exec' : LEG.includes(officeId()) ? 'leg' : 'padrao')
+export const histNow = () => (game.poder && game.poder.hist32) || { last: -9, seen: [], pend: null }
+export const histDef = (id) => HIST_EVENTOS.find((x) => x.id === id)
+export function histPendNow() {
+  const h = histNow()
+  if (!h.pend) return null
+  const e = histDef(h.pend.id)
+  return e ? { e, left: h.pend.left, texto: e.txt[histGrupo()] || e.txt.padrao } : null
+}
+export function histMotivo(opId) {
+  const pn = histPendNow()
+  if (!pn) return 'Nada pendente.'
+  const o = pn.e.ops.find((x) => x.id === opId)
+  if (!o) return 'Opção inválida.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function histAplicar(h, opId, auto) {
+  const e = histDef(h.pend.id)
+  const o = e.ops.find((x) => x.id === opId) || e.ops.find((x) => x.id === e.padrao)
+  const g = histGrupo()
+  const fx = { ...(o.fx[g] || o.fx.padrao) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  if (o.risco && R() < o.risco.p) for (const k in o.risco.fx) fx[k] = (fx[k] || 0) + o.risco.fx[k]
+  applyFx(fx, true)
+  if (o.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp((game.heat || 0) + 5)
+  }
+  h.pend = null
+  timelineAdd(e.icon, `${e.nome}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, 'flat')
+  cnt('historia')
+  return o
+}
+export function histEscolher(opId) {
+  if (histMotivo(opId)) return null
+  const h = game.poder.hist32
+  const e = histDef(h.pend.id)
+  const o = histAplicar(h, opId, false)
+  save()
+  return { txt: `${e.nome}: ${o.name.toLowerCase()}.` }
+}
+function roundHist() {
+  ensurePoder()
+  if (!game.poder.hist32) game.poder.hist32 = { last: -9, seen: [], pend: null }
+  const h = game.poder.hist32
+  if (h.pend) {
+    if (--h.pend.left < 0) histAplicar(h, histDef(h.pend.id).padrao, true)
+    return
+  }
+  if (game.total < 4 || game.total - h.last < 6 || R() > 0.1) return
+  let pool = HIST_EVENTOS.filter((e) => !h.seen.includes(e.id))
+  if (!pool.length) {
+    h.seen = []
+    pool = HIST_EVENTOS
+  }
+  const e = pool[Math.floor(R() * pool.length)]
+  h.pend = { id: e.id, left: 2 }
+  h.seen.push(e.id)
+  h.last = game.total
+  toast(e.icon, e.nome)
 }

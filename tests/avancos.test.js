@@ -545,7 +545,7 @@ describe('Vida entre rodadas', () => {
   it('figuras políticas existem e eventos de vida têm efeito', () => {
     novo()
     E.roundAvancos()
-    expect(E.figurasNow().length).toBe(6)
+    expect(E.figurasNow().length).toBe(9)
     E.game.poder.vida.pend = { tipo: 'morte', fig: 'mentor', left: 2 }
     expect(E.vidaEscolher('velorio')).toBeTruthy()
     expect(E.figurasNow().find((f) => f.id === 'mentor').estado).toBe('falecida')
@@ -1078,5 +1078,84 @@ describe('BLOCO 31 — ministros, redes e missões', () => {
       const ctx = Object.fromEntries(d.pers.map((k) => [k, 'X']))
       expect(d.intro(ctx)).toBeTruthy()
     }
+  })
+})
+
+describe('BLOCO 32 — conspiração, história de fundo e mais gente', () => {
+  it('a conspiração nasce, dá pistas e pode ser exposta com provas', () => {
+    novo('presidente')
+    E.game.total = 10
+    E.game.poder.mist = { ctx: { operador: 'Op', financista: 'Fin', traidor: 'Tra' }, avanco: 20, pistas: [], pend: null, last: 0, acao: -9, fim: null }
+    E.game.stats.cash = 80
+    expect(E.misAcaoMotivo('expor')).toMatch(/pistas/)
+    for (let i = 0; i < 40 && E.misNow().pistas.length < 4; i++) { E.game.total += 3; E.misAcao('infiltrar') }
+    expect(E.misNow().pistas.length).toBeGreaterThanOrEqual(4)
+    E.game.total += 3
+    expect(E.misAcaoMotivo('expor')).toBe('')
+    E.game.poder.mist.pistas = [0, 1, 2, 3, 4, 5]
+    let fim = null
+    for (let i = 0; i < 30 && !fim; i++) { E.game.total += 3; E.game.poder.mist.pistas = [0, 1, 2, 3, 4, 5]; E.misAcao('expor'); fim = E.misNow().fim }
+    expect(fim.tipo).toBe('exposta')
+    expect(E.game.poder.cadeia && E.game.poder.cadeia.id).toBe('conspiracao')
+  })
+  it('conspiração sem resposta explode ao chegar em 100', () => {
+    novo('presidente')
+    E.game.total = 10
+    E.game.poder.mist = { ctx: { operador: 'Op', financista: 'Fin', traidor: 'Tra' }, avanco: 99, pistas: [], pend: null, last: 99, acao: -9, fim: null }
+    const img = E.game.stats.img
+    E.roundAvancos()
+    expect(E.misNow().fim.tipo).toBe('explodiu')
+    expect(E.game.stats.img).toBeLessThan(img)
+  })
+  it('ponta solta cai na opção padrão e a opção de seguir pode dar pista', () => {
+    novo('presidente')
+    E.game.total = 10
+    E.game.poder.mist = { ctx: { operador: 'Op', financista: 'Fin', traidor: 'Tra' }, avanco: 10, pistas: [], pend: { left: 0 }, last: 0, acao: -9, fim: null }
+    E.roundAvancos()
+    expect(E.misNow().pend).toBeNull()
+    let ok = false
+    for (let i = 0; i < 40 && !ok; i++) { E.game.stats.cash = 20; E.misNow().pend = { left: 2 }; E.misPendEscolher('seguir'); ok = E.misNow().pistas.length > 0 }
+    expect(ok).toBe(true)
+  })
+  it('eventos históricos variam por cargo e caem na opção padrão', () => {
+    novo('presidente')
+    E.game.total = 10
+    E.game.poder.hist32 = { last: 0, seen: [], pend: { id: 'diesel', left: 2 } }
+    const t1 = E.histPendNow().texto
+    novo('vereador')
+    E.game.poder.hist32 = { last: 0, seen: [], pend: { id: 'diesel', left: 2 } }
+    expect(E.histPendNow().texto).not.toBe(t1)
+    E.game.stats.cash = 20
+    E.histEscolher('subsidio')
+    expect(E.game.poder.hist32.pend).toBeNull()
+    E.game.poder.hist32 = { last: 0, seen: [], pend: { id: 'ponte', left: 0 } }
+    E.game.total = 10
+    E.roundAvancos()
+    expect(E.game.poder.hist32.pend).toBeNull()
+  })
+  it('todos os eventos históricos têm texto por grupo e ops com efeitos', async () => {
+    const M = await import('../src/game/misterio32.js')
+    expect(M.HIST_EVENTOS.length).toBeGreaterThanOrEqual(10)
+    for (const e of M.HIST_EVENTOS) {
+      expect(e.txt.exec && e.txt.leg && e.txt.padrao && e.insp).toBeTruthy()
+      expect(e.ops.some((o) => o.id === e.padrao)).toBe(true)
+      for (const o of e.ops) expect(o.fx.exec && o.fx.leg && o.fx.padrao).toBeTruthy()
+    }
+    expect(M.MIS_PISTAS.length).toBe(6)
+  })
+  it('novas figuras entram nos saves antigos e as cadeias novas existem', async () => {
+    novo('presidente')
+    E.game.total = 5
+    E.game.poder.vida = { figuras: [{ id: 'mentor', icon: 'x', label: 'm', nome: 'A', idade: 70, estado: 'ativa', casado: false }], pend: null }
+    E.roundAvancos()
+    const ids = E.game.poder.vida.figuras.map((f) => f.id)
+    expect(ids).toContain('banqueiro')
+    expect(ids).toContain('influenciador')
+    const R = await import('../src/game/reunioes.js')
+    for (const id of ['apagao', 'conspiracao']) {
+      expect(R.CADEIAS[id].passos.length).toBe(3)
+      for (const pid of R.CADEIAS[id].passos) expect(R.REUNIOES.find((d) => d.id === pid)).toBeTruthy()
+    }
+    expect(R.REUNIOES.length).toBeGreaterThanOrEqual(40)
   })
 })

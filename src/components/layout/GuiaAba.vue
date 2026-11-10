@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -21,6 +21,8 @@ const pend = computed(() => {
 const fam = computed(() => famPend())
 const rival = computed(() => rvPendNow())
 const mini = computed(() => minPendNow())
+const mis = computed(() => misPendNow())
+const hist = computed(() => histPendNow())
 const missao = computed(() => { const v = missaoView(); return v && v.passo ? v : null })
 const cadeia = computed(() => {
   const c = cadeiaNow()
@@ -75,6 +77,20 @@ const cadeia = computed(() => {
       <br /><small>{{ missao.texto }}</small>
       <span class="ops">
         <button v-for="o in missao.passo.ops" :key="o.id" type="button" class="mini" :disabled="!!missaoMotivo(o.id)" :title="o.desc" @click="missaoEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="mis" class="aviso conv">
+      🔎 <b>{{ mis.titulo }}</b> <small>({{ mis.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ mis.texto }}</small>
+      <span class="ops">
+        <button v-for="o in mis.ops" :key="o.id" type="button" class="mini" :disabled="!!misPendMotivo(o.id)" :title="o.desc" @click="misPendEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="hist" class="aviso conv">
+      {{ hist.e.icon }} <b>{{ hist.e.nome }}</b> <small>({{ hist.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ hist.texto }} <i class="muted">{{ hist.e.insp }}</i></small>
+      <span class="ops">
+        <button v-for="o in hist.e.ops" :key="o.id" type="button" class="mini" :disabled="!!histMotivo(o.id)" :title="o.desc" @click="histEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
       </span>
     </div>
     <p v-if="inds.length" class="aviso">🏭 Em operação: {{ inds.map((x) => x.nome).join(' · ') }}.</p>
