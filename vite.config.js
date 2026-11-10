@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+﻿import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // base './' faz o build funcionar em qualquer subpasta (GitHub Pages, etc.)
@@ -14,4 +14,6 @@ export default defineConfig({
       },
     },
   },
+  // testes em sequência e com folga de tempo (o teste dos bots abre outros processos e disputa CPU)
+  test: { fileParallelism: false, testTimeout: 30000 },
 })
