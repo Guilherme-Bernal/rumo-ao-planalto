@@ -297,7 +297,7 @@ const canNext = computed(() => (step.value === 3 ? !!partyId.value : true))
               <section class="tsec">
                 <h3>🧑 Seu visual</h3>
                 <p class="hint">Monte o rosto do seu personagem. Ele aparece nas redes, no painel e no fim da carreira.</p>
-                <LookEditor v-model="look" />
+                <LookEditor v-model="look" :idade="Number(picks.idade)" />
               </section>
 
               <section class="tsec">

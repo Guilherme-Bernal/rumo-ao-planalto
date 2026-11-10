@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -18,6 +18,7 @@ const pend = computed(() => {
   const e = eventoDef(v.pend.tipo)
   return f && e ? { e, f, left: v.pend.left } : null
 })
+const fam = computed(() => famPend())
 const cadeia = computed(() => {
   const c = cadeiaNow()
   return c ? { ...cadeiaDef(c.id), passo: c.passo } : null
@@ -43,6 +44,13 @@ const cadeia = computed(() => {
       <br /><small>{{ pend.e.texto(pend.f) }}</small>
       <span class="ops">
         <button v-for="o in pend.e.ops" :key="o.id" type="button" class="mini" :disabled="!!vidaMotivo(o.id)" :title="o.desc" @click="vidaEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="fam" class="aviso conv">
+      {{ fam.e.icon }} <b>{{ fam.titulo }}</b> <small>({{ fam.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ fam.texto }}</small>
+      <span class="ops">
+        <button v-for="o in fam.e.ops" :key="o.id" type="button" class="mini" :disabled="!!famEscolhaMotivo(o.id)" :title="o.desc" @click="famEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
       </span>
     </div>
     <p v-if="inds.length" class="aviso">🏭 Em operação: {{ inds.map((x) => x.nome).join(' · ') }}.</p>

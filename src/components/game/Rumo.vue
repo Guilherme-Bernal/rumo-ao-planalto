@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, officeInfo, pathOptions, chooseRumo, retireCareer, ageNow } from '../../game/engine'
+import { game, officeInfo, pathOptions, chooseRumo, retireCareer, ageNow, sucessaoMotivo, iniciarSucessao } from '../../game/engine'
 
 const opts = computed(() => pathOptions())
 const cur = computed(() => officeInfo())
@@ -24,6 +24,7 @@ const cur = computed(() => officeInfo())
       <div class="muted">Cargos do Executivo (prefeito, governador, presidente) têm uma reeleição seguida e, para disputar outro cargo, o titular renuncia seis meses antes (desincompatibilização).</div>
       <div class="muted">Legislativo (vereador, deputado) não tem limite de reeleições.</div>
     </div>
-    <button style="width: 100%; margin-top: 12px" @click="retireCareer">🏁 Encerrar a carreira por aqui</button>
+    <button style="width: 100%; margin-top: 12px" :disabled="!!sucessaoMotivo()" :title="sucessaoMotivo()" @click="iniciarSucessao">🎓 Passar o bastão: apoiar um sucessor na eleição</button>
+    <button style="width: 100%; margin-top: 8px" @click="retireCareer">🏁 Encerrar a carreira por aqui</button>
   </div>
 </template>

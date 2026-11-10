@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { ref } from 'vue'
-import { game, stageInfo, ageNow, POST_OPTS, doPost, canPost, reactsLeft } from '../../game/engine'
+import { game, stageInfo, ageNow, officeId, POST_OPTS, doPost, canPost, reactsLeft } from '../../game/engine'
 import PostCard from '../game/PostCard.vue'
 import { fmtNum } from '../../game/social'
 import Avatar from '../character/Avatar.vue'
@@ -27,7 +27,7 @@ const top = computed(() => Math.max(1, ...trends.value.map((t) => t.heat)))
     <div class="sn-profile">
       <div class="sn-cover"></div>
       <div class="sn-pbody">
-        <div class="sn-pava"><Avatar v-if="game.look" :look="game.look" :size="68" /><div v-else class="avatar">{{ game.name.slice(0, 1) }}</div></div>
+        <div class="sn-pava"><Avatar v-if="game.look" :look="game.look" :cargo="officeId()" :idade="ageNow()" :size="68" /><div v-else class="avatar">{{ game.name.slice(0, 1) }}</div></div>
         <div class="sn-pid">
           <b>{{ game.name }} <span class="sp-ok">✔</span></b>
           <small class="muted">{{ handle }}</small>

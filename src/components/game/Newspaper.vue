@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, onMounted, onUpdated } from 'vue'
-import { game } from '../../game/engine'
+import { game, officeId, ageNow } from '../../game/engine'
 import Avatar from '../character/Avatar.vue'
 
 const props = defineProps({ news: Object })
@@ -37,7 +37,7 @@ const initial = (n) => (n || '?').replace(/^(Dr\.|Dra\.|Seu|Dona|Tio|Tia|Prof\.|
 
     <div class="np-grid">
       <figure class="np-photo">
-        <div class="np-frame"><Avatar v-if="game.look" :look="game.look" :size="108" :round="false" /><div v-else class="np-ph">{{ (game.name || '?')[0] }}</div></div>
+        <div class="np-frame"><Avatar v-if="game.look" :look="game.look" :cargo="officeId()" :idade="ageNow()" :size="108" :round="false" /><div v-else class="np-ph">{{ (game.name || '?')[0] }}</div></div>
         <figcaption>{{ game.name }}</figcaption>
       </figure>
       <div ref="bodyEl" class="np-body" :class="{ drop: long }"><slot /></div>

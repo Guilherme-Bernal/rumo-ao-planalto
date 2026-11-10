@@ -18,6 +18,8 @@ import { CRISES, CRISE_RESP, EMB, VIAGEM, SANCAO, ESPIO_ACOES } from './mundo24'
 import { SETORES, SETOR_ACOES, MOVIMENTOS, MOV_RESP, VEICULOS, LINHAS, MIDIA_ACOES, CATASTROFES, CATAST_RESP } from './sociedade'
 import { INIMIGOS, AMEACAS, GUERRA_ACOES } from './ameacas'
 import { FIGURAS, EVENTOS } from './vida'
+import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
+import { randomLook } from './look'
 import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS, CADEIAS } from './reunioes'
 import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
 import { makeContacts, ensureContacts, SCRIPTS, ROLES, KIND, ASKS, CHAT, LIGAR } from './contacts'
@@ -263,7 +265,7 @@ function checkAch() {
 function computePoints(ended) {
   const s = game.stats
   const avg = (s.pop + s.eco + s.soc + s.seg + s.img) / 5
-  return Math.round(game.history.length * 10 + game.stage * 6 + avg + (game.term >= 2 ? 10 : 0) + (ended ? 15 : 0) + game.keptAll * 5)
+  return Math.round(game.history.length * 10 + game.stage * 6 + avg + (game.term >= 2 ? 10 : 0) + (ended ? 15 : 0) + game.keptAll * 5 + (game.poder && game.poder.sucessao && game.poder.sucessao.fim && game.poder.sucessao.fim.won ? 12 : 0))
 }
 
 function finalize(ended) {
@@ -2338,6 +2340,8 @@ function endGame() {
     text = 'Teve acertos e erros. Os historiadores vão brigar por décadas.'
   }
   if (game.lastPlan && game.lastPlan.total) text += ` Promessas cumpridas no último mandato: ${game.lastPlan.kept}/${game.lastPlan.total}.`
+  const sc = game.poder && game.poder.sucessao && game.poder.sucessao.fim
+  if (sc) text += sc.won ? ` ${game.poder.sucessao.nome} foi eleito(a) seu sucessor(a) e levou o projeto adiante.` : ` ${game.poder.sucessao.nome} tentou a sucessão, mas perdeu a eleição.`
   game.legacy = { title, text }
   game.phase = 'end'
   finalize(true)
@@ -2504,6 +2508,9 @@ export function timelineAdd(icon, text, tn = 'flat') {
   ensurePoder()
   game.poder.timeline.unshift({ r: game.total, icon, text, tone: tn })
   game.poder.timeline = game.poder.timeline.slice(0, 40)
+  if (!game.poder.bio) game.poder.bio = { marcos: [] }
+  game.poder.bio.marcos.push({ r: game.total, icon, text, tone: tn, cargo: officeId() })
+  if (game.poder.bio.marcos.length > 80) game.poder.bio.marcos.splice(0, game.poder.bio.marcos.length - 80)
 }
 function enactStatute(bill, how, k = 1) {
   ensurePoder()
@@ -4139,6 +4146,7 @@ export function roundAvancos() {
   roundSociedade()
   roundMundo24()
   roundVida()
+  roundFamilia()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -5027,7 +5035,7 @@ function roundVida() {
   for (const f of v.figuras) {
     if (f.estado !== 'ativa') continue
     const d = FIGURAS.find((x) => x.id === f.id)
-    for (const k in d.pass || {}) fp[k] = (fp[k] || 0) + d.pass[k]
+    for (const k in d.pass || {}) fp[k] = (fp[k] || 0) + d.pass[k] * ((f.laco == null ? 55 : f.laco) / 55)
   }
   if (Object.keys(fp).length) applyFx(fp)
   if (v.pend) {
@@ -5080,4 +5088,261 @@ export function vidaEscolher(op) {
   v.pend = null
   save()
   return { txt }
+}
+
+/* ---------- BLOCO 26: família, biografia, laços e sucessão ---------- */
+const famBase = () => ({ harmonia: 65, pais: null, conjuge: null, filhos: [], pend: null, used: false, prox: 0 })
+export const familiaNow = () => (game.poder && game.poder.familia) || famBase()
+function famEnsure() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.familia || !p.familia.filhos) p.familia = { ...famBase(), ...(p.familia || {}) }
+  const f = p.familia
+  if (!f.pais) f.pais = { mae: candName(R), pai: candName(R) }
+  return f
+}
+export const famAcoes = () => FAM_ACOES
+export const famEventoDef = (tipo) => FAM_EVENTOS[tipo]
+export const perfisConjuge = () => PERFIS_CONJUGE
+export const famPend = () => {
+  const f = familiaNow()
+  if (!f.pend) return null
+  const e = FAM_EVENTOS[f.pend.tipo]
+  const ctx = { nome: (f.conjuge && f.conjuge.nome) || 'Alguém da família', perfilTxt: (f.conjuge && PERFIS_CONJUGE.find((x) => x.id === f.conjuge.perfil).name) || '', filho: (f.filhos[0] && f.filhos[0].nome) || 'Seu filho' }
+  return { tipo: f.pend.tipo, left: f.pend.left, e, titulo: e.titulo(ctx), texto: e.texto(ctx) }
+}
+function roundFamilia() {
+  if (!game.world) return
+  const f = famEnsure()
+  f.used = false
+  const cargo = officeId()
+  f.harmonia = clamp(f.harmonia - (cargo === 'presidente' ? 2.5 : cargo === 'governador' ? 2 : 1.5))
+  if (f.harmonia >= 70) applyFx({ img: 0.15 })
+  else if (f.harmonia <= 25) applyFx({ img: -0.3, pop: -0.1 })
+  if (f.pend) {
+    f.pend.left--
+    if (f.pend.left < 0) { f.harmonia = clamp(f.harmonia - 8); applyFx({ img: -0.3 }, true); f.pend = null }
+    return
+  }
+  if (game.total < 3 || --f.prox > 0 || R() > 0.18) return
+  f.prox = 3
+  const c = f.conjuge
+  const pool = []
+  if (!c && game.total >= 4) pool.push('noivado')
+  if (c && c.casado && !f.filhos.length && game.total >= 6) pool.push('filho')
+  if (c && f.harmonia < 45) pool.push('reclama', 'reclama')
+  if (f.filhos.length) pool.push('polemica')
+  if (game.total >= 5) pool.push('favor')
+  if (!pool.length) return
+  const tipo = pool[Math.floor(R() * pool.length)]
+  if (tipo === 'noivado') {
+    const perfil = PERFIS_CONJUGE[Math.floor(R() * PERFIS_CONJUGE.length)].id
+    f.conjuge = { nome: candName(R), perfil, look: randomLook(), casado: false, apoio: 60 }
+  }
+  f.pend = { tipo, left: 2 }
+  const info = famPend()
+  toast(info.e.icon, info.titulo)
+}
+export function famEscolhaMotivo(op) {
+  const p = famPend()
+  if (!p) return 'Indisponível.'
+  const o = p.e.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+export function famEscolher(op) {
+  if (famEscolhaMotivo(op)) return null
+  const f = famEnsure()
+  const p = famPend()
+  const o = p.e.ops.find((x) => x.id === op)
+  const fx = { ...(o.fx || {}) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  applyFx(fx, true)
+  f.harmonia = clamp(f.harmonia + (o.h || 0))
+  if (o.sujo) game.heat = (game.heat || 0) + 4
+  let txt = `${p.titulo}: ${o.name.toLowerCase()}.`
+  if (p.tipo === 'noivado') {
+    if (o.naoCasa) f.conjuge = null
+    else { f.conjuge.casado = true; timelineAdd('💍', `Casamento com ${f.conjuge.nome}`, 'up') }
+  } else if (p.tipo === 'filho') {
+    f.filhos.push({ nome: candName(R).split(' ')[0], look: { ...randomLook(), age: 'jovem', headwear: 'nenhum', beard: 'nenhuma', glasses: 'nenhum' }, nasc: game.total })
+    timelineAdd('👶', `Nasce ${f.filhos[f.filhos.length - 1].nome}, filho(a) de ${game.name}`, 'up')
+  } else timelineAdd(p.e.icon, txt, 'flat')
+  cnt('familia')
+  f.pend = null
+  save()
+  return { txt }
+}
+export function famAcaoMotivo(id) {
+  const a = FAM_ACOES.find((x) => x.id === id)
+  const f = familiaNow()
+  if (!a) return 'Indisponível.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (f.used) return 'Você já dedicou tempo à família nesta rodada.'
+  if (a.req && !(f.conjuge && f.conjuge.casado && f.conjuge.perfil === a.req)) return 'Exige cônjuge atuante.'
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function famAgir(id) {
+  if (famAcaoMotivo(id)) return null
+  const f = famEnsure()
+  const a = FAM_ACOES.find((x) => x.id === id)
+  const fx = { ...(a.fx || {}) }
+  if (a.cash) fx.cash = -a.cash
+  applyFx(fx, true)
+  f.harmonia = clamp(f.harmonia + a.h)
+  f.used = true
+  cnt('familia')
+  save()
+  return { txt: `${a.name}: harmonia ${a.h > 0 ? '+' : ''}${a.h}.` }
+}
+
+// biografia viva
+export const bioNow = () => ((game.poder && game.poder.bio) || { marcos: [] }).marcos
+export function bioTitulos() {
+  const t = []
+  const c = (k) => cntAll(k)
+  if (c('guerravit') > 0 || c('pacto') > 0) t.push({ icon: '🕊️', nome: 'Pacificador', txt: 'Venceu ou evitou uma guerra.' })
+  if (c('criseok') > 0 || c('cadeiaok') > 0) t.push({ icon: '🧭', nome: 'Estadista de crise', txt: 'Atravessou crises sem perder o rumo.' })
+  if (c('reuniaook') >= 3) t.push({ icon: '🤝', nome: 'Negociador', txt: 'Fechou três ou mais acordos em reuniões.' })
+  if (c('setor') >= 3) t.push({ icon: '🏭', nome: 'Amigo dos setores', txt: 'Cuidou da relação com os setores econômicos.' })
+  if (c('catastok') > 0) t.push({ icon: '🚒', nome: 'Na linha de frente', txt: 'Respondeu a uma catástrofe local.' })
+  if (c('cadeia') > 0) t.push({ icon: '🔥', nome: 'Sobrevivente', txt: 'Passou por uma crise que saiu do controle.' })
+  if (game.poder && game.poder.familia && game.poder.familia.harmonia >= 70) t.push({ icon: '🏡', nome: 'Família unida', txt: 'Manteve a casa em ordem apesar da agenda.' })
+  if (game.poder && game.poder.sucessao && game.poder.sucessao.fim && game.poder.sucessao.fim.won) t.push({ icon: '🎓', nome: 'Criador de sucessores', txt: 'Elegeu o próprio sucessor.' })
+  return t
+}
+
+// laços com mentor, rival e líder do partido
+export const figAcoes = (id) => FIG_ACOES[id] || []
+export function figMotivo(figId, acao) {
+  const v = vidaNow()
+  const f = v.figuras.find((x) => x.id === figId)
+  const a = (FIG_ACOES[figId] || []).find((x) => x.id === acao)
+  if (!f || !a) return 'Indisponível.'
+  if (f.estado !== 'ativa') return 'Esta pessoa já não está em atividade.'
+  if (game.phase !== 'actions') return 'Disponível na fase de ações da rodada.'
+  if (v.usedR === game.total) return 'Você já conversou com uma figura política nesta rodada.'
+  return ''
+}
+export function figAgir(figId, acao) {
+  if (figMotivo(figId, acao)) return null
+  const v = vidaEnsure()
+  const f = v.figuras.find((x) => x.id === figId)
+  const a = FIG_ACOES[figId].find((x) => x.id === acao)
+  if (f.laco == null) f.laco = figId === 'rival' ? 40 : 55
+  if (!f.hist) f.hist = []
+  const p = Math.max(0.1, Math.min(0.92, a.base + (a.k ? (f.laco - 50) / a.k : 0)))
+  const ok = R() < p
+  const fx = { ...(ok ? a.ok : a.bad) }
+  applyFx(fx, true)
+  f.laco = clamp(f.laco + (ok ? a.lacoOk : a.lacoBad))
+  f.hist.unshift({ r: game.total, t: ok ? a.hOk : a.hBad })
+  f.hist = f.hist.slice(0, 5)
+  if (a.rivalMod && ok) game.rivalMod = (game.rivalMod || 0) + a.rivalMod
+  v.usedR = game.total
+  timelineAdd(f.icon, `${f.nome}: ${ok ? a.hOk : a.hBad}`, ok ? 'up' : 'down')
+  cnt('laco')
+  save()
+  return { ok, txt: `${f.nome}: ${ok ? a.hOk : a.hBad}` }
+}
+
+// sucessão jogável
+export const sucessaoNow = () => (game.poder && game.poder.sucessao) || null
+export const sucPerfis = () => SUC_PERFIS
+export const sucAcoes = () => SUC_ACOES
+export function sucessaoMotivo() {
+  if (game.phase !== 'rumo') return 'Só ao fim de um mandato.'
+  if (sucessaoNow()) return 'A sucessão já foi decidida.'
+  return ''
+}
+export function iniciarSucessao() {
+  if (sucessaoMotivo()) return false
+  ensurePoder()
+  const cands = SUC_PERFIS.map((pf) => ({
+    perfil: pf.id,
+    nome: candName(R),
+    look: randomLook(),
+    forca: pf.base + (pf.id === 'popular' ? (game.stats.pop - 50) / 5 : pf.id === 'tecnico' ? (game.stats.cong - 50) / 6 : 0),
+  }))
+  game.poder.sucessao = { etapa: 0, cands, esc: null, nome: '', look: null, forca: 0, rival: 46 + Math.floor(R() * 14), usados: [], log: [], fim: null }
+  save()
+  return true
+}
+export function sucEscolher(i) {
+  const s = sucessaoNow()
+  if (!s || s.etapa !== 0 || !s.cands[i]) return false
+  const c = s.cands[i]
+  s.esc = c.perfil
+  s.nome = c.nome
+  s.look = { ...c.look }
+  s.forca = c.forca
+  s.etapa = 1
+  save()
+  return true
+}
+export function sucEditar(nome, look) {
+  const s = sucessaoNow()
+  if (!s || s.fim || s.etapa < 1) return false
+  if (nome != null && String(nome).trim()) s.nome = String(nome).trim().slice(0, 40)
+  if (look) s.look = { ...look }
+  save()
+  return true
+}
+export function sucAcaoMotivo(id) {
+  const s = sucessaoNow()
+  const a = SUC_ACOES.find((x) => x.id === id)
+  if (!s || s.fim || s.etapa < 1 || s.etapa > 3 || !a) return 'Indisponível.'
+  if (s.usados.includes(id)) return 'Já feito nesta etapa.'
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function sucAgir(id) {
+  if (sucAcaoMotivo(id)) return null
+  const s = sucessaoNow()
+  const a = SUC_ACOES.find((x) => x.id === id)
+  const pf = SUC_PERFIS.find((x) => x.id === s.esc)
+  if (a.cash) applyFx({ cash: -a.cash }, true)
+  let d = 0
+  let txt = ''
+  if (id === 'comicio') { d = 7; txt = 'O comício encheu a praça.' }
+  else if (id === 'debate') {
+    const ok = R() < 0.35 + (pf.vol >= 8 ? 0.25 : pf.id === 'tecnico' ? 0.3 : 0.15)
+    d = ok ? 10 : -4
+    txt = ok ? 'No debate, o sucessor brilhou.' : 'No debate, o sucessor tropeçou.'
+  } else if (id === 'agenda') { d = Math.round((game.stats.pop - 50) / 6 + (game.stats.cong - 50) / 10 + 4); txt = 'Seu capital político ajudou na campanha.' }
+  else if (id === 'atacar') {
+    if (R() < 0.35) { d = -8; txt = 'O ataque virou contra o sucessor.' } else { d = 6; txt = 'O ataque desgastou o adversário.' }
+  } else { d = 5; txt = 'Novo visual e discurso renovado.' }
+  d += (R() - 0.5) * pf.vol
+  s.forca = Math.round((s.forca + d) * 10) / 10
+  s.usados.push(id)
+  s.log.push(txt)
+  if (s.usados.length >= 2) { s.etapa++; s.usados = [] }
+  if (s.etapa > 3) sucFinalizar()
+  save()
+  return { txt }
+}
+function sucFinalizar() {
+  const s = sucessaoNow()
+  const margem = Math.round((s.forca - s.rival + (R() - 0.5) * 8) * 10) / 10
+  const won = margem > 0
+  s.fim = { won, margem }
+  s.etapa = 4
+  cnt(won ? 'sucessor' : 'sucessorperd')
+  timelineAdd(won ? '🎓' : '📉', won ? `${s.nome}, seu sucessor, vence a eleição` : `${s.nome}, seu sucessor, perde a eleição`, won ? 'up' : 'down')
+}
+export function sucCancelar() {
+  const s = sucessaoNow()
+  if (!s || s.etapa !== 0) return false
+  game.poder.sucessao = null
+  save()
+  return true
+}
+export function sucConcluir() {
+  const s = sucessaoNow()
+  if (!s || !s.fim) return false
+  retireCareer()
+  return true
 }

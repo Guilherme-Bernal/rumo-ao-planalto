@@ -565,3 +565,89 @@ describe('Vida entre rodadas', () => {
     }
   })
 })
+
+describe('Pessoas: visual, família, biografia e sucessão', () => {
+  it('criador de rosto tem as novas opções e o envelhecimento acompanha a idade', async () => {
+    const L = await import('../src/game/look.js')
+    const d = L.defaultLook()
+    for (const k of ['brow', 'eyeColor', 'mouth', 'nose', 'marks', 'headwear', 'pin', 'age']) expect(d).toHaveProperty(k)
+    expect(L.HAIRS.length).toBeGreaterThanOrEqual(13)
+    expect(L.OUTFITS.length).toBeGreaterThanOrEqual(7)
+    expect(L.agingLevel('auto', 30)).toBe(0)
+    expect(L.agingLevel('auto', 70)).toBe(3)
+    expect(L.agingLevel('jovem', 70)).toBe(0)
+    for (const c of Object.keys(L.INSIGNIAS)) expect(typeof L.INSIGNIAS[c]).toBe('string')
+    expect(L.randomLook()).toHaveProperty('mouth')
+  })
+  it('família: casamento, filho e harmonia', () => {
+    novo()
+    E.roundAvancos()
+    const f = E.game.poder.familia
+    f.conjuge = { nome: 'Alex Teste', perfil: 'atuante', look: {}, casado: false, apoio: 60 }
+    f.pend = { tipo: 'noivado', left: 2 }
+    const h = f.harmonia
+    expect(E.famEscolher('discreto')).toBeTruthy()
+    expect(E.familiaNow().conjuge.casado).toBe(true)
+    expect(E.familiaNow().harmonia).toBeGreaterThan(h)
+    E.game.poder.familia.pend = { tipo: 'filho', left: 2 }
+    E.famEscolher('reservar')
+    expect(E.familiaNow().filhos.length).toBe(1)
+    expect(E.famAcaoMotivo('campanha')).toBe('')
+    const hh = E.familiaNow().harmonia
+    E.famAgir('jantar')
+    expect(E.familiaNow().harmonia).toBeGreaterThan(hh)
+    expect(E.famAcaoMotivo('viagem')).toMatch(/já dedicou/)
+  })
+  it('família ignorada degrada harmonia mas nunca quebra', () => {
+    for (const o of ['vereador', 'presidente']) {
+      novo(o)
+      E.game.total = 10
+      for (let i = 0; i < 60; i++) { E.roundAvancos(); E.game.poder.familia.pend = null; E.game.poder.vida.pend = null }
+      expect(E.familiaNow().harmonia).toBeGreaterThanOrEqual(0)
+    }
+  })
+  it('biografia registra marcos e títulos', () => {
+    novo()
+    E.timelineAdd('🏅', 'Marco de teste', 'up')
+    expect(E.bioNow().some((m) => m.text === 'Marco de teste')).toBe(true)
+    E.cnt('guerravit')
+    expect(E.bioTitulos().some((t) => t.nome === 'Pacificador')).toBe(true)
+  })
+  it('laço com o mentor: conversar muda o laço, uma vez por rodada', () => {
+    novo()
+    E.roundAvancos()
+    const antes = E.figurasNow().find((x) => x.id === 'mentor').laco
+    const r = E.figAgir('mentor', 'conselho')
+    expect(r).toBeTruthy()
+    const m = E.figurasNow().find((x) => x.id === 'mentor')
+    expect(m.laco).not.toBe(antes)
+    expect(m.hist.length).toBe(1)
+    expect(E.figMotivo('rival', 'tregua')).toMatch(/uma figura/)
+  })
+  it('sucessão jogável vai da escolha ao fim da carreira', () => {
+    novo()
+    E.game.phase = 'rumo'
+    E.game.election = null
+    expect(E.sucessaoMotivo()).toBe('')
+    expect(E.iniciarSucessao()).toBe(true)
+    expect(E.sucEscolher(1)).toBe(true)
+    expect(E.sucEditar('Candidata Nova', { hair: 'tranca' })).toBe(true)
+    expect(E.sucessaoNow().nome).toBe('Candidata Nova')
+    let n = 0
+    while (E.sucessaoNow().etapa <= 3 && n++ < 20) {
+      for (const a of E.sucAcoes()) { E.game.stats.cash = 60; if (!E.sucAcaoMotivo(a.id)) E.sucAgir(a.id) }
+    }
+    expect(E.sucessaoNow().fim).toBeTruthy()
+    expect(E.sucConcluir()).toBe(true)
+    expect(E.game.phase).toBe('end')
+    expect(E.game.legacy.text).toMatch(/Candidata Nova/)
+  })
+  it('sucessão pode ser cancelada antes de escolher e só existe ao fim do mandato', () => {
+    novo()
+    expect(E.sucessaoMotivo()).toMatch(/fim/)
+    E.game.phase = 'rumo'
+    E.iniciarSucessao()
+    expect(E.sucCancelar()).toBe(true)
+    expect(E.sucessaoNow()).toBe(null)
+  })
+})

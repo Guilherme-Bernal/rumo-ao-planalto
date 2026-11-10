@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { game, figurasNow, memoriaNow } from '../../game/engine'
 import { ROLES, relLabel } from '../../game/contacts'
+import SecPessoas from './SecPessoas.vue'
 
 const emit = defineEmits(['go'])
 const figs = computed(() => figurasNow())
@@ -64,6 +65,7 @@ const sign = (d) => (d > 0 ? `+${d}` : d < 0 ? `${d}` : '0')
       <p class="muted">Na Agenda, marque a ação "Ligar para um contato" no calendário. Bata papo para fortalecer a relação ou peça um favor. Pedidos polêmicos rendem mais, mas contam como escolha suja.</p>
       <button class="primary" @click="emit('go', 'agenda')">Ir para a Agenda</button>
     </div>
+    <SecPessoas />
     <div v-if="figs.length" class="sumbox" style="margin-top: 12px">
       <b>🏛️ Figuras políticas</b>
       <p class="muted">Pessoas da política que acompanham a sua carreira. Elas envelhecem, se casam, se aposentam e morrem, e você decide como reagir.</p>

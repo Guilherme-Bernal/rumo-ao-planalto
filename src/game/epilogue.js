@@ -33,6 +33,8 @@ export function epilogue(g) {
   if (ot === 'Golpe de Estado') out.push('A noite do golpe virou capítulo obrigatório nos livros. Quem tentou defender as instituições é lembrado; quem as derrubou, também, mas por outro motivo.')
   else if (ot === 'Guerra civil') out.push('O país dividido deixou cicatrizes que levaram gerações para fechar. Nos museus, a data do início do conflito ganhou uma sala inteira.')
   if (cn('paz') > 0 && ot !== 'Guerra civil') out.push('O pacto de paz que encerrou o conflito interno ficou conhecido como o dia em que o país escolheu conversar em vez de lutar.')
+  if (g.poder && g.poder.sucessao && g.poder.sucessao.fim) out.push(g.poder.sucessao.fim.won ? `O bastão passou para ${g.poder.sucessao.nome}, e a transição de poder foi lembrada como um raro exemplo de continuidade.` : `${g.poder.sucessao.nome} não conseguiu herdar o capital político e a sucessão virou assunto de seminário.`)
+  if (g.poder && g.poder.familia && g.poder.familia.conjuge && g.poder.familia.conjuge.casado) out.push(`${g.poder.familia.conjuge.nome} esteve ao seu lado em boa parte da jornada${g.poder.familia.filhos.length ? ', e os filhos cresceram vendo a política de perto' : ''}.`)
   if (cn('golpefail') > 0 || cn('plotok') > 0) out.push('Houve quem tentasse romper a ordem, e as instituições seguraram. Esse capítulo costuma ser citado como prova de que a democracia resistiu.')
   if (cn('emenda') > 0) out.push(`A sua assinatura ficou numa emenda à Constituição${cn('emenda') > 1 ? ' (e em outras)' : ''}, daquelas que professores citam em sala de aula.`)
   if (cn('petrea') > 0) out.push('O Supremo teve de lembrar que algumas cláusulas da Constituição não se mexem, e o episódio ficou na sua biografia.')

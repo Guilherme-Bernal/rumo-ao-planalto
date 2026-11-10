@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { game, STATS, resetGame, country } from '../../game/engine'
+import { game, STATS, resetGame, country, officeId, ageNow } from '../../game/engine'
 import { ACHIEVEMENTS, loadHall } from '../../game/extras'
 import Avatar from '../character/Avatar.vue'
 import { epilogue } from '../../game/epilogue'
@@ -62,7 +62,7 @@ async function share() {
 <template>
   <div class="screen">
     <div class="box panel card">
-      <div v-if="game.look" style="display: flex; justify-content: center; margin-bottom: 10px"><Avatar :look="game.look" :size="96" /></div>
+      <div v-if="game.look" style="display: flex; justify-content: center; margin-bottom: 10px"><Avatar :look="game.look" :cargo="officeId()" :idade="ageNow()" :size="96" /></div>
       <template v-if="game.phase === 'over'">
         <h1 style="color: var(--bad)">{{ game.over.title }}</h1>
         <p class="lead" style="margin-top: 8px">{{ game.over.text }}</p>

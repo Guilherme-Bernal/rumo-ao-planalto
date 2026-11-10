@@ -11,6 +11,7 @@ import Sandbox from './components/layout/Sandbox.vue'
 import Apoie from './components/layout/Apoie.vue'
 import Settings from './components/layout/Settings.vue'
 import Reuniao from './components/game/Reuniao.vue'
+import Sucessao from './components/game/Sucessao.vue'
 import { unlock, sfx, setMood } from './game/audio'
 const showSandbox = import.meta.env.DEV || new URLSearchParams(location.search).has('sandbox')
 import EndScreen from './components/screens/EndScreen.vue'
@@ -112,6 +113,7 @@ function restart() {
 
   <Settings />
   <Reuniao />
+  <Sucessao />
   <StartScreen v-if="game.phase === 'start'" />
   <EndScreen v-else-if="game.phase === 'over' || game.phase === 'end'" />
 
