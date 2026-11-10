@@ -24,6 +24,7 @@ const out = computed(() => (r.value && r.value.resultado ? d.value.out[r.value.r
         <div v-for="(p, i) in r.parts" :key="i" class="part">
           <div class="who"><span class="ic">{{ p.icon }}</span> <b>{{ p.nome }}</b> <small class="muted">{{ p.nome === p.role ? '' : p.role }} · {{ tr[p.trait].icon }} {{ tr[p.trait].label }}</small>
             <span class="mood" :title="'Atitude: ' + p.att">{{ humor(p.att) }}</span></div>
+          <p v-if="p.lembra" class="lembra">🧠 {{ p.lembra }}</p>
           <div class="meter"><i :style="{ width: ((p.att + 3) / 6) * 100 + '%' }"></i></div>
           <p v-if="r.step >= 1 && r.step <= 3 && r.falas[i]" class="fala">“{{ r.falas[i] }}”</p>
         </div>
@@ -62,6 +63,7 @@ const out = computed(() => (r.value && r.value.resultado ? d.value.out[r.value.r
 .reu { background: var(--panel, #131a2b); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 14px; padding: 14px; max-width: 560px; width: 100%; max-height: 94vh; overflow: auto; }
 h2 { margin: 0 0 4px; font-size: 1.1rem; }
 h3 { margin: 12px 0 6px; font-size: 0.98rem; }
+.lembra { margin: 2px 0; font-size: 0.82rem; opacity: 0.85; font-style: italic; }
 .parts { display: grid; gap: 8px; margin-top: 8px; }
 .part { background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 8px 10px; }
 .who { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

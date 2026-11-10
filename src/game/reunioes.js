@@ -106,3 +106,46 @@ export const REUNIOES = [
   { id: 'x_reconciliar', icon: '🤝', title: 'Conversa com um antigo aliado', tema: 'reconstruir uma aliança que se rompeu', offs: 'all', cond: 'exaliado', parts: [P('Antigo aliado', '💔', 'orgulhoso', -1, { peso: 2, nome: 'exaliado' }), P('Amigo em comum', '🍻', 'pragmatico', 1, { nome: 'auto' }), P('Jornalista que cobre a história', '🎤', 'cauteloso', 0, { nome: 'auto' })],
     out: { acordo: { t: 'Vocês fizeram as pazes e a base agradeceu.', fx: { cong: 3, img: 1 } }, parcial: { t: 'Uma trégua frágil, sem foto juntos.', fx: { cong: 1 } }, fracasso: { t: 'A conversa vazou e piorou o clima entre os dois.', fx: { img: -2, cong: -1.5 } } } },
 ]
+
+// BLOCO 25: crises em cadeia. Cada passo é uma reunião; o saldo de acordos decide o desfecho final.
+export const CADEIAS = {
+  escandalo: {
+    icon: '🗞️', nome: 'Crise do escândalo', gatilho: 'Um escândalo ganhou as manchetes e vai passar pelo partido, pela imprensa e pelo tribunal.',
+    passos: ['c_esc_partido', 'c_esc_imprensa', 'c_esc_tribunal'],
+    fim: {
+      bom: { t: 'Você atravessou o escândalo e saiu com a imagem intacta.', fx: { img: 3, pop: 1 } },
+      medio: { t: 'O escândalo foi se arrastando e deixou arranhões.', fx: { img: -1 } },
+      ruim: { t: 'O escândalo explodiu e virou a pauta do país.', fx: { img: -4, pop: -2, cong: -2 } },
+    },
+  },
+  greve: {
+    icon: '✊', nome: 'Crise da greve geral', gatilho: 'Uma greve geral ameaça parar o país e vai passar pelos sindicatos, pelos empresários e pelo Congresso.',
+    passos: ['c_gg_sindicatos', 'c_gg_patroes', 'c_gg_congresso'],
+    fim: {
+      bom: { t: 'O pacto social encerrou a greve e o país voltou a funcionar.', fx: { pop: 2, eco: 2, img: 1 } },
+      medio: { t: 'A greve acabou sem acordo claro e o desgaste ficou.', fx: { eco: -1, pop: -1 } },
+      ruim: { t: 'A greve geral paralisou o país e o governo saiu enfraquecido.', fx: { eco: -3, pop: -3, cong: -2 } },
+    },
+  },
+}
+
+REUNIOES.push(
+  { id: 'c_esc_partido', cadeia: true, icon: '🏢', title: 'Reunião de emergência no partido', tema: 'como o partido vai reagir ao escândalo', offs: 'all',
+    parts: [P('Presidente do partido', '🎙️', 'orgulhoso', -1, { peso: 2, nome: 'auto' }), P('Líder da bancada', '🏛️', 'pragmatico', 0, { nome: 'auto' }), P('Ala jovem', '🌱', 'idealista', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'O partido fechou questão em sua defesa.', fx: { cong: 2 } }, parcial: { t: 'O partido ficou em cima do muro.', fx: {} }, fracasso: { t: 'O partido deixou você sozinho.', fx: { cong: -2 } } } },
+  { id: 'c_esc_imprensa', cadeia: true, icon: '🎤', title: 'Coletiva com a imprensa', tema: 'as respostas sobre o escândalo', offs: 'all',
+    parts: [P('Colunista político', '📰', 'orgulhoso', -1, { peso: 2, nome: 'auto' }), P('Repórter investigativo', '🔍', 'idealista', -1, { nome: 'auto' }), P('Âncora de TV', '📺', 'pragmatico', 0, { nome: 'auto' })],
+    out: { acordo: { t: 'A coletiva virou a página e a cobertura esfriou.', fx: { img: 1.5 } }, parcial: { t: 'A imprensa seguiu cobrando, sem novidades.', fx: {} }, fracasso: { t: 'Uma resposta mal dada virou manchete.', fx: { img: -2 } } } },
+  { id: 'c_esc_tribunal', cadeia: true, icon: '⚖️', title: 'Audiência no tribunal', tema: 'o inquérito aberto sobre o escândalo', offs: 'all',
+    parts: [P('Ministro relator', '👨‍⚖️', 'cauteloso', 0, { peso: 2, nome: 'auto' }), P('Promotor', '📜', 'idealista', -1, { nome: 'auto' }), P('Seu advogado', '🧑‍💼', 'ganancioso', 1, { nome: 'auto' })],
+    out: { acordo: { t: 'O relator arquivou a parte mais grave.', fx: { img: 1.5 } }, parcial: { t: 'O caso segue, mas sem prisão.', fx: {} }, fracasso: { t: 'O relator abriu processo formal.', fx: { img: -2, cong: -1 } } } },
+  { id: 'c_gg_sindicatos', cadeia: true, icon: '✊', title: 'Mesa com as centrais sindicais', tema: 'a pauta da greve geral', offs: 'all',
+    parts: [P('Presidente da central', '📣', 'orgulhoso', -1, { peso: 2, nome: 'auto' }), P('Líder dos metalúrgicos', '🔧', 'pragmatico', 0, { nome: 'auto' }), P('Líder dos professores', '📚', 'idealista', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'Os sindicatos aceitaram negociar e suspenderam o bloqueio.', fx: { pop: 1 } }, parcial: { t: 'Saiu uma trégua curta.', fx: {} }, fracasso: { t: 'Os sindicatos endureceram o discurso.', fx: { pop: -1.5 } } } },
+  { id: 'c_gg_patroes', cadeia: true, icon: '🏦', title: 'Reunião com os empresários', tema: 'quem paga a conta do acordo', offs: 'all',
+    parts: [P('Presidente da federação industrial', '🏭', 'ganancioso', 0, { peso: 2, nome: 'auto' }), P('Dono de rede de varejo', '🏪', 'pragmatico', 0, { nome: 'auto' }), P('Banqueiro', '💰', 'cauteloso', -1, { nome: 'auto' })],
+    out: { acordo: { t: 'Os empresários toparam dividir o custo.', fx: { eco: 1 } }, parcial: { t: 'Aceitaram só uma parte.', fx: {} }, fracasso: { t: 'Os empresários ameaçaram demissões.', fx: { eco: -1.5 } } } },
+  { id: 'c_gg_congresso', cadeia: true, icon: '🏛️', title: 'Votação do pacote no Congresso', tema: 'o pacote que encerra a greve', offs: 'all',
+    parts: [P('Presidente da Casa', '🎖️', 'orgulhoso', 0, { peso: 2, nome: 'auto' }), P('Líder da oposição', '🥊', 'idealista', -1, { nome: 'auto' }), P('Líder do centrão', '🤝', 'ganancioso', 0, { nome: 'auto' })],
+    out: { acordo: { t: 'O Congresso aprovou o pacote em votação rápida.', fx: { cong: 1.5 } }, parcial: { t: 'O pacote passou desidratado.', fx: {} }, fracasso: { t: 'O pacote travou no plenário.', fx: { cong: -2 } } } },
+)

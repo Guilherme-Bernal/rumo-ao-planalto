@@ -17,7 +17,8 @@ import { BIG, bigWhen, BIG_TAGS } from './bigevents'
 import { CRISES, CRISE_RESP, EMB, VIAGEM, SANCAO, ESPIO_ACOES } from './mundo24'
 import { SETORES, SETOR_ACOES, MOVIMENTOS, MOV_RESP, VEICULOS, LINHAS, MIDIA_ACOES, CATASTROFES, CATAST_RESP } from './sociedade'
 import { INIMIGOS, AMEACAS, GUERRA_ACOES } from './ameacas'
-import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS } from './reunioes'
+import { FIGURAS, EVENTOS } from './vida'
+import { REUNIOES, ABORDAGENS, FALAS, TRAITS, FICTICIOS, CADEIAS } from './reunioes'
 import { PECS, PETREAS, MPS, ESTADOS, CONSULTAS, BLOCOS, TRATADOS, OPS, TECHS, TECH_PUSH, CHAIN, VOLTA_RIVAL, VOLTA_EXALIADO, MINISTRO_FASES, HIST_PARTIDOS } from './avancos'
 import { makeContacts, ensureContacts, SCRIPTS, ROLES, KIND, ASKS, CHAT, LIGAR } from './contacts'
 import { makeReactions } from './reactions'
@@ -4137,6 +4138,7 @@ export function roundAvancos() {
   roundAmeacas()
   roundSociedade()
   roundMundo24()
+  roundVida()
 }
 
 /* ---------- BLOCO 21: reuniões com várias pessoas ---------- */
@@ -4177,10 +4179,20 @@ function roundReunioes() {
     const d = reuniaoDef(c.defId)
     applyFx({ img: -0.5 }, true)
     if (d) toast('📅', `Você deixou passar: ${d.title}.`)
+    if (c.cadeia) cadeiaPasso(c.cadeia, c.passo, c.pontos || 0, -1)
   }
   p.convites = p.convites.filter((c) => c.left >= 0)
+  p.memoria = (p.memoria || []).filter((m) => game.total - m.r <= 14)
+  if (!p.cadeia && !p.convites.length && game.total >= 5 && R() < (game.stats.img < 45 ? 0.1 : game.stats.pop < 40 ? 0.08 : 0.02)) {
+    const id = game.stats.img < 45 || R() < 0.5 ? 'escandalo' : 'greve'
+    p.cadeia = { id, passo: 0, pontos: 0 }
+    p.convites.push({ defId: CADEIAS[id].passos[0], left: 3, cadeia: id, passo: 0, pontos: 0 })
+    toast(CADEIAS[id].icon, CADEIAS[id].gatilho)
+    timelineAdd(CADEIAS[id].icon, CADEIAS[id].nome, 'down')
+    return
+  }
   if (p.convites.length >= 2 || R() > 0.45) return
-  const pool = REUNIOES.filter((d) => reuOk(d) && !p.reuHist.slice(-4).includes(d.id) && !p.convites.some((c) => c.defId === d.id))
+  const pool = REUNIOES.filter((d) => !d.cadeia && reuOk(d) && !p.reuHist.slice(-4).includes(d.id) && !p.convites.some((c) => c.defId === d.id))
   if (!pool.length) return
   const d = pool[Math.floor(R() * pool.length)]
   const w = game.world
@@ -4218,10 +4230,22 @@ export function reuniaoAbrir(idx) {
     else if (x.nome === 'exaliado') nome = elencoOf().exAliado || candName(R)
     return { role: x.role, icon: x.icon, trait: x.trait, peso: x.peso || 1, nome, att: Math.max(-3, Math.min(3, x.base + Math.floor(R() * 3) - 1)), d: 0 }
   })
+  const mem = game.poder.memoria || []
+  for (const pt of parts) {
+    const i = mem.findIndex((m) => m.role === pt.role && R() < 0.6)
+    if (i < 0) continue
+    const m = mem[i]
+    mem.splice(i, 1)
+    pt.nome = m.nome
+    pt.trait = m.trait
+    pt.att = Math.max(-3, Math.min(3, pt.att + (m.tipo === 'rancor' ? -1.5 : 1.5)))
+    pt.lembra = m.tipo === 'rancor' ? `Lembra de "${m.ref}" e ainda guarda rancor.` : `Lembra de "${m.ref}" e é grato a você.`
+  }
+  game.poder.memoria = mem
   const fic = c.fict ? FICTICIOS.find((f) => f.id === c.fict) : null
   game.poder.convites.splice(idx, 1)
   game.poder.reuHist = [...(game.poder.reuHist || []), d.id].slice(-8)
-  game.poder.reuniao = { defId: d.id, parts, step: d.locais ? 0 : 1, falas: [], reacoes: [], loc: null, partner: c.partner || null, fict: fic ? fic.name : null, resultado: null }
+  game.poder.reuniao = { defId: d.id, cadeia: c.cadeia ? { id: c.cadeia, passo: c.passo, pontos: c.pontos || 0 } : null, parts, step: d.locais ? 0 : 1, falas: [], reacoes: [], loc: null, partner: c.partner || null, fict: fic ? fic.name : null, resultado: null }
   if (!d.locais) reuFalas(game.poder.reuniao)
   save()
   return true
@@ -4291,6 +4315,14 @@ function reuniaoFinalizar(r) {
   if (o.quebraPacto) w.pactos = w.pactos.filter((x) => !(x.partner === r.partner && x.tipo === 'defesa'))
   if (o.fa) w.fa = clamp(w.fa + o.fa)
   r.resultado = { cls, text: o.t, score: Math.round(score * 10) / 10 }
+  const mem = game.poder.memoria || (game.poder.memoria = [])
+  for (const pt of r.parts) {
+    const tipo = pt.att <= -1 ? 'rancor' : pt.att >= 2 ? 'gratidao' : null
+    if (!tipo || (cls === 'parcial' && Math.abs(pt.att) < 2)) continue
+    mem.unshift({ nome: pt.nome, role: pt.role, trait: pt.trait, tipo, ref: d.title, r: game.total })
+  }
+  game.poder.memoria = mem.slice(0, 10)
+  if (r.cadeia) cadeiaPasso(r.cadeia.id, r.cadeia.passo, r.cadeia.pontos, cls === 'acordo' ? 1 : cls === 'fracasso' ? -1 : 0)
   r.step = 4
   timelineAdd(d.icon, `${d.title}: ${o.t}`, cls === 'acordo' ? 'up' : cls === 'fracasso' ? 'down' : 'flat')
   cnt('reuniao')
@@ -4948,4 +4980,104 @@ export function apoiarEleicao(lado) {
   m.eleicao.apoio = lado
   spendWorld({ cash: -1 }, `Posição na eleição de ${partnerNome(m.eleicao.pais)}`, lado === 'neutro' ? 'Você manteve neutralidade.' : `Você apoiou o candidato ${lado === 'aliado' ? 'amigo' : 'da oposição'}.`)
   return { txt: game.world.last.text }
+}
+
+/* ---------- BLOCO 25: memória, cadeias de reuniões e vida política ---------- */
+export const memoriaNow = () => (game.poder && game.poder.memoria) || []
+export const cadeiaNow = () => (game.poder && game.poder.cadeia) || null
+export const cadeiaDef = (id) => CADEIAS[id]
+function cadeiaPasso(id, passo, pontos, delta) {
+  const c = CADEIAS[id]
+  const p = game.poder
+  const tot = pontos + delta
+  if (passo + 1 < c.passos.length) {
+    p.cadeia = { id, passo: passo + 1, pontos: tot }
+    p.convites = (p.convites || []).filter((x) => !x.cadeia)
+    p.convites.push({ defId: c.passos[passo + 1], left: 3, cadeia: id, passo: passo + 1, pontos: tot })
+    toast(c.icon, `${c.nome}: próxima etapa, ${reuniaoDef(c.passos[passo + 1]).title}.`)
+    return
+  }
+  const fim = tot >= 1 ? c.fim.bom : tot === 0 ? c.fim.medio : c.fim.ruim
+  p.cadeia = null
+  applyFx(fim.fx, true)
+  timelineAdd(c.icon, `${c.nome}: ${fim.t}`, tot >= 1 ? 'up' : tot === 0 ? 'flat' : 'down')
+  toast(c.icon, fim.t)
+  cnt(tot >= 1 ? 'cadeiaok' : 'cadeia')
+}
+
+export const vidaNow = () => (game.poder && game.poder.vida) || { figuras: [], pend: null }
+export const eventoDef = (tipo) => EVENTOS[tipo]
+function vidaEnsure() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.vida || !p.vida.figuras) p.vida = { figuras: [], pend: null, ...(p.vida || {}) }
+  const v = p.vida
+  if (!v.figuras.length) {
+    const rv = (game.rival && String(game.rival)) || null
+    v.figuras = FIGURAS.map((f) => ({ id: f.id, icon: f.icon, label: f.label, nome: f.id === 'rival' && rv ? rv : candName(R), idade: f.idade[0] + Math.floor(R() * (f.idade[1] - f.idade[0] + 1)), estado: 'ativa', casado: false }))
+  }
+  return v
+}
+export const figurasNow = () => vidaNow().figuras
+function roundVida() {
+  if (!game.world) return
+  const v = vidaEnsure()
+  if (game.total % 4 === 0) for (const f of v.figuras) if (f.estado !== 'falecida') f.idade++
+  const fp = {}
+  for (const f of v.figuras) {
+    if (f.estado !== 'ativa') continue
+    const d = FIGURAS.find((x) => x.id === f.id)
+    for (const k in d.pass || {}) fp[k] = (fp[k] || 0) + d.pass[k]
+  }
+  if (Object.keys(fp).length) applyFx(fp)
+  if (v.pend) {
+    v.pend.left--
+    if (v.pend.left < 0) {
+      applyFx({ img: -0.4 }, true)
+      v.pend = null
+    }
+    return
+  }
+  if (game.total < 3 || R() > 0.12) return
+  const ativos = v.figuras.filter((f) => f.estado === 'ativa')
+  if (!ativos.length) return
+  const f = ativos[Math.floor(R() * ativos.length)]
+  const cands = []
+  if (f.idade >= 62) cands.push('aposentadoria')
+  if (f.idade >= 68) cands.push('morte', 'morte')
+  if (f.idade <= 62 && !f.casado) cands.push('casamento')
+  if (!cands.length) return
+  const tipo = cands[Math.floor(R() * cands.length)]
+  v.pend = { tipo, fig: f.id, left: 2 }
+  const e = EVENTOS[tipo]
+  toast(e.icon, e.titulo(f))
+}
+export function vidaMotivo(op) {
+  const v = vidaNow()
+  if (!v.pend) return 'Indisponível.'
+  const o = EVENTOS[v.pend.tipo].ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+export function vidaEscolher(op) {
+  if (vidaMotivo(op)) return null
+  const v = vidaEnsure()
+  const f = v.figuras.find((x) => x.id === v.pend.fig)
+  const e = EVENTOS[v.pend.tipo]
+  const o = e.ops.find((x) => x.id === op)
+  const fx = { ...((f.id === 'rival' && o.fxRival) || o.fx) }
+  if (o.cash) fx.cash = (fx.cash || 0) - o.cash
+  applyFx(fx, true)
+  if (v.pend.tipo === 'morte') {
+    f.estado = 'falecida'
+    if (f.id === 'mentor') applyFx({ cong: -1.5 }, true)
+  } else if (v.pend.tipo === 'aposentadoria') f.estado = 'aposentada'
+  else if (v.pend.tipo === 'casamento') f.casado = true
+  const txt = `${e.titulo(f)}: ${o.name.toLowerCase()}.`
+  timelineAdd(e.icon, txt, 'flat')
+  cnt('vida')
+  v.pend = null
+  save()
+  return { txt }
 }

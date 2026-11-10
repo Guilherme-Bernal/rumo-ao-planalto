@@ -1,9 +1,12 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { game } from '../../game/engine'
+import { game, figurasNow, memoriaNow } from '../../game/engine'
 import { ROLES, relLabel } from '../../game/contacts'
 
 const emit = defineEmits(['go'])
+const figs = computed(() => figurasNow())
+const mems = computed(() => memoriaNow())
+const estadoTxt = (f) => (f.estado === 'falecida' ? '🕯️ faleceu' : f.estado === 'aposentada' ? '🎓 aposentado(a)' : f.casado ? '💍 casado(a)' : 'em atividade')
 const col = (v) => (v >= 55 ? 'var(--good)' : v >= 30 ? 'var(--warn)' : 'var(--bad)')
 const perk = (c) => (c.rel >= 70 ? { t: ROLES[c.role].hiText, cls: 'up' } : c.rel <= 15 ? { t: ROLES[c.role].loText, cls: 'down' } : null)
 const pending = computed(() => game.approach && !game.approach.done)
@@ -60,6 +63,16 @@ const sign = (d) => (d > 0 ? `+${d}` : d < 0 ? `${d}` : '0')
       <b>📞 Ligar para um contato</b>
       <p class="muted">Na Agenda, marque a ação "Ligar para um contato" no calendário. Bata papo para fortalecer a relação ou peça um favor. Pedidos polêmicos rendem mais, mas contam como escolha suja.</p>
       <button class="primary" @click="emit('go', 'agenda')">Ir para a Agenda</button>
+    </div>
+    <div v-if="figs.length" class="sumbox" style="margin-top: 12px">
+      <b>🏛️ Figuras políticas</b>
+      <p class="muted">Pessoas da política que acompanham a sua carreira. Elas envelhecem, se casam, se aposentam e morrem, e você decide como reagir.</p>
+      <p v-for="f in figs" :key="f.id">{{ f.icon }} <b>{{ f.nome }}</b> <small class="muted">{{ f.label }} · {{ f.idade }} anos · {{ estadoTxt(f) }}</small></p>
+    </div>
+    <div v-if="mems.length" class="sumbox" style="margin-top: 12px">
+      <b>🧠 Quem se lembra de você</b>
+      <p class="muted">Quem saiu de uma reunião com raiva ou gratidão pode voltar à mesa com essa memória.</p>
+      <p v-for="(m, i) in mems" :key="i">{{ m.tipo === 'rancor' ? '😠' : '🙏' }} <b>{{ m.nome }}</b> <small class="muted">({{ m.role }}) · {{ m.tipo === 'rancor' ? 'guarda rancor de' : 'é grato por' }} "{{ m.ref }}"</small></p>
     </div>
   </div>
 </template>

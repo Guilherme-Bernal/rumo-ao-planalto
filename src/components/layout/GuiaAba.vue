@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -11,6 +11,17 @@ const tribunal = computed(() => !!(acaoPendente() || inquerito()))
 const excecao = computed(() => cstEstado())
 const convites = computed(() => convitesNow().map((c, i) => ({ ...c, i, d: reuniaoDef(c.defId) })).filter((c) => c.d))
 const inds = computed(() => industriasNow())
+const pend = computed(() => {
+  const v = vidaNow()
+  if (!v.pend) return null
+  const f = figurasNow().find((x) => x.id === v.pend.fig)
+  const e = eventoDef(v.pend.tipo)
+  return f && e ? { e, f, left: v.pend.left } : null
+})
+const cadeia = computed(() => {
+  const c = cadeiaNow()
+  return c ? { ...cadeiaDef(c.id), passo: c.passo } : null
+})
 </script>
 
 <template>
@@ -25,6 +36,14 @@ const inds = computed(() => industriasNow())
       {{ c.d.icon }} <b>Convite:</b> {{ c.d.title }} <small>(vale mais {{ c.left + 1 }} rodada(s))</small>
       <button type="button" class="mini" :disabled="!!reuniaoMotivo(c.i)" :title="reuniaoMotivo(c.i)" @click="reuniaoAbrir(c.i)">Participar</button>
       <small v-if="reuniaoMotivo(c.i)" class="why">🔒 {{ reuniaoMotivo(c.i) }}</small>
+    </div>
+    <p v-if="cadeia" class="aviso warn">{{ cadeia.icon }} <b>{{ cadeia.nome }}</b>: etapa {{ cadeia.passo + 1 }} de {{ cadeia.passos.length }}. O saldo das reuniões decide como a crise termina.</p>
+    <div v-if="pend" class="aviso conv">
+      {{ pend.e.icon }} <b>{{ pend.e.titulo(pend.f) }}</b> <small>({{ pend.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ pend.e.texto(pend.f) }}</small>
+      <span class="ops">
+        <button v-for="o in pend.e.ops" :key="o.id" type="button" class="mini" :disabled="!!vidaMotivo(o.id)" :title="o.desc" @click="vidaEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
     </div>
     <p v-if="inds.length" class="aviso">🏭 Em operação: {{ inds.map((x) => x.nome).join(' · ') }}.</p>
     <details v-if="g" class="guiabox">
@@ -41,6 +60,7 @@ const inds = computed(() => industriasNow())
 .aviso.warn { border-color: var(--warn); }
 .mini { margin-left: 8px; padding: 3px 8px; font-size: 0.8rem; }
 .conv { border-color: var(--accent); }
+.ops { display: block; margin-top: 6px; }
 .why { display: block; opacity: 0.8; }
 .guiabox { font-size: 0.86rem; opacity: 0.92; }
 .guiabox summary { cursor: pointer; }

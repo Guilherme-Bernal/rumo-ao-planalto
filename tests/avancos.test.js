@@ -484,3 +484,84 @@ describe('Mundo avançado', () => {
     expect(E.m24Now().crise).toBe(null)
   })
 })
+
+describe('Vida entre rodadas', () => {
+  const jogar = () => {
+    E.reuniaoAbrir(0)
+    let n = 0
+    while (!E.reuniaoAtual().resultado && n++ < 5) { E.game.stats.cash = 60; E.reuniaoAbordar('ouvir') }
+    const r = E.reuniaoAtual().resultado
+    E.reuniaoFechar()
+    return r
+  }
+  it('quem saiu com raiva volta lembrando', () => {
+    novo()
+    E.roundAvancos()
+    E.game.poder.convites = [{ defId: 'p_executiva', left: 2 }]
+    E.game.poder.reuniao = null
+    E.game.poder.memoria = [{ nome: 'Fulano Teste', role: 'Tesoureiro', trait: 'ganancioso', tipo: 'rancor', ref: 'Executiva do partido', r: E.game.total }]
+    let achou = false
+    for (let i = 0; i < 40 && !achou; i++) {
+      E.game.poder.memoria = [{ nome: 'Fulano Teste', role: 'Tesoureiro', trait: 'ganancioso', tipo: 'rancor', ref: 'Executiva do partido', r: E.game.total }]
+      E.game.poder.convites = [{ defId: 'p_executiva', left: 2 }]
+      E.reuniaoAbrir(0)
+      const pt = E.reuniaoAtual().parts.find((x) => x.nome === 'Fulano Teste')
+      if (pt) { achou = true; expect(pt.lembra).toMatch(/rancor/) }
+      E.game.poder.reuniao = null
+    }
+    expect(achou).toBe(true)
+  })
+  it('reunião terminada com hostilidade registra memória', () => {
+    novo()
+    E.roundAvancos()
+    E.game.poder.convites = [{ defId: 'p_expulsao', left: 2 }]
+    E.reuniaoAbrir(0)
+    E.reuniaoAtual().parts.forEach((p) => { p.att = -3 })
+    E.reuniaoAtual().step = 3
+    E.reuniaoAbordar('adiar')
+    expect(E.memoriaNow().length).toBeGreaterThan(0)
+    expect(E.memoriaNow()[0].tipo).toBe('rancor')
+  })
+  it('crise em cadeia passa por três reuniões e fecha com desfecho', () => {
+    novo()
+    E.roundAvancos()
+    E.game.poder.cadeia = { id: 'escandalo', passo: 0, pontos: 0 }
+    E.game.poder.convites = [{ defId: 'c_esc_partido', left: 3, cadeia: 'escandalo', passo: 0, pontos: 0 }]
+    for (let i = 0; i < 3; i++) {
+      expect(E.convitesNow()[0].cadeia).toBe('escandalo')
+      jogar()
+    }
+    expect(E.cadeiaNow()).toBe(null)
+    expect(E.convitesNow().filter((c) => c.cadeia).length).toBe(0)
+  })
+  it('convite da cadeia ignorado encerra a crise', () => {
+    novo()
+    E.roundAvancos()
+    E.game.poder.cadeia = { id: 'greve', passo: 0, pontos: 0 }
+    E.game.poder.convites = [{ defId: 'c_gg_sindicatos', left: 0, cadeia: 'greve', passo: 0, pontos: 0 }]
+    for (let i = 0; i < 12 && E.cadeiaNow(); i++) { E.game.poder.convites.forEach((c) => { c.left = 0 }); E.roundAvancos() }
+    expect(E.cadeiaNow()).toBe(null)
+  })
+  it('figuras políticas existem e eventos de vida têm efeito', () => {
+    novo()
+    E.roundAvancos()
+    expect(E.figurasNow().length).toBe(6)
+    E.game.poder.vida.pend = { tipo: 'morte', fig: 'mentor', left: 2 }
+    expect(E.vidaEscolher('velorio')).toBeTruthy()
+    expect(E.figurasNow().find((f) => f.id === 'mentor').estado).toBe('falecida')
+    E.game.poder.vida.pend = { tipo: 'casamento', fig: 'aliado', left: 2 }
+    E.vidaEscolher('festa')
+    expect(E.figurasNow().find((f) => f.id === 'aliado').casado).toBe(true)
+    E.game.poder.vida.pend = { tipo: 'aposentadoria', fig: 'lider', left: 2 }
+    E.vidaEscolher('silencio')
+    expect(E.figurasNow().find((f) => f.id === 'lider').estado).toBe('aposentada')
+  })
+  it('rodadas longas com vida política não quebram', () => {
+    for (const o of ['vereador', 'prefeito', 'governador', 'presidente']) {
+      novo(o)
+      E.game.total = 10
+      for (let i = 0; i < 80; i++) { E.roundAvancos(); E.game.poder.vida.pend = null; E.game.poder.reuniao = null }
+      expect(Number.isFinite(E.game.stats.img)).toBe(true)
+    }
+  })
+})
