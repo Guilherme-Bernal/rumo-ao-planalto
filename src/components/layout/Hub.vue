@@ -4,9 +4,17 @@ import { game, stageInfo, targetOffice } from '../../game/engine'
 import GamePanel from '../game/GamePanel.vue'
 import GuiaAba from './GuiaAba.vue'
 import Tips from './Tips.vue'
+import { importar, recarregarSeNovaVersao } from '../../game/chunks'
 import { dicaPendente, dicaVista } from '../../game/dicas'
 // abas pesadas carregam só quando abertas (a tela inicial fica bem mais leve)
-const aba = (f) => defineAsyncComponent({ loader: f, delay: 150, loadingComponent: { render: () => h('p', { class: 'muted' }, 'Carregando…') } })
+const aba = (f) =>
+  defineAsyncComponent({
+    loader: () => importar(f).catch((e) => { recarregarSeNovaVersao(); throw e }),
+    delay: 150,
+    timeout: 30000,
+    loadingComponent: { render: () => h('p', { class: 'muted' }, 'Carregando…') },
+    errorComponent: { render: () => h('p', { class: 'aviso bad', role: 'alert' }, ['Não deu para carregar esta aba. Pode ser uma versão nova do jogo. ', h('button', { type: 'button', class: 'mini', onClick: () => location.reload() }, 'Recarregar')]) },
+  })
 const TabMap = aba(() => import('../tabs/TabMap.vue'))
 const TabParty = aba(() => import('../tabs/TabParty.vue'))
 const TabPlan = aba(() => import('../tabs/TabPlan.vue'))

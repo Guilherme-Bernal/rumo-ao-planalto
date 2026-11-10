@@ -23,7 +23,7 @@ const out = computed(() => (r.value && r.value.resultado ? d.value.out[r.value.r
       <div class="parts">
         <div v-for="(p, i) in r.parts" :key="i" class="part">
           <div class="who"><span class="ic">{{ p.icon }}</span> <b>{{ p.nome }}</b> <small class="muted">{{ p.nome === p.role ? '' : p.role }} · {{ tr[p.trait].icon }} {{ tr[p.trait].label }}</small>
-            <span class="mood" :title="'Atitude: ' + p.att">{{ humor(p.att) }}</span></div>
+            <span class="rmood" :title="'Atitude: ' + p.att">{{ humor(p.att) }}</span></div>
           <p v-if="p.lembra" class="lembra">🧠 {{ p.lembra }}</p>
           <div class="meter"><i :style="{ width: ((p.att + 3) / 6) * 100 + '%' }"></i></div>
           <p v-if="r.step >= 1 && r.step <= 3 && r.falas[i]" class="fala">“{{ r.falas[i] }}”</p>
@@ -67,7 +67,7 @@ h3 { margin: 12px 0 6px; font-size: 0.98rem; }
 .parts { display: grid; gap: 8px; margin-top: 8px; }
 .part { background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 8px 10px; }
 .who { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.mood { margin-left: auto; font-size: 1.2rem; line-height: 1.4; flex-shrink: 0; }
+.rmood { margin-left: auto; font-size: 1.2rem; line-height: 1.4; flex-shrink: 0; }
 .meter { height: 5px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); margin: 6px 0; overflow: hidden; }
 .meter i { display: block; height: 100%; background: var(--accent, #fbbf24); transition: width 0.4s; }
 .fala { margin: 4px 0 0; font-style: italic; font-size: 0.9rem; }

@@ -1332,3 +1332,16 @@ describe('BLOCO 34 — arcos e gráfico da carreira', () => {
     expect(E.serieNow().some((r) => r.r != null)).toBe(true)
   })
 })
+
+describe('carregamento de abas após atualização', () => {
+  it('importar tenta de novo antes de desistir e devolve o módulo quando consegue', async () => {
+    const { importar } = await import('../src/game/chunks.js')
+    let n = 0
+    const f = () => (++n < 3 ? Promise.reject(new Error('503')) : Promise.resolve('ok'))
+    expect(await importar(f)).toBe('ok')
+    expect(n).toBe(3)
+    let m = 0
+    await expect(importar(() => (m++, Promise.reject(new Error('404'))), 2)).rejects.toThrow('404')
+    expect(m).toBe(2)
+  })
+})

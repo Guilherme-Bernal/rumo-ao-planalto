@@ -5,8 +5,10 @@ import './extras.css'
 import './ui.css'
 import './screens.css'
 import { pwaInit } from './game/pwa'
+import { chunksInit } from './game/chunks'
 
 pwaInit()
+chunksInit()
 
 createApp(App).mount('#app')
 
