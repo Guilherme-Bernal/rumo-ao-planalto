@@ -1830,3 +1830,114 @@ describe('BLOCO 37 — obras vivas', () => {
     expect(volta.obras.lista[0].st).toBe('andamento')
   })
 })
+
+describe('BLOCO 38 — personagem: sexo, cabelos, visual e rotina', () => {
+  const inicia = (office = 'prefeito', look) => {
+    E.startGame({ name: 'Teste', regionId: 'SP', look })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('todo penteado do catálogo tem forma desenhada, e cada perfil tem opções', async () => {
+    const L = await import('../src/game/look.js')
+    for (const h of L.HAIRS) if (h.id !== 'careca') expect(L.HAIR_SHAPES[h.id], h.id).toBeTruthy()
+    expect(L.hairsFor('m').length).toBeGreaterThan(5)
+    expect(L.hairsFor('f').length).toBeGreaterThan(5)
+    for (const sx of ['m', 'f']) {
+      expect(L.hairOk(L.defaultLook(sx).hair, sx)).toBe(true)
+      for (let i = 0; i < 40; i++) {
+        const l = L.randomLook(sx)
+        expect(l.sex).toBe(sx)
+        expect(L.hairOk(l.hair, sx)).toBe(true)
+        if (sx === 'f') expect(l.beard).toBe('nenhuma')
+      }
+    }
+  })
+  it('os presets têm sexo e penteado compatível', async () => {
+    const L = await import('../src/game/look.js')
+    const { PRESETS } = await import('../src/game/presets.js')
+    expect(PRESETS.some((p) => p.look.sex === 'f')).toBe(true)
+    for (const p of PRESETS) {
+      expect(['m', 'f']).toContain(p.look.sex)
+      expect(L.hairOk(p.look.hair, p.look.sex), p.id).toBe(true)
+    }
+  })
+  it('o cônjuge nasce com o perfil oposto', () => {
+    inicia('prefeito', { sex: 'f', hair: 'longo' })
+    expect(E.game.look.sex).toBe('f')
+    E.game.poder.familia = undefined
+    const f = E.familiaNow()
+    if (f.conjuge) expect(f.conjuge.look.sex).toBe('m')
+  })
+  it('sem usar nada, o estado pessoal não nasce e o humor é neutro', () => {
+    inicia()
+    rodada()
+    expect(E.game.poder.eu).toBeUndefined()
+    expect(E.humorNow()).toBe('')
+  })
+  it('treinar e descansar aliviam o estresse e respeitam a espera', () => {
+    inicia()
+    E.euAgir('descansar')
+    const e0 = E.euNow().estresse
+    expect(e0).toBeLessThan(30)
+    expect(E.euAcaoMotivo('descansar')).toMatch(/Espere/)
+    expect(E.euAgir('descansar')).toBeNull()
+    for (let i = 0; i < 3; i++) rodada()
+    expect(E.euAcaoMotivo('descansar')).toBe('')
+  })
+  it('mudar o visual custa caixa, tem espera e valida o penteado', () => {
+    inicia('prefeito', { sex: 'm', hair: 'curto' })
+    const c0 = E.game.stats.cash
+    expect(E.visualMudar({ hair: 'longo', sex: 'm' })).toBeNull() // longo é de perfil feminino
+    const r = E.visualMudar({ hair: 'social' })
+    expect(r).toBeTruthy()
+    expect(E.game.look.hair).toBe('social')
+    expect(E.game.stats.cash).toBeLessThan(c0)
+    expect(E.visualMotivo()).toMatch(/Espere/)
+    expect(E.visualMudar({ hair: 'topete' })).toBeNull()
+  })
+  it('trocar o perfil no meio do jogo funciona', () => {
+    inicia('prefeito', { sex: 'm', hair: 'curto' })
+    expect(E.visualMudar({ sex: 'f', hair: 'bob', beard: 'nenhuma' })).toBeTruthy()
+    expect(E.game.look.sex).toBe('f')
+  })
+  it('estresse alto vira mal-estar, que o padrão resolve sozinho', () => {
+    inicia('presidente')
+    E.euAgir('treinar')
+    E.game.poder.eu.estresse = 95
+    E.game.poder.eu.last = -9
+    rodada()
+    expect(E.euPendNow()).toBeTruthy()
+    expect(E.humorNow()).toBe('ruim')
+    expect(E.pendenciasNow().some((p) => p.id === 'eu')).toBe(true)
+    E.euEscolher('parar')
+    expect(E.euPendNow()).toBeNull()
+    expect(E.euNow().estresse).toBeLessThan(70)
+    E.game.poder.eu.estresse = 95
+    E.game.poder.eu.last = -9
+    rodada()
+    expect(E.euPendNow()).toBeTruthy()
+    for (let i = 0; i < 4; i++) rodada()
+    expect(E.euPendNow()).toBeNull()
+  })
+  it('o estilo combina com o cargo e a fala existe', () => {
+    inicia('presidente')
+    E.euAgir('treinar')
+    expect(E.estiloEscolher('institucional')).toBeNull() // já é o estilo atual
+    expect(E.estiloEscolher('popular')).toBeTruthy()
+    expect(typeof E.falaNow()).toBe('string')
+  })
+  it('o estado pessoal sobrevive ao salvamento', () => {
+    inicia()
+    E.euAgir('paixao')
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.eu.cd.paixao).toBeGreaterThan(E.game.total)
+  })
+})

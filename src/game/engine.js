@@ -22,7 +22,8 @@ import { INIMIGOS, AMEACAS, GUERRA_ACOES } from './ameacas'
 import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
-import { randomLook } from './look'
+import { randomLook, hairOk } from './look'
+import { ESTILOS, estiloFx, EU_ACOES, EU_POR_ID, VISUAL_CUSTO, VISUAL_CD, EU_PEND, FALAS_EU } from './bloco38'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
 import { finalOf, saveFinal } from './finais'
 import { ARCOS } from './arcos34'
@@ -4301,6 +4302,7 @@ export function roundAvancos() {
   roundCenario()
   roundObras()
   roundPressao()
+  roundEu()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -4569,6 +4571,155 @@ function roundObras() {
   o.last = game.total
   const pn = obraPendNow()
   if (pn) toast(pn.d.icon, pn.titulo)
+}
+
+/* ---------- BLOCO 38: vida pessoal 2 (visual, rotina, humor) ---------- */
+function euBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.eu) p.eu = { forma: 60, estresse: 30, estilo: 'institucional', cd: {}, trocas: 0, ultimaTroca: -99, pend: null, last: -9 }
+  return p.eu
+}
+// leitura sem criar estado (jogos antigos)
+export const euNow = () => {
+  const e = game.poder && game.poder.eu
+  return e ? { forma: e.forma, estresse: e.estresse, estilo: e.estilo, trocas: e.trocas } : { forma: 60, estresse: 30, estilo: 'institucional', trocas: 0 }
+}
+export const humorNow = () => {
+  const e = euNow()
+  if (e.estresse >= 70 || e.forma <= 30) return 'ruim'
+  if (e.forma >= 70 && e.estresse <= 40) return 'bom'
+  return ''
+}
+export const estilosNow = () => ESTILOS
+export function euAcoesNow() {
+  return EU_ACOES.map((a) => ({ ...a, motivo: euAcaoMotivo(a.id) }))
+}
+export function euAcaoMotivo(id) {
+  const a = EU_POR_ID[id]
+  if (!a) return 'Indisponível.'
+  if (!game.world) return 'Indisponível.'
+  const cd = game.poder && game.poder.eu && game.poder.eu.cd[id]
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  if (a.custo && game.stats.cash < a.custo) return `Sem caixa (${a.custo}).`
+  return ''
+}
+function euAplicarD(e, d) {
+  for (const k in d || {}) e[k] = clamp((e[k] == null ? 50 : e[k]) + d[k], 0, 100)
+}
+export function euAgir(id) {
+  if (euAcaoMotivo(id)) return null
+  const a = EU_POR_ID[id]
+  const e = euBase()
+  const fx = { ...a.fx }
+  if (a.custo) fx.cash = (fx.cash || 0) - a.custo
+  let txt = `${a.nome}.`
+  if (a.risco) {
+    const ok = R() < a.risco.p
+    for (const k in (ok ? a.risco.ok : a.risco.mal)) fx[k] = (fx[k] || 0) + (ok ? a.risco.ok : a.risco.mal)[k]
+    txt = ok ? 'As selfies bombaram e o povo gostou.' : 'Uma selfie saiu torta e virou meme.'
+  }
+  applyFx(fx, true)
+  euAplicarD(e, a.d)
+  if (a.fam) { const f = familiaNow(); f.harmonia = clamp(f.harmonia + a.fam, 0, 100) }
+  e.cd[id] = game.total + a.cd
+  cnt('eu')
+  save()
+  return { txt }
+}
+export function estiloEscolher(id) {
+  if (!ESTILOS.some((x) => x.id === id)) return null
+  const e = euBase()
+  if (e.estilo === id) return null
+  e.estilo = id
+  cnt('eu')
+  timelineAdd('👔', `Novo estilo de se vestir: ${ESTILOS.find((x) => x.id === id).nome.toLowerCase()}.`, 'flat')
+  save()
+  return { txt: 'Estilo atualizado.' }
+}
+export function visualMotivo() {
+  if (!game.world || !game.look) return 'Indisponível.'
+  const ult = game.poder && game.poder.eu ? game.poder.eu.ultimaTroca : -99
+  if (game.total - ult < VISUAL_CD) return `Espere ${VISUAL_CD - (game.total - ult)} rodada(s) para mudar de novo.`
+  if (game.stats.cash < VISUAL_CUSTO) return `Sem caixa (${VISUAL_CUSTO}).`
+  return ''
+}
+// aplica um visual novo vindo do editor. Muita troca de cara em pouco tempo vira piada.
+export function visualMudar(novo) {
+  if (visualMotivo() || !novo || typeof novo !== 'object') return null
+  const e = euBase()
+  const nx = { ...game.look, ...novo }
+  if (!hairOk(nx.hair, nx.sex === 'f' ? 'f' : 'm')) return null
+  const mudou = Object.keys(nx).some((k) => nx[k] !== game.look[k])
+  if (!mudou) return null
+  game.look = nx
+  e.trocas++
+  e.ultimaTroca = game.total
+  const fx = { cash: -VISUAL_CUSTO, img: 0.5 }
+  if (e.trocas > 3 && e.trocas % 2 === 0) { fx.img = -0.5; timelineAdd('🪞', 'A imprensa brinca com tantas mudanças de visual.', 'down') } else timelineAdd('💇', 'Visual novo do personagem.', 'up')
+  applyFx(fx, true)
+  cnt('eu')
+  save()
+  return { txt: 'Visual atualizado.' }
+}
+export function falaNow() {
+  const h = humorNow()
+  const lista = h === 'bom' ? FALAS_EU.bom : h === 'ruim' ? FALAS_EU.ruim : game.phase === 'campaign' ? FALAS_EU.campanha : FALAS_EU.normal
+  return lista[Math.floor(hash01(game.name + ':' + game.total + ':' + h) * lista.length)]
+}
+export const euPendNow = () => {
+  const e = game.poder && game.poder.eu
+  if (!e || !e.pend) return null
+  const d = EU_PEND[e.pend.tipo]
+  return d ? { d, left: e.pend.left, tipo: e.pend.tipo } : null
+}
+export function euPendMotivo(op) {
+  const pn = euPendNow()
+  return pn && pn.d.ops.some((x) => x.id === op) ? '' : 'Indisponível.'
+}
+function euPendAplicar(e, pn, opId, auto) {
+  const o = pn.d.ops.find((x) => x.id === opId) || pn.d.ops[0]
+  applyFx({ ...o.fx }, true)
+  euAplicarD(e, o.d)
+  timelineAdd(pn.d.icon, `${pn.d.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, 'flat')
+  e.pend = null
+  e.last = game.total
+  cnt('eupend')
+  return o
+}
+export function euEscolher(op) {
+  if (euPendMotivo(op)) return null
+  const e = euBase()
+  const pn = euPendNow()
+  const o = euPendAplicar(e, pn, op, false)
+  save()
+  return { txt: `${pn.d.titulo}: ${o.name.toLowerCase()}.` }
+}
+function roundEu() {
+  if (!game.world || !game.poder || !game.poder.eu) {
+    // sem estado ainda: só nasce quando o jogador usa algo daqui. Antes disso, nada muda (jogos antigos ficam como estão).
+    return
+  }
+  const e = game.poder.eu
+  // o cargo pesa: executivo cansa mais
+  euAplicarD(e, { estresse: isExec() ? 3 : 2, forma: -1 })
+  const ctx = { exec: isExec(), fed: obraSphere() === 'fed', mun: obraSphere() === 'mun', jovem: !!(game.cenario && game.cenario.id === 'jovem') }
+  applyFx(estiloFx(e.estilo, ctx))
+  if (e.estresse >= 85) applyFx({ pop: -0.2 })
+  if (e.pend) {
+    e.pend.left--
+    if (e.pend.left < 0) {
+      const pn = euPendNow()
+      if (pn) euPendAplicar(e, pn, pn.d.padrao, true)
+      else e.pend = null
+    }
+    return
+  }
+  if (e.estresse >= 80 && game.total - e.last >= 6) {
+    e.pend = { tipo: 'malestar', left: 2 }
+    e.last = game.total
+    toast('🤒', EU_PEND.malestar.titulo)
+  }
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -5589,7 +5740,7 @@ function famEnsure() {
     const o = FAM_ORIGENS[f.origem]
     if (o && game.total <= 1 && !f.conjuge && !f.filhos.length) {
       f.harmonia = o.h
-      if (o.conjuge) f.conjuge = { nome: candName(R), perfil: PERFIS_CONJUGE[Math.floor(R() * PERFIS_CONJUGE.length)].id, look: randomLook(), casado: true, apoio: 60 }
+      if (o.conjuge) f.conjuge = { nome: candName(R), perfil: PERFIS_CONJUGE[Math.floor(R() * PERFIS_CONJUGE.length)].id, look: randomLook(sexoConjuge()), casado: true, apoio: 60 }
       for (let i = 0; i < o.filhos; i++) f.filhos.push({ nome: candName(R).split(' ')[0], look: { ...randomLook(), age: 'jovem', headwear: 'nenhum', beard: 'nenhuma', glasses: 'nenhum' }, nasc: 0 })
     }
   }
@@ -5651,7 +5802,7 @@ function roundFamilia() {
   const tipo = pool[Math.floor(R() * pool.length)]
   if (tipo === 'noivado') {
     const perfil = PERFIS_CONJUGE[Math.floor(R() * PERFIS_CONJUGE.length)].id
-    f.conjuge = { nome: candName(R), perfil, look: randomLook(), casado: false, apoio: 60 }
+    f.conjuge = { nome: candName(R), perfil, look: randomLook(sexoConjuge()), casado: false, apoio: 60 }
   }
   f.pend = { tipo, left: 2 }
   const info = famPend()
@@ -5770,6 +5921,10 @@ export function sucessaoMotivo() {
   if (game.phase !== 'rumo') return 'Só ao fim de um mandato.'
   if (sucessaoNow()) return 'A sucessão já foi decidida.'
   return ''
+}
+// cônjuge tem o perfil oposto ao do personagem (jogos antigos sem sex contam como homem)
+function sexoConjuge() {
+  return game.look && game.look.sex === 'f' ? 'm' : 'f'
 }
 export function iniciarSucessao() {
   if (sucessaoMotivo()) return false
@@ -7343,6 +7498,7 @@ export function pendenciasNow() {
   const pr = pressPendNow(); if (pr) dec('press', pr.d.icon, pr.d.titulo, pr.left)
   const cn = cenPendNow(); if (cn) dec('cen', cn.ico, cn.titulo, cn.left)
   const ob = obraPendNow(); if (ob) dec('obra', ob.d.icon, ob.titulo, ob.left)
+  const eu = euPendNow(); if (eu) dec('eu', eu.d.icon, eu.d.titulo, eu.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })

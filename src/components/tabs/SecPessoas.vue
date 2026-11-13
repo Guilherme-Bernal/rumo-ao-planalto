@@ -4,7 +4,9 @@ import Avatar from '../character/Avatar.vue'
 import {
   game, officeId, ageNow, familiaNow, famAcoes, famAcaoMotivo, famAgir, perfisConjuge, bioNow, bioTitulos,
   figurasNow, figAcoes, figMotivo, figAgir,
+  euNow, humorNow, falaNow, euAcoesNow, euAgir, estilosNow, estiloEscolher, visualMotivo, visualMudar,
 } from '../../game/engine'
+import LookEditor from '../character/LookEditor.vue'
 
 const f = computed(() => familiaNow())
 const msg = ref('')
@@ -14,6 +16,15 @@ const marcos = computed(() => bioNow().slice(-14).reverse())
 const titulos = computed(() => bioTitulos())
 const figs = computed(() => figurasNow().filter((x) => ['mentor', 'rival', 'lider'].includes(x.id)))
 const laco = (x) => Math.round(x.laco == null ? (x.id === 'rival' ? 40 : 55) : x.laco)
+const eu = computed(() => euNow())
+const humor = computed(() => humorNow())
+const acoesEu = computed(() => euAcoesNow())
+const fala = ref('')
+const editando = ref(false)
+const rascunho = ref(null)
+const abrirVisual = () => { rascunho.value = { ...game.look }; editando.value = true }
+const salvarVisual = () => { const r = visualMudar(rascunho.value); msg.value = r ? r.txt : 'Nada mudou.'; editando.value = false }
+const falar = () => { fala.value = falaNow() }
 const hLabel = computed(() => (f.value.harmonia >= 70 ? 'em paz' : f.value.harmonia >= 40 ? 'estável' : f.value.harmonia >= 25 ? 'tensa' : 'em crise'))
 </script>
 
@@ -21,14 +32,38 @@ const hLabel = computed(() => (f.value.harmonia >= 70 ? 'em paz' : f.value.harmo
   <div class="sumbox" style="margin-top: 12px">
     <b>📖 Biografia viva</b>
     <div class="bio-head">
-      <Avatar v-if="game.look" :look="game.look" :cargo="officeId()" :idade="ageNow()" :size="72" />
+      <Avatar v-if="game.look" :look="game.look" :cargo="officeId()" :idade="ageNow()" :mood="humor" :size="72" class="clk" title="Toque para ouvir o personagem" @click="falar" />
       <div>
         <div><b>{{ game.name }}</b> <small class="muted">{{ ageNow() != null ? ageNow() + ' anos' : '' }}</small></div>
         <div class="muted"><span v-for="t in titulos" :key="t.nome" class="chip" :title="t.txt">{{ t.icon }} {{ t.nome }}</span><span v-if="!titulos.length">Nenhum título ainda. A carreira escreve os títulos.</span></div>
       </div>
     </div>
+    <p v-if="fala" class="fala">💬 {{ fala }}</p>
     <p v-for="(m, i) in marcos" :key="i" class="bio-l">{{ m.icon }} <small class="muted">r{{ m.r }}</small> {{ m.text }}</p>
     <p v-if="!marcos.length" class="muted">Os marcos da carreira vão aparecendo aqui.</p>
+  </div>
+
+  <div class="sumbox" style="margin-top: 12px">
+    <b>🪞 Imagem e rotina</b>
+    <p class="muted">Forma <b>{{ Math.round(eu.forma) }}</b> · Estresse <b>{{ Math.round(eu.estresse) }}</b> {{ humor === 'bom' ? '· de bom humor' : humor === 'ruim' ? '· com cara de cansaço' : '' }}. Estresse alto derruba a popularidade e pode virar mal-estar.</p>
+    <div class="bar"><i :style="{ width: eu.estresse + '%', background: eu.estresse >= 70 ? 'var(--bad)' : 'var(--accent)' }"></i></div>
+    <div class="acts">
+      <button v-for="a in estilosNow()" :key="a.id" type="button" :class="{ on: eu.estilo === a.id }" :title="a.desc" @click="estiloEscolher(a.id)">
+        <b>{{ a.icon }} {{ a.nome }}</b><small>{{ a.desc }}</small>
+      </button>
+    </div>
+    <div class="acts">
+      <button type="button" :disabled="!!visualMotivo()" @click="abrirVisual">
+        <b>💇 Mudar o visual</b><small>Cabelo, roupa, perfil e detalhes. Custa 2 de caixa. Trocar demais vira piada.</small><small v-if="visualMotivo()" class="why">🔒 {{ visualMotivo() }}</small>
+      </button>
+      <button v-for="a in acoesEu" :key="a.id" type="button" :disabled="!!a.motivo" :title="a.desc" @click="say(euAgir(a.id))">
+        <b>{{ a.icon }} {{ a.nome }}</b><small>{{ a.desc }}</small><small v-if="a.motivo" class="why">🔒 {{ a.motivo }}</small>
+      </button>
+    </div>
+    <div v-if="editando && rascunho" class="sumbox">
+      <LookEditor v-model="rascunho" />
+      <div class="acts"><button type="button" @click="salvarVisual"><b>✅ Aplicar visual</b></button><button type="button" @click="editando = false"><b>Cancelar</b></button></div>
+    </div>
   </div>
 
   <div class="sumbox" style="margin-top: 12px">
@@ -73,6 +108,9 @@ const hLabel = computed(() => (f.value.harmonia >= 70 ? 'em paz' : f.value.harmo
 .acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px; margin: 8px 0; }
 .acts button { text-align: left; padding: 8px 10px; }
 .acts small { display: block; margin-top: 3px; opacity: 0.9; }
+.clk { cursor: pointer; }
+.fala { font-style: italic; margin: 4px 0; }
+.acts button.on { outline: 2px solid var(--accent); }
 .why { color: var(--warn); }
 .fig { margin: 10px 0; }
 .hl { display: block; }

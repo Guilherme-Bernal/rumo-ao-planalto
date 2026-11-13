@@ -190,8 +190,8 @@ function rollAge() {
 }
 
 function randomChar() {
-  name.value = randomName()
   look.value = randomLook()
+  name.value = randomName(Math.random, look.value.sex)
   archetype.value = c.archetypes[Math.floor(Math.random() * c.archetypes.length)].id
   picks.value.idade = AGE_MIN + Math.floor(Math.random() * 43)
   for (const cat of c.traits) {

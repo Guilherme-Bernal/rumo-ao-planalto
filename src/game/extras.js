@@ -143,10 +143,14 @@ export function makeHeadline(who, state, fx, R) {
   }
   return `${icon} ${pick(OUTLETS)}: ${pick(list)}`
 }
-const T = ['Dr.', 'Dra.', 'Seu', 'Dona', 'Prof.', 'Cabo', 'Pastor', 'Mestre', 'Tia', 'Tio', '']
-const F = ['Marina', 'Zé', 'Ricardo', 'Cláudia', 'Antônio', 'Luciana', 'Bruno', 'Fátima', 'Sérgio', 'Aline', 'Toninho', 'Rosângela', 'Wagner', 'Patrícia', 'Neto', 'Joana']
+const TM = ['Dr.', 'Seu', 'Prof.', 'Cabo', 'Pastor', 'Mestre', 'Tio', '']
+const TF = ['Dra.', 'Dona', 'Profa.', 'Tia', 'Irmã', '']
+const FM = ['Zé', 'Ricardo', 'Antônio', 'Bruno', 'Sérgio', 'Toninho', 'Wagner', 'Neto']
+const FF = ['Marina', 'Cláudia', 'Luciana', 'Fátima', 'Aline', 'Rosângela', 'Patrícia', 'Joana']
 const N = ['do Pastel', 'da Feira', 'do Bairro', 'da Saúde', 'Contador', 'Motoboy', 'da Padaria', 'do Povo', 'Faz-Tudo', 'da Escola', 'do Caminhão', 'Xerife', 'Sorriso', 'da Esperança', 'Silva', 'Souza']
-export function randomName(r = Math.random) {
+// sex: 'm' ou 'f' escolhe nomes e títulos do perfil. Sem sex, sorteia.
+export function randomName(r = Math.random, sex) {
   const p = (a) => a[Math.floor(r() * a.length)]
-  return `${p(T)} ${p(F)} ${p(N)}`.trim()
+  const f = sex === 'f' || (sex !== 'm' && r() < 0.5)
+  return `${p(f ? TF : TM)} ${p(f ? FF : FM)} ${p(N)}`.trim()
 }

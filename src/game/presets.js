@@ -1,6 +1,7 @@
 // Personagens prontos: cada um já vem com idade, perfil e visual. Dá para alterar tudo depois de escolher.
 const L = (skin, hair, hairColor, face, beard, glasses, outfit, outfitColor, bg) => ({ skin, hair, hairColor, face, beard, glasses, outfit, outfitColor, bg })
-const P = (id, name, tag, desc, age, arch, picks, look) => ({ id, name, tag, desc, age, arch, picks, look })
+const FEM = ['marina', 'helena', 'lorena', 'beatriz', 'raquel', 'bia', 'cida', 'claudia', 'tereza']
+const P = (id, name, tag, desc, age, arch, picks, look) => ({ id, name, tag, desc, age, arch, picks, look: { sex: FEM.includes(id) ? 'f' : 'm', ...look } })
 
 export const PRESETS = [
   P('marina', 'Dra. Marina Teixeira', '🩺 A médica do posto', 'Atende há anos no SUS. Povo confia, caixa é curto.', 42, 'tecnico', { ideologia: 'socialdem', religiao: 'sem', formacao: 'medico', carreira: 'saude', patrimonio: 'classe_media', paixao: 'corrida' }, L(2, 'bob', 1, 'oval', 'nenhuma', 'redondo', 'blusa', 1, 0)),

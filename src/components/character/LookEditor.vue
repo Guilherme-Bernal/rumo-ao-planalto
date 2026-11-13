@@ -1,15 +1,30 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import Avatar from './Avatar.vue'
 import {
   SKINS, HAIR_COLORS, HAIRS, FACES, BEARDS, GLASSES, OUTFITS, OUTFIT_COLORS, BGS, BROWS, EYE_COLORS, MOUTHS, NOSES,
-  MARKS, HEADWEAR, PINS, AGES, CARGOS_PREVIA, randomLook, defaultLook,
+  MARKS, HEADWEAR, PINS, AGES, CARGOS_PREVIA, randomLook, defaultLook, SEXOS, hairsFor, hairOk,
 } from '../../game/look'
 
 const props = defineProps({ modelValue: { type: Object, required: true }, cargo: { type: String, default: '' }, idade: { type: Number, default: null } })
 const emit = defineEmits(['update:modelValue'])
 const set = (k, v) => emit('update:modelValue', { ...props.modelValue, [k]: v })
 const aba = ref('rosto')
+const todos = ref(false)
+const sex = computed(() => (props.modelValue.sex === 'f' ? 'f' : 'm'))
+const hairs = computed(() => (todos.value ? HAIRS : hairsFor(sex.value)))
+const roupas = computed(() => OUTFITS.filter((o) => sex.value === 'f' || todos.value || !['vestido', 'blazer'].includes(o.id)))
+// trocar o perfil ajusta o que não combina (barba, penteado e roupa de outro perfil)
+function setSex(v) {
+  if (v === sex.value) return
+  const nx = { ...props.modelValue, sex: v }
+  const d = defaultLook(v)
+  if (!hairOk(nx.hair, v)) nx.hair = d.hair
+  if (v === 'f') nx.beard = 'nenhuma'
+  if (v === 'm' && ['vestido', 'blazer'].includes(nx.outfit)) nx.outfit = 'terno'
+  if (v === 'f' && nx.outfit === 'terno') nx.outfit = 'blazer'
+  emit('update:modelValue', nx)
+}
 const previa = ref(props.cargo || 'vereador')
 const abas = [['rosto', '🙂 Rosto'], ['cabelo', '💇 Cabelo e barba'], ['roupa', '👔 Roupa'], ['detalhes', '✨ Detalhes']]
 </script>
@@ -21,13 +36,15 @@ const abas = [['rosto', '🙂 Rosto'], ['cabelo', '💇 Cabelo e barba'], ['roup
       <div class="prev-cargos" role="group" aria-label="Prévia por cargo">
         <button v-for="c in CARGOS_PREVIA" :key="c.id" type="button" :class="{ on: previa === c.id }" :title="'Ver com a insígnia de ' + c.name" @click="previa = c.id">{{ c.name }}</button>
       </div>
-      <button type="button" @click="emit('update:modelValue', randomLook())">🎲 Sortear rosto</button>
-      <button type="button" @click="emit('update:modelValue', defaultLook())">↺ Padrão</button>
+      <button type="button" @click="emit('update:modelValue', randomLook(sex))">🎲 Sortear rosto</button>
+      <button type="button" @click="emit('update:modelValue', defaultLook(sex))">↺ Padrão</button>
     </div>
     <div class="look-opts">
       <div class="lk-tabs" role="tablist"><button v-for="a in abas" :key="a[0]" type="button" role="tab" :aria-selected="aba === a[0]" :class="{ on: aba === a[0] }" @click="aba = a[0]">{{ a[1] }}</button></div>
 
       <template v-if="aba === 'rosto'">
+        <div class="lk-row"><small>Perfil</small>
+          <span class="lk-ch"><button v-for="o in SEXOS" :key="o.id" type="button" :class="{ on: sex === o.id }" @click="setSex(o.id)">{{ o.icon }} {{ o.name }}</button></span></div>
         <div class="lk-row"><small>Tom de pele</small>
           <span class="lk-sw"><i v-for="(c, i) in SKINS" :key="c" :style="{ background: c }" :class="{ on: modelValue.skin === i }" @click="set('skin', i)"></i></span></div>
         <div class="lk-row"><small>Rosto</small>
@@ -46,16 +63,17 @@ const abas = [['rosto', '🙂 Rosto'], ['cabelo', '💇 Cabelo e barba'], ['roup
 
       <template v-else-if="aba === 'cabelo'">
         <div class="lk-row"><small>Cabelo</small>
-          <span class="lk-ch"><button v-for="o in HAIRS" :key="o.id" type="button" :class="{ on: modelValue.hair === o.id }" @click="set('hair', o.id)">{{ o.name }}</button></span></div>
+          <span class="lk-ch"><button v-for="o in hairs" :key="o.id" type="button" :class="{ on: modelValue.hair === o.id }" @click="set('hair', o.id)">{{ o.name }}</button>
+            <button type="button" class="lk-all" :class="{ on: todos }" @click="todos = !todos">{{ todos ? 'Só os do meu perfil' : 'Ver todos' }}</button></span></div>
         <div class="lk-row"><small>Cor do cabelo</small>
           <span class="lk-sw"><i v-for="(c, i) in HAIR_COLORS" :key="c" :style="{ background: c }" :class="{ on: modelValue.hairColor === i }" @click="set('hairColor', i)"></i></span></div>
-        <div class="lk-row"><small>Barba</small>
+        <div v-if="sex === 'm' || todos" class="lk-row"><small>Barba</small>
           <span class="lk-ch"><button v-for="o in BEARDS" :key="o.id" type="button" :class="{ on: modelValue.beard === o.id }" @click="set('beard', o.id)">{{ o.name }}</button></span></div>
       </template>
 
       <template v-else-if="aba === 'roupa'">
         <div class="lk-row"><small>Roupa</small>
-          <span class="lk-ch"><button v-for="o in OUTFITS" :key="o.id" type="button" :class="{ on: modelValue.outfit === o.id }" @click="set('outfit', o.id)">{{ o.name }}</button></span></div>
+          <span class="lk-ch"><button v-for="o in roupas" :key="o.id" type="button" :class="{ on: modelValue.outfit === o.id }" @click="set('outfit', o.id)">{{ o.name }}</button></span></div>
         <div class="lk-row"><small>Cor da roupa</small>
           <span class="lk-sw"><i v-for="(c, i) in OUTFIT_COLORS" :key="c" :style="{ background: c }" :class="{ on: modelValue.outfitColor === i }" @click="set('outfitColor', i)"></i></span></div>
         <div class="lk-row"><small>Lapela</small>
