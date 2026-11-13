@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { ESCALAS, ESCALAS_CARGO, CRISES_ESC, CRISE_ESC_POR_ID, opsCrise, PADRAO_CRISE, CHANCE_ESCALA, REVOLTA } from './bloco42'
 import { DOUTRINAS, DOUT_POR_ID, PERFIS_PART, PERFIL_PART_POR_ID, MAX_FILIADOS, CUSTO_DOUTRINA, PEDIDOS_FILIACAO, OPS_FILIACAO, OPS_CISAO, PADRAO_CISAO, PADRAO_FILIACAO } from './bloco41'
 import { SEGMENTOS, SEG_POR_ID, PROTESTOS, opsProtesto, PADRAO_PROTESTO, PAUTA_ACOES } from './bloco40'
 import { ECO_IDS, TAG_SETOR, PEDIDOS, opsPara, PEND_INFO, DOACOES, GREVES, ESCANDALO_DOACAO } from './bloco39'
@@ -4311,6 +4312,7 @@ export function roundAvancos() {
   roundEco()
   roundPop()
   roundPartido()
+  roundCrises()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -5219,6 +5221,161 @@ function roundPartido() {
   p.pend = { tipo: 'filiacao', nome: candName(R), perfil: perfil.id, v: Math.floor(R() * 3), left: 2 }
   p.last = game.total
   toast('🪪', `Pedido de filiação: ${p.pend.nome}`)
+}
+
+/* ---------- BLOCO 42: revoltas e crises (municipal, estadual, nacional, internacional) ---------- */
+function criseBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.crise) p.crise = { pend: null, volta: null, last: -9, cd: {}, vistas: {}, rev: 0, lancadas: 0, resolvidas: 0 }
+  return p.crise
+}
+export const criseEscalasNow = () => Object.keys(ESCALAS_CARGO[officeId()] || { municipal: 1 })
+export const criseInfoNow = () => {
+  const c = game.poder && game.poder.crise
+  return { vistas: c ? Object.keys(c.vistas).length : 0, total: CRISES_ESC.length, rev: c ? c.rev : 0, lancadas: c ? c.lancadas : 0, resolvidas: c ? c.resolvidas : 0 }
+}
+export const crisePendNow = () => {
+  const c = game.poder && game.poder.crise
+  if (!c || !c.pend) return null
+  const def = CRISE_ESC_POR_ID[c.pend.id]
+  if (!def) return null
+  const esc = ESCALAS[def.esc]
+  const rev = c.pend.stage === 2
+  const ctx = { exec: isExec(), stage: c.pend.stage, pop: game.stats.pop, seg: game.stats.seg, apoioSeg: apoioDe(def.seg) }
+  return {
+    icon: rev ? '🔥' : def.icon,
+    titulo: `${esc.icon} ${rev ? 'Revolta: ' : 'Crise: '}${def.nome}`,
+    texto: (rev ? 'A crise ficou sem solução e virou revolta. ' : '') + def.t(esc.alvo) + ` (${esc.nome})`,
+    left: c.pend.left, esc: def.esc, stage: c.pend.stage, seg: def.seg, ops: opsCrise(def, ctx),
+  }
+}
+export function crisePMotivo(op) {
+  const pn = crisePendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function criseAplicar(c, pn, opId, auto) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === PADRAO_CRISE)
+  const def = CRISE_ESC_POR_ID[c.pend.id]
+  const ok = o.id === 'esperar' ? false : R() < o.p
+  const r = ok ? o.ok : o.bad
+  applyFx({ ...r.fx, cash: -(o.cash || 0) }, true)
+  popMexe(def.seg, ok ? o.apoio[0] : o.apoio[1])
+  c.cd[def.id] = game.total + 10
+  c.vistas[def.id] = (c.vistas[def.id] || 0) + 1
+  if (ok) c.resolvidas++
+  const escala = !ok && (o.escala || R() < CHANCE_ESCALA) && c.pend.stage === 1 && R() < (o.escala ? 0.5 : 0.4)
+  timelineAdd(pn.icon, `${pn.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}. ${r.t}`.trim(), ok ? 'up' : 'down')
+  if (escala) c.volta = { id: def.id, in: 2 }
+  c.pend = null
+  c.last = game.total
+  cnt(ok ? 'criseok' : 'criseruim')
+  return { o, ok, r }
+}
+export function criseEscolher(op) {
+  if (crisePMotivo(op)) return null
+  const c = criseBase()
+  const pn = crisePendNow()
+  const { o, ok, r } = criseAplicar(c, pn, op, false)
+  save()
+  return { ok, txt: o.id === 'esperar' ? 'Você esperou e a crise seguiu.' : r.t }
+}
+// lançar uma mobilização a partir de um segmento já esquentado (bloco 40)
+export function revoltaMotivo(segId) {
+  if (!game.world || !SEG_POR_ID[segId]) return 'Indisponível.'
+  const pop = game.poder && game.poder.pop
+  const c = game.poder && game.poder.crise
+  const cd = c && c.cd['revolta']
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  if (game.stats.cash < REVOLTA.custo) return `Sem caixa (${REVOLTA.custo}).`
+  if (!pop || pop.mob[segId] < REVOLTA.minMob) return `O segmento ainda não está mobilizado (precisa de ${REVOLTA.minMob}).`
+  return ''
+}
+export const revoltaAlvo = () => (isExec() ? (officeId() === 'presidente' ? 'o Congresso' : 'o governo federal') : 'o governo')
+export function revoltaChance(segId) {
+  const pop = game.poder && game.poder.pop
+  const part = game.poder && game.poder.partido
+  const mob = pop ? pop.mob[segId] : 0
+  return clamp(0.3 + mob / 200 + (part && partidoProprio() ? part.seg / 400 : 0) + (apoioDe(segId) < 40 ? 0.1 : 0), 0.15, 0.85)
+}
+export function revoltaLancar(segId) {
+  if (revoltaMotivo(segId)) return null
+  const c = criseBase()
+  const sg = SEG_POR_ID[segId]
+  const ok = R() < revoltaChance(segId)
+  applyFx({ cash: -REVOLTA.custo }, true)
+  c.cd.revolta = game.total + REVOLTA.cd
+  c.lancadas++
+  const pop = popBase()
+  let txt
+  if (ok) {
+    applyFx({ img: 1.5, pop: 1, cong: -1.5 }, true)
+    popMexe(segId, 10)
+    pop.mob[segId] = clamp(pop.mob[segId] - 25, 0, 100)
+    txt = `Você levou ${sg.nome.toLowerCase()} às ruas contra ${revoltaAlvo()} e a pauta ganhou o noticiário.`
+  } else {
+    applyFx({ img: -2, cong: -1 }, true)
+    popMexe(segId, -8)
+    pop.mob[segId] = clamp(pop.mob[segId] - 10, 0, 100)
+    txt = `A mobilização de ${sg.nome.toLowerCase()} não pegou e você ficou com a conta.`
+  }
+  timelineAdd('📢', txt, ok ? 'up' : 'down')
+  cnt('crisereg')
+  save()
+  return { ok, txt }
+}
+function criseSorteia(c) {
+  const pesos = ESCALAS_CARGO[officeId()] || { municipal: 1 }
+  const ks = Object.keys(pesos)
+  let r = R() * ks.reduce((a, k) => a + pesos[k], 0)
+  let esc = ks[ks.length - 1]
+  for (const k of ks) { r -= pesos[k]; if (r < 0) { esc = k; break } }
+  const cen = game.cenario && game.cenario.id
+  const mob = (game.poder && game.poder.pop && game.poder.pop.mob) || {}
+  const pool = CRISES_ESC.filter((d) => d.esc === esc && !(c.cd[d.id] && game.total < c.cd[d.id]))
+  if (!pool.length) return null
+  const w = pool.map((d) => (d.cen.includes(cen) ? 2 : 1) * (1 + (mob[d.seg] || 30) / 100))
+  let t = R() * w.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < pool.length; i++) { t -= w[i]; if (t < 0) return pool[i] }
+  return pool[pool.length - 1]
+}
+function roundCrises() {
+  if (!game.world) return
+  const c = criseBase()
+  if (c.pend) {
+    c.pend.left--
+    if (c.pend.left < 0) {
+      const pn = crisePendNow()
+      if (pn) criseAplicar(c, pn, PADRAO_CRISE, true)
+      else c.pend = null
+    }
+    return
+  }
+  if (c.volta) {
+    c.volta.in--
+    if (c.volta.in <= 0) {
+      c.pend = { id: c.volta.id, stage: 2, left: 1 }
+      c.volta = null
+      c.rev++
+      c.last = game.total
+      const pn = crisePendNow()
+      if (pn) toast(pn.icon, pn.titulo)
+      cnt('crise')
+      return
+    }
+  }
+  if (game.total - c.last < 5 || game.total < 3 || R() > 0.13) return
+  const d = criseSorteia(c)
+  if (!d) return
+  c.pend = { id: d.id, stage: 1, left: 2 }
+  c.last = game.total
+  const pn = crisePendNow()
+  if (pn) toast(pn.icon, pn.titulo)
+  cnt('crise')
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -8001,6 +8158,7 @@ export function pendenciasNow() {
   const ec = ecoPendNow(); if (ec) dec('eco', ec.icon, ec.titulo, ec.left)
   const pp = popPendNow(); if (pp) dec('pop', pp.icon, pp.titulo, pp.left)
   const pt = partidoPendNow(); if (pt) dec('partido', pt.icon, pt.titulo, pt.left)
+  const cr = crisePendNow(); if (cr) dec('crise', cr.icon, cr.titulo, cr.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })

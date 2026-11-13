@@ -2247,3 +2247,106 @@ describe('BLOCO 41 — partido próprio: doutrina, filiados e cisões', () => {
     expect(v.partido.dout).toBe('verde')
   })
 })
+
+describe('BLOCO 42 — crises e revoltas por escala', () => {
+  const inicia = (office = 'prefeito') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é coerente: segmentos, cenários, escalas e uma resposta especial por crise', async () => {
+    const B = await import('../src/game/bloco42.js')
+    const B40 = await import('../src/game/bloco40.js')
+    const cens = E.cenariosDef ? E.cenariosDef().map((c) => c.id) : null
+    for (const d of B.CRISES_ESC) {
+      expect(B.ESCALAS[d.esc], d.id).toBeTruthy()
+      expect(B40.SEG_POR_ID[d.seg], d.id).toBeTruthy()
+      expect(d.esp.ok.t.length).toBeGreaterThan(5)
+      if (cens) for (const c of d.cen) expect(cens, d.id).toContain(c)
+    }
+    for (const esc of Object.keys(B.ESCALAS)) expect(B.CRISES_ESC.filter((d) => d.esc === esc).length, esc).toBeGreaterThanOrEqual(3)
+    for (const [cargo, pesos] of Object.entries(B.ESCALAS_CARGO)) for (const k of Object.keys(pesos)) expect(B.ESCALAS[k], cargo).toBeTruthy()
+    const ops = B.opsCrise(B.CRISES_ESC[0], { exec: true, stage: 1, pop: 50, seg: 50, apoioSeg: 50 })
+    expect(ops.some((o) => o.id === B.PADRAO_CRISE)).toBe(true)
+  })
+  it('cada cargo só enfrenta as escalas dele', () => {
+    inicia('prefeito')
+    expect(E.criseEscalasNow().sort()).toEqual(['internacional', 'municipal'])
+    inicia('presidente')
+    expect(E.criseEscalasNow().sort()).toEqual(['internacional', 'nacional'])
+    inicia('governador')
+    expect(E.criseEscalasNow()).toContain('estadual')
+  })
+  it('numa carreira longa cada cargo vê só crises das suas escalas e a pendência vence sozinha', async () => {
+    const B = await import('../src/game/bloco42.js')
+    for (const cargo of ['vereador', 'governador', 'senador', 'presidente']) {
+      inicia(cargo)
+      const vistas = new Set()
+      for (let i = 0; i < 300; i++) {
+        rodada()
+        const p = E.crisePendNow()
+        if (p) vistas.add(p.esc)
+        E.game.stats.cash = 60
+      }
+      expect(vistas.size, cargo).toBeGreaterThan(0)
+      for (const e of vistas) expect(Object.keys(B.ESCALAS_CARGO[cargo]), cargo).toContain(e)
+    }
+  })
+  it('a resposta aplica efeito, tira caixa e registra; esperar escalona às vezes', () => {
+    inicia('prefeito')
+    rodada()
+    const c = E.game.poder.crise
+    c.pend = { id: 'alagamento', stage: 1, left: 2 }
+    expect(E.pendenciasNow().some((x) => x.id === 'crise')).toBe(true)
+    const caixa = E.game.stats.cash
+    expect(E.criseEscolher('investir')).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(caixa)
+    expect(E.crisePendNow()).toBeNull()
+    expect(E.criseInfoNow().vistas).toBe(1)
+    let rev = 0
+    for (let i = 0; i < 60; i++) {
+      c.pend = { id: 'lixo', stage: 1, left: 2 }
+      c.cd = {}
+      E.criseEscolher('esperar')
+      if (c.volta) { rev++; c.volta.in = 1; E.game.total++; c.last = -9; E.roundAvancos(); expect(E.crisePendNow()?.stage).toBe(2); c.pend = null; c.volta = null }
+    }
+    expect(rev).toBeGreaterThan(0)
+  })
+  it('legislador cobra o governo; executivo usa a força', () => {
+    inicia('vereador')
+    rodada()
+    E.game.poder.crise.pend = { id: 'tarifa', stage: 1, left: 2 }
+    expect(E.crisePendNow().ops.some((o) => o.id === 'cobrar')).toBe(true)
+    expect(E.crisePendNow().ops.some((o) => o.id === 'forca')).toBe(false)
+    inicia('prefeito')
+    rodada()
+    E.game.poder.crise.pend = { id: 'tarifa', stage: 1, left: 2 }
+    expect(E.crisePendNow().ops.some((o) => o.id === 'forca')).toBe(true)
+  })
+  it('lançar mobilização exige segmento esquentado, custa caixa e tem espera', () => {
+    inicia('vereador')
+    rodada()
+    expect(E.revoltaMotivo('jovens')).toMatch(/mobilizado/)
+    E.game.poder.pop.mob.jovens = 80
+    const caixa = E.game.stats.cash
+    const r = E.revoltaLancar('jovens')
+    expect(r).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(caixa)
+    expect(E.revoltaMotivo('jovens')).toMatch(/Espere/)
+    expect(E.revoltaChance('jovens')).toBeGreaterThan(0.3)
+  })
+  it('o estado das crises sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.crise.cd).toBeTruthy()
+  })
+})
