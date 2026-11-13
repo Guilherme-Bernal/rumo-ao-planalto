@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { billsOf } from '../../game/bills'
 import SecEducacao from './SecEducacao.vue'
 import SecDefesa from './SecDefesa.vue'
+import SecObras from './SecObras.vue'
 import SecConstituicao from './SecConstituicao.vue'
 import { pastasNow, pesquisas, aprovacao, protesto, responderProtesto, consultaFeita, consultaChance, consultar, officeId, emCrise, articular, goalsNow, courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition, leiCtx, cenarioNow, perfilEstado } from '../../game/engine'
 
@@ -107,6 +108,7 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
     </ul>
 
     <SecMinistros />
+    <SecObras />
     <SecEducacao />
     <SecDefesa />
     <SecConstituicao />

@@ -15,6 +15,7 @@ import { DAY_FLAVOR, ACTION_ICON, holidayOf, makePost, slug, GENERIC_TAGS, candN
 import { MORE_FLAVOR } from './flavor'
 import { BIG, bigWhen, BIG_TAGS } from './bigevents'
 import { GEN_BASES, montarGen, pesoGen } from './bloco43'
+import { OBRAS, OBRA_POR_ID, OBRA_CEN, OBRA_PROBLEMAS } from './bloco37'
 import { CRISES, CRISE_RESP, EMB, VIAGEM, SANCAO, ESPIO_ACOES } from './mundo24'
 import { SETORES, SETOR_ACOES, MOVIMENTOS, MOV_RESP, VEICULOS, LINHAS, MIDIA_ACOES, CATASTROFES, CATAST_RESP } from './sociedade'
 import { INIMIGOS, AMEACAS, GUERRA_ACOES } from './ameacas'
@@ -4298,6 +4299,7 @@ export function roundAvancos() {
   roundLegado()
   roundArcos()
   roundCenario()
+  roundObras()
   roundPressao()
 }
 
@@ -4404,6 +4406,169 @@ function roundCenario() {
   s.pend = { k: pool[Math.floor(R() * pool.length)], left: 2 }
   s.last = game.total
   toast(c.ico, cenPendNow().titulo)
+}
+
+/* ---------- BLOCO 37: obras vivas ---------- */
+const obraSphere = () => (OFFICES[officeId()] || {}).sphere || 'mun'
+const obraEscala = () => (isExec() ? 1 : 0.6) // legislador consegue a obra por emenda: custo e efeito menores
+function obrasBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.obras) p.obras = { lista: [], usada: false, pend: null, last: -9 }
+  return p.obras
+}
+export const obrasNow = () => {
+  const o = game.poder && game.poder.obras
+  const l = (o && o.lista) || []
+  return { andamento: l.filter((x) => x.st === 'andamento'), prontas: l.filter((x) => x.st === 'pronta'), usada: !!(o && o.usada) }
+}
+export const obrasDisponiveis = () => OBRAS.filter((o) => o.sphere === obraSphere() && (isExec() || o.leg))
+export const obraLimite = () => (isExec() ? 3 : 2)
+export const obraDef = (id) => OBRA_POR_ID[id] || null
+function obraMult(def) {
+  let m = 1
+  const pf = perfilEstado()
+  const cn = cenarioNow()
+  if (pf && pf.dor === def.tema) m *= 1.3
+  const oc = cn && OBRA_CEN[cn.id]
+  if (oc && oc.tipo && oc.tipo.includes(def.tipo)) m *= oc.mult
+  return m
+}
+export function obraCusto(def) {
+  const cn = cenarioNow()
+  const f = (cn && OBRA_CEN[cn.id] && OBRA_CEN[cn.id].custo) || 1
+  return Math.round(def.custo * obraEscala() * f * 10) / 10
+}
+export function obraNotas(def) {
+  const pf = perfilEstado()
+  const cn = cenarioNow()
+  const oc = cn && OBRA_CEN[cn.id]
+  const out = []
+  if (pf && pf.dor === def.tema) out.push('🩹 atende a dor do estado')
+  if (oc && oc.tipo && oc.tipo.includes(def.tipo)) out.push('🔥 combina com o cenário')
+  if (oc && oc.custo > 1) out.push('📉 mais cara na crise')
+  if (oc && oc.custo < 1) out.push('🚀 mais barata no boom')
+  return out
+}
+export function obraMotivo(id) {
+  const def = OBRA_POR_ID[id]
+  if (!def || !obrasDisponiveis().includes(def)) return 'Indisponível neste cargo.'
+  const o = obrasBase()
+  if (game.phase !== 'actions') return 'Disponível na fase de ações.'
+  if (o.usada) return 'Você já começou uma obra nesta rodada.'
+  if (obrasNow().andamento.length >= obraLimite()) return `Limite de ${obraLimite()} obras ao mesmo tempo.`
+  if (game.stats.cash < obraCusto(def)) return `Sem caixa (${obraCusto(def)}).`
+  return ''
+}
+export function obraIniciar(id) {
+  if (obraMotivo(id)) return null
+  const def = OBRA_POR_ID[id]
+  const o = obrasBase()
+  const custo = obraCusto(def)
+  game.delta = {}
+  applyFx({ cash: -custo }, true)
+  o.lista.unshift({ uid: Math.random().toString(36).slice(2), id, ini: game.total, left: def.prazo, prazo: def.prazo, st: 'andamento', sphere: def.sphere, mult: obraMult(def) * obraEscala(), enxuta: false })
+  o.lista = o.lista.slice(0, 16)
+  o.usada = true
+  timelineAdd(def.icon, `Obra iniciada: ${def.nome.toLowerCase()} (${def.prazo} rodadas).`, 'flat')
+  log(`Obra iniciada: ${def.nome}.`)
+  cnt('obras')
+  save()
+  return { def, custo }
+}
+function obraConcluir(b, def) {
+  b.st = 'pronta'
+  b.fim = game.total
+  const k = (b.enxuta ? 0.8 : 1) * obraEscala()
+  const fx = {}
+  for (const s in def.fim) fx[s] = def.fim[s] * k
+  const pf = perfilEstado()
+  if (pf && pf.dor === def.tema) fx.pop = (fx.pop || 0) + 1
+  applyFx(fx, true)
+  if (def.edu) eduAdd(def.edu * obraEscala())
+  if (def.cien) cienAdd(def.cien)
+  timelineAdd(def.icon, `Obra pronta: ${def.nome.toLowerCase()}.`, 'up')
+  toast(def.icon, `Obra pronta: ${def.nome}`)
+  log(`Obra concluída: ${def.nome}.`)
+  cnt('obrasprontas')
+}
+export const obraPendNow = () => {
+  const o = game.poder && game.poder.obras
+  if (!o || !o.pend) return null
+  const b = o.lista.find((x) => x.uid === o.pend.uid)
+  const def = b && OBRA_POR_ID[b.id]
+  const d = OBRA_PROBLEMAS[o.pend.tipo]
+  return b && def && d ? { d, b, def, left: o.pend.left, titulo: d.titulo(def.nome), texto: d.texto(def.nome.toLowerCase()) } : null
+}
+export function obraMotivoOp(op) {
+  const pn = obraPendNow()
+  if (!pn) return 'Indisponível.'
+  const x = pn.d.ops.find((y) => y.id === op)
+  if (!x) return 'Indisponível.'
+  if (x.fx && x.fx.cash && game.stats.cash < -x.fx.cash) return `Sem caixa (${-x.fx.cash}).`
+  return ''
+}
+function obraAplicar(o, pn, opId, auto) {
+  const x = pn.d.ops.find((y) => y.id === opId) || pn.d.ops[0]
+  applyFx({ ...x.fx }, true)
+  if (x.atraso) pn.b.left += x.atraso
+  if (x.enxuta) pn.b.enxuta = true
+  timelineAdd(pn.d.icon, `${pn.titulo}${auto ? ' (você deixou passar)' : ''}: ${x.name.toLowerCase()}.`, 'flat')
+  o.pend = null
+  o.last = game.total
+  cnt('obraprob')
+  return x
+}
+export function obraEscolher(op) {
+  if (obraMotivoOp(op)) return null
+  const o = obrasBase()
+  const pn = obraPendNow()
+  const x = obraAplicar(o, pn, op, false)
+  save()
+  return { txt: `${pn.titulo}: ${x.name.toLowerCase()}.` }
+}
+function roundObras() {
+  if (!game.world || !game.poder) return
+  const o = game.poder.obras
+  if (!o) {
+    // sem obras ainda: nada a fazer (o estado só nasce quando a primeira obra é iniciada)
+    return
+  }
+  o.usada = false
+  const pass = {}
+  let manut = 0
+  for (const b of o.lista) {
+    const def = OBRA_POR_ID[b.id]
+    if (!def) continue
+    if (b.st === 'andamento') {
+      b.left--
+      if (b.left <= 0) obraConcluir(b, def)
+    } else {
+      const f = (b.sphere === obraSphere() ? 1 : 0.4) * (b.enxuta ? 0.8 : 1) * b.mult
+      for (const k in def.pass) pass[k] = (pass[k] || 0) + def.pass[k] * f
+      manut++
+    }
+  }
+  for (const k in pass) pass[k] = Math.min(1, pass[k])
+  if (manut) pass.cash = (pass.cash || 0) - Math.min(0.3, 0.04 * manut)
+  applyFx(pass)
+  if (o.pend) {
+    o.pend.left--
+    if (o.pend.left < 0) {
+      const pn = obraPendNow()
+      if (pn) obraAplicar(o, pn, pn.d.padrao, true)
+      else o.pend = null
+    }
+    return
+  }
+  const andando = o.lista.filter((x) => x.st === 'andamento')
+  if (!andando.length || game.total - o.last < 3 || R() > 0.16) return
+  const b = andando[Math.floor(R() * andando.length)]
+  const tipos = Object.keys(OBRA_PROBLEMAS)
+  o.pend = { tipo: tipos[Math.floor(R() * tipos.length)], uid: b.uid, left: 2 }
+  o.last = game.total
+  const pn = obraPendNow()
+  if (pn) toast(pn.d.icon, pn.titulo)
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -7177,6 +7342,7 @@ export function pendenciasNow() {
   const ap = arcoPendNow(); if (ap) dec('arco', ap.e.icon, ap.titulo, ap.left)
   const pr = pressPendNow(); if (pr) dec('press', pr.d.icon, pr.d.titulo, pr.left)
   const cn = cenPendNow(); if (cn) dec('cen', cn.ico, cn.titulo, cn.left)
+  const ob = obraPendNow(); if (ob) dec('obra', ob.d.icon, ob.titulo, ob.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })

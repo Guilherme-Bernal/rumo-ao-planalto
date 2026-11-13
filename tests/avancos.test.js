@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { CENARIOS, SETORES_UF, PERFIL_UF } from '../src/game/bloco36'
 import { GEN_BASES, GEN_CENARIO, montarGen, pesoGen } from '../src/game/bloco43'
+import { OBRAS, OBRA_PROBLEMAS } from '../src/game/bloco37'
 
 const mem = new Map()
 globalThis.localStorage = {
@@ -1705,5 +1706,127 @@ describe('BLOCO 43 — eventos esportivos e culturais gerados', () => {
     expect(E.currentBig().title).toMatch(/Estadual/)
     E.chooseBig(3)
     expect(E.game.bigOffer.done).toBe(true)
+  })
+})
+
+describe('BLOCO 37 — obras vivas', () => {
+  const inicia = (office = 'prefeito', regionId = 'SP', cenario = 'boom') => {
+    E.startGame({ name: 'Teste', regionId })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 90
+    E.game.total = 5
+    E.game.cenario = { id: cenario, n: 1, desde: 0, pend: null, last: 99, vistos: [] }
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é consistente com os temas e as esferas', () => {
+    const temas = E.worldTemas().map((t) => t.id)
+    for (const o of OBRAS) {
+      expect(temas, o.id).toContain(o.tema)
+      expect(['mun', 'est', 'fed']).toContain(o.sphere)
+      expect(o.custo).toBeGreaterThan(0)
+      expect(o.prazo).toBeGreaterThan(1)
+      expect(Object.keys(o.pass).every((k) => ['soc', 'seg', 'eco', 'cash', 'img', 'pop', 'cong'].includes(k))).toBe(true)
+    }
+    for (const id of Object.keys(OBRA_PROBLEMAS)) expect(OBRA_PROBLEMAS[id].ops.some((x) => x.id === OBRA_PROBLEMAS[id].padrao)).toBe(true)
+  })
+  it('cada cargo vê as obras da sua esfera, e o legislador só as pequenas', () => {
+    inicia('prefeito')
+    expect(E.obrasDisponiveis().every((o) => o.sphere === 'mun')).toBe(true)
+    const nPref = E.obrasDisponiveis().length
+    inicia('vereador')
+    expect(E.obrasDisponiveis().length).toBeLessThan(nPref)
+    expect(E.obrasDisponiveis().every((o) => o.leg)).toBe(true)
+    inicia('presidente')
+    expect(E.obrasDisponiveis().every((o) => o.sphere === 'fed')).toBe(true)
+    inicia('governador')
+    expect(E.obrasDisponiveis().every((o) => o.sphere === 'est')).toBe(true)
+  })
+  it('iniciar gasta caixa, vale uma por rodada e respeita o limite', () => {
+    inicia('prefeito')
+    const cash = E.game.stats.cash
+    expect(E.obraIniciar('brt')).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(cash)
+    expect(E.obraMotivo('ubs')).toMatch(/rodada/)
+    expect(E.obraIniciar('ubs')).toBeNull()
+    rodada()
+    expect(E.obraIniciar('saneamento')).toBeTruthy()
+    rodada()
+    expect(E.obraIniciar('escola_mun')).toBeTruthy()
+    rodada()
+    expect(E.obrasNow().andamento.length).toBe(3)
+    expect(E.obraMotivo('praca')).toMatch(/Limite/)
+  })
+  it('a obra anda, termina e entrega o efeito de conclusão e a educação', () => {
+    inicia('prefeito')
+    E.obraIniciar('escola_mun')
+    const edu = E.eduNow()
+    for (let i = 0; i < 12 && E.obrasNow().prontas.length === 0; i++) {
+      rodada()
+      const pn = E.obraPendNow()
+      if (pn) E.obraEscolher(pn.d.padrao)
+    }
+    expect(E.obrasNow().prontas.length).toBe(1)
+    expect(E.eduNow()).toBeGreaterThan(edu - 3)
+    expect(E.game.poder.timeline.some((t) => /Obra pronta/.test(t.text))).toBe(true)
+  })
+  it('obra pronta rende por rodada, mais na sua esfera do que fora dela', () => {
+    inicia('prefeito')
+    E.game.poder.obras = { lista: [{ uid: 'x', id: 'brt', ini: 0, left: 0, prazo: 5, st: 'pronta', sphere: 'mun', mult: 1, enxuta: false }], usada: false, pend: null, last: 99 }
+    E.game.stats.eco = 50
+    rodada()
+    const dentro = E.game.stats.eco
+    inicia('presidente')
+    E.game.poder.obras = { lista: [{ uid: 'x', id: 'brt', ini: 0, left: 0, prazo: 5, st: 'pronta', sphere: 'mun', mult: 1, enxuta: false }], usada: false, pend: null, last: 99 }
+    E.game.stats.eco = 50
+    rodada()
+    expect(dentro).toBeGreaterThan(E.game.stats.eco)
+  })
+  it('problema na obra vira decisão com prazo e opção padrão', () => {
+    inicia('prefeito')
+    E.obraIniciar('brt')
+    const o = E.game.poder.obras
+    o.pend = { tipo: 'atraso', uid: o.lista[0].uid, left: 2 }
+    expect(E.obraPendNow().titulo).toMatch(/atrasada/)
+    expect(E.pendenciasNow().some((x) => x.id === 'obra')).toBe(true)
+    const left = o.lista[0].left
+    expect(E.obraEscolher('esperar')).toBeTruthy()
+    expect(o.lista[0].left).toBe(left + 2)
+    expect(E.obraPendNow()).toBeNull()
+    o.pend = { tipo: 'estouro', uid: o.lista[0].uid, left: 0 }
+    rodada()
+    rodada()
+    expect(E.obraPendNow()).toBeNull()
+    expect(o.lista[0].enxuta).toBe(true)
+  })
+  it('estado e cenário mudam o custo e o valor da obra', () => {
+    inicia('prefeito', 'SP', 'fiscal')
+    const def = OBRAS.find((o) => o.id === 'escola_mun')
+    const caro = E.obraCusto(def)
+    inicia('prefeito', 'SP', 'boom')
+    expect(E.obraCusto(def)).toBeLessThan(caro)
+    inicia('prefeito', 'GO', 'boom')
+    expect(E.obraNotas(OBRAS.find((o) => o.id === 'ubs'))).toContain('🩹 atende a dor do estado')
+    inicia('prefeito', 'SP', 'saude')
+    expect(E.obraNotas(OBRAS.find((o) => o.id === 'ubs')).join(' ')).toMatch(/cenário/)
+  })
+  it('legislador paga menos e ganha menos', () => {
+    inicia('prefeito')
+    const def = OBRAS.find((o) => o.id === 'escola_mun')
+    const exec = E.obraCusto(def)
+    inicia('vereador')
+    expect(E.obraCusto(def)).toBeLessThan(exec)
+  })
+  it('as obras sobrevivem ao salvamento', () => {
+    inicia('prefeito')
+    E.obraIniciar('praca')
+    const volta = JSON.parse(JSON.stringify(E.game.poder))
+    expect(volta.obras.lista.length).toBe(1)
+    expect(volta.obras.lista[0].st).toBe('andamento')
   })
 })

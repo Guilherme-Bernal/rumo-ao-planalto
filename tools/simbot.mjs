@@ -107,6 +107,12 @@ function jogaCarreira(estilo) {
           }
           if (best) E.proposeLaw(best.t.id, best.o.id)
         }
+        if (process.env.OBRAS) {
+          const ok = E.obrasDisponiveis().filter((d) => !E.obraMotivo(d.id)).sort((a, b) => b.custo / b.prazo - a.custo / a.prazo)
+          if (ok.length) E.obraIniciar(ok[ok.length - 1].id)
+          const pn = E.obraPendNow()
+          if (pn && !E.obraMotivoOp(pn.d.padrao)) E.obraEscolher(pn.d.padrao)
+        }
         E.endTurn()
       } else if (ph === 'recap') E.continueRecap()
       else if (ph === 'balance') E.continueBalance()
@@ -199,7 +205,7 @@ function jogaCarreira(estilo) {
   out.office = game.office
   out.vit = game.history.length
   const c = (game.poder && game.poder.cnt) || {}
-  out.blk = { ministro: 0, historia: 0, missao: 0, conspira: 0, redes: 0, rival: 0, pressao: 0, familia: 0, cenario: 0, leictx: 0 }
+  out.blk = { ministro: 0, historia: 0, missao: 0, conspira: 0, redes: 0, rival: 0, pressao: 0, familia: 0, cenario: 0, leictx: 0, obras: 0, obrasprontas: 0, obraprob: 0 }
   for (const [k, v] of Object.entries(c)) { const n = k.split(':')[1]; if (n in out.blk) out.blk[n] += v }
   const ms = game.poder && game.poder.mist
   out.mist = !ms ? 'nenhuma' : ms.fim ? ms.fim.tipo : 'ativa'
@@ -249,7 +255,7 @@ if (CARGO) {
   const rt = res.reduce((a, x) => a + x.rodadas, 0) || 1
   const sum = (k) => res.reduce((a, x) => a + ((x.blk || {})[k] || 0), 0)
   console.log('\n=== BLOCOS 31/32: interações por 100 rodadas jogadas ===')
-  for (const k of ['ministro', 'historia', 'missao', 'conspira', 'redes', 'rival', 'pressao', 'familia', 'cenario', 'leictx']) console.log(k.padEnd(10), ((100 * sum(k)) / rt).toFixed(2))
+  for (const k of ['ministro', 'historia', 'missao', 'conspira', 'redes', 'rival', 'pressao', 'familia', 'cenario', 'leictx', 'obras', 'obrasprontas', 'obraprob']) console.log(k.padEnd(10), ((100 * sum(k)) / rt).toFixed(2))
   console.log('missões concluídas por carreira:', media(res, (x) => x.missoes || 0).toFixed(2))
   console.log('conspiração (fim):', Object.entries(por(res, (x) => x.mist || 'nenhuma')).map(([k, v]) => `${k} ${pct(v, res.length)}`).join(' | '))
 }

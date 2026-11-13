@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher, arcoPendNow, arcoMotivo, arcoEscolher, pressPendNow, pressMotivo, pressEscolher, cenPendNow, cenMotivo, cenEscolher, cenarioNow, perfilEstado, pendenciasNow } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher, arcoPendNow, arcoMotivo, arcoEscolher, pressPendNow, pressMotivo, pressEscolher, cenPendNow, cenMotivo, cenEscolher, cenarioNow, perfilEstado, obraPendNow, obraMotivoOp, obraEscolher, pendenciasNow } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -28,6 +28,7 @@ const leg = computed(() => legadoPendNow())
 const arco = computed(() => arcoPendNow())
 const press = computed(() => pressPendNow())
 const cen = computed(() => cenPendNow())
+const obra = computed(() => obraPendNow())
 const cenario = computed(() => (game.world ? cenarioNow() : null))
 const perfil = computed(() => (game.world ? perfilEstado() : null))
 // fora da Agenda, as decisões ficam numa linha só (os cartões completos moram na Agenda)
@@ -133,6 +134,13 @@ const cadeia = computed(() => {
       <br /><small>{{ cen.texto }}</small>
       <span class="ops">
         <button v-for="o in cen.d.ops" :key="o.id" type="button" class="mini" :disabled="!!cenMotivo(o.id)" :title="o.desc" @click="cenEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="obra" class="aviso conv">
+      {{ obra.d.icon }} <b>{{ obra.titulo }}</b> <small>({{ obra.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ obra.texto }}</small>
+      <span class="ops">
+        <button v-for="o in obra.d.ops" :key="o.id" type="button" class="mini" :disabled="!!obraMotivoOp(o.id)" :title="o.desc" @click="obraEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
       </span>
     </div>
     <div v-if="press" class="aviso conv">
