@@ -2350,3 +2350,138 @@ describe('BLOCO 42 — crises e revoltas por escala', () => {
     expect(v.crise.cd).toBeTruthy()
   })
 })
+
+describe('BLOCO 44 — canal, jornal próprio, coletiva e escândalos', () => {
+  const inicia = (office = 'prefeito') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é coerente', async () => {
+    const B = await import('../src/game/bloco44.js')
+    for (const f of B.FORMATOS_EST) {
+      expect(f.p, f.id).toBeGreaterThan(0.3)
+      expect(f.okT.length).toBeGreaterThan(5)
+    }
+    expect(B.LINHAS_EST.length).toBe(3)
+    expect(B.MANCHETES_EST.filter((m) => m.dirty).length).toBe(1)
+    expect(B.ESCANDALOS_EST.length).toBeGreaterThanOrEqual(5)
+    const ops = B.opsEscandalo({ sujo: false, midia: 0 })
+    expect(ops.some((o) => o.id === B.PADRAO_ESC)).toBe(true)
+    expect(B.opsEscandalo({ sujo: true, midia: 0 }).find((o) => o.id === 'desmentir').p).toBeLessThan(ops.find((o) => o.id === 'desmentir').p)
+  })
+  it('gravar cria o canal, aplica efeito e respeita a espera; explicar exige lei vigente', () => {
+    inicia()
+    rodada()
+    expect(E.studioCanalNow()).toBeNull()
+    expect(E.studioGravarMotivo('explica')).toMatch(/lei/)
+    expect(E.studioGravar('bastidores')).toBeTruthy()
+    expect(E.studioCanalNow().vids).toBe(1)
+    expect(E.studioGravarMotivo('bastidores')).toMatch(/Espere/)
+    expect(E.studioGravar('bastidores')).toBeNull()
+  })
+  it('vídeos bem-sucedidos e fracassados mudam os inscritos; equipamento custa e sobe a qualidade', () => {
+    inicia()
+    rodada()
+    E.studioGravar('humor')
+    const c = E.studioCanalNow()
+    expect(c.insc).toBeGreaterThan(5)
+    const caixa = E.game.stats.cash
+    expect(E.studioEquipComprar()).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(caixa)
+    expect(E.studioCanalNow().qual).toBe(1)
+    E.game.poder.studio.canal.qual = 3
+    expect(E.studioEquipMotivo()).toMatch(/máximo/)
+  })
+  it('fundar o jornal exige nome e linha, custa e só acontece uma vez', () => {
+    inicia()
+    rodada()
+    expect(E.studioFundarMotivo('ab', 'serio')).toMatch(/nome/)
+    expect(E.studioFundarMotivo('Gazeta Teste', 'x')).toMatch(/linha/)
+    expect(E.studioEdicaoMotivo('entregas')).toMatch(/jornal/)
+    const caixa = E.game.stats.cash
+    expect(E.studioFundar('Gazeta Teste', 'combativo')).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(caixa)
+    expect(E.studioJornalNow().cred).toBe(45)
+    expect(E.studioFundarMotivo('Outro Jornal', 'serio')).toMatch(/já tem/)
+  })
+  it('edição muda credibilidade; boato mal-sucedido derruba, e a denúncia usa o rival', () => {
+    inicia()
+    rodada()
+    E.studioFundar('Gazeta Teste', 'serio')
+    const j0 = E.studioJornalNow().cred
+    let queda = false
+    for (let i = 0; i < 40 && !queda; i++) {
+      E.game.poder.studio.cd = {}
+      E.game.stats.cash = 60
+      const r = E.studioEdicao('boato')
+      if (r && !r.ok) queda = true
+    }
+    expect(queda).toBe(true)
+    expect(E.studioJornalNow().cred).toBeLessThan(j0)
+    expect(E.game.dirty).toBeGreaterThan(0)
+    const rm = E.game.rivalMod || 0
+    for (let i = 0; i < 40; i++) {
+      E.game.poder.studio.cd = {}
+      E.game.stats.cash = 60
+      E.studioEdicao('denuncia')
+    }
+    expect(E.game.rivalMod || 0).toBeGreaterThan(rm)
+  })
+  it('coletiva tem espera e custo da preparada', () => {
+    inicia()
+    rodada()
+    const caixa = E.game.stats.cash
+    expect(E.studioColetiva('preparada')).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(caixa)
+    expect(E.studioColetivaMotivo('dura')).toMatch(/Espere/)
+  })
+  it('escândalo aparece mais com jogo sujo, tem decisão e o padrão resolve sozinho', () => {
+    inicia()
+    rodada()
+    const e = E.game.poder.studio
+    e.pend = { id: 'foto', left: 2 }
+    expect(E.pendenciasNow().some((x) => x.id === 'escandalo')).toBe(true)
+    expect(E.escandaloMotivo('midia')).toMatch(/canal/)
+    expect(E.escandaloEscolher('assumir')).toBeTruthy()
+    expect(E.escandaloPendNow()).toBeNull()
+    e.pend = { id: 'nota', left: 0 }
+    e.last = -9
+    rodada()
+    expect(E.escandaloPendNow()).toBeNull()
+    expect(e.escandalos).toBe(2)
+    let com = 0
+    let sem = 0
+    for (let k = 0; k < 2; k++) {
+      inicia()
+      rodada()
+      E.game.dirty = k ? 12 : 0
+      E.game.termDirty = k ? 8 : 0
+      for (let i = 0; i < 400; i++) {
+        E.game.heat = k ? 15 : 0
+        rodada()
+        if (E.escandaloPendNow()) { if (k) com++; else sem++; E.game.poder.studio.pend = null }
+        E.game.stats.pop = 55
+      }
+    }
+    expect(com).toBeGreaterThan(sem)
+  })
+  it('o estado do estúdio sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    E.studioGravar('povo')
+    E.studioFundar('Gazeta Teste', 'popular')
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.studio.jornal.nome).toBe('Gazeta Teste')
+    expect(v.studio.canal.vids).toBe(1)
+  })
+})

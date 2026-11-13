@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { FORMATOS_EST, EQUIP_EST, LINHAS_EST, MANCHETES_EST, POSTURAS_EST, ESC_EST_POR_ID, ESCANDALOS_EST, opsEscandalo, PADRAO_ESC } from './bloco44'
 import { ESCALAS, ESCALAS_CARGO, CRISES_ESC, CRISE_ESC_POR_ID, opsCrise, PADRAO_CRISE, CHANCE_ESCALA, REVOLTA } from './bloco42'
 import { DOUTRINAS, DOUT_POR_ID, PERFIS_PART, PERFIL_PART_POR_ID, MAX_FILIADOS, CUSTO_DOUTRINA, PEDIDOS_FILIACAO, OPS_FILIACAO, OPS_CISAO, PADRAO_CISAO, PADRAO_FILIACAO } from './bloco41'
 import { SEGMENTOS, SEG_POR_ID, PROTESTOS, opsProtesto, PADRAO_PROTESTO, PAUTA_ACOES } from './bloco40'
@@ -4313,6 +4314,7 @@ export function roundAvancos() {
   roundPop()
   roundPartido()
   roundCrises()
+  roundEstudio()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -5376,6 +5378,252 @@ function roundCrises() {
   const pn = crisePendNow()
   if (pn) toast(pn.icon, pn.titulo)
   cnt('crise')
+}
+
+/* ---------- BLOCO 44: mídia e redes (canal de vídeos, jornal próprio, coletiva, escândalos) ---------- */
+function estBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.studio) p.studio = { canal: null, jornal: null, cd: {}, pend: null, last: -9, ultima: -99, escandalos: 0 }
+  return p.studio
+}
+const estNow = () => (game.poder && game.poder.studio) || null
+// ---- canal ----
+export const studioCanalNow = () => {
+  const c = estNow() && estNow().canal
+  return c ? { ...c, insc: Math.round(c.insc) } : null
+}
+export const studioFormatos = () => FORMATOS_EST
+export const studioEquip = () => EQUIP_EST
+export function studioGravarMotivo(id) {
+  const f = FORMATOS_EST.find((x) => x.id === id)
+  if (!f || !game.world) return 'Indisponível.'
+  const e = estNow()
+  const cd = e && e.cd['v:' + id]
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  if (f.cash && game.stats.cash < f.cash) return `Sem caixa (${f.cash}).`
+  if (f.lei && !lawsActive().length) return 'Precisa de uma lei vigente para explicar.'
+  return ''
+}
+export function studioGravar(id) {
+  if (studioGravarMotivo(id)) return null
+  const f = FORMATOS_EST.find((x) => x.id === id)
+  const e = estBase()
+  if (!e.canal) e.canal = { insc: 5, qual: 0, vids: 0 }
+  const c = e.canal
+  const p = clamp(f.p + EQUIP_EST.slice(0, c.qual).reduce((a, q) => a + q.bonus, 0) + (c.insc > 80 ? 0.03 : 0), 0.1, 0.95)
+  const ok = R() < p
+  const fx = { ...(ok ? f.ok : f.bad) }
+  if (f.cash) fx.cash = -f.cash
+  applyFx(fx, true)
+  let extra = ''
+  if (f.lei && ok) {
+    // agrada o segmento que quer o tema da última lei vigente
+    const tema = lawsActive()[0].tema
+    for (const sg of SEGMENTOS) if (sg.quer.includes(tema)) popMexe(sg.id, 4)
+    extra = ' Quem acompanha o tema gostou.'
+  }
+  c.insc += ok ? f.insc : Math.ceil(f.insc / 4)
+  c.vids++
+  e.cd['v:' + id] = game.total + f.cd
+  const txt = (ok ? f.okT : f.badT) + extra
+  timelineAdd(f.icon, `Canal: ${f.nome.toLowerCase()}. ${txt}`, ok ? 'up' : 'down')
+  if (ok && id === 'humor') pushTrend('#VideoDoMomento', 65)
+  cnt(ok ? 'canalok' : 'canalruim')
+  save()
+  return { ok, txt }
+}
+export function studioEquipMotivo() {
+  const c = estNow() && estNow().canal
+  const q = c ? c.qual : 0
+  const nx = EQUIP_EST[q]
+  if (!nx) return 'Estúdio no máximo.'
+  if (!c) return 'Grave o primeiro vídeo antes de investir.'
+  if (game.stats.cash < nx.custo) return `Sem caixa (${nx.custo}).`
+  return ''
+}
+export function studioEquipComprar() {
+  if (studioEquipMotivo()) return null
+  const e = estBase()
+  const nx = EQUIP_EST[e.canal.qual]
+  applyFx({ cash: -nx.custo }, true)
+  e.canal.qual++
+  timelineAdd('🎥', `O canal ganhou ${nx.nome.toLowerCase()}.`, 'up')
+  cnt('canal')
+  save()
+  return { txt: `Equipamento: ${nx.nome}.` }
+}
+// ---- jornal ----
+export const studioJornalNow = () => {
+  const j = estNow() && estNow().jornal
+  return j ? { ...j, cred: Math.round(j.cred), tir: Math.round(j.tir) } : null
+}
+export const studioLinhas = () => LINHAS_EST
+export const studioManchetes = () => MANCHETES_EST
+export function studioFundarMotivo(nome, linha) {
+  if (!game.world) return 'Indisponível.'
+  if (estNow() && estNow().jornal) return 'Você já tem um jornal.'
+  if (game.stats.cash < 4) return 'Sem caixa (4).'
+  if (!LINHAS_EST.some((x) => x.id === linha)) return 'Escolha uma linha editorial.'
+  if (((nome || '').trim()).length < 4) return 'Dê um nome ao jornal (4 letras ou mais).'
+  return ''
+}
+export function studioFundar(nome, linha) {
+  if (studioFundarMotivo(nome, linha)) return null
+  const e = estBase()
+  const l = LINHAS_EST.find((x) => x.id === linha)
+  applyFx({ cash: -4, img: 0.5 }, true)
+  e.jornal = { nome: nome.trim().slice(0, 28), linha, cred: l.cred, tir: l.tir, ed: 0 }
+  timelineAdd('📰', `Nasce o jornal "${e.jornal.nome}" (${l.nome.toLowerCase()}).`, 'up')
+  cnt('jornal')
+  save()
+  return { txt: `Jornal "${e.jornal.nome}" fundado.` }
+}
+export function studioEdicaoMotivo(id) {
+  const m = MANCHETES_EST.find((x) => x.id === id)
+  const e = estNow()
+  if (!m || !game.world) return 'Indisponível.'
+  if (!e || !e.jornal) return 'Funde um jornal primeiro.'
+  const cd = e.cd['j:' + id]
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  if (game.stats.cash < m.cash) return `Sem caixa (${m.cash}).`
+  return ''
+}
+export function studioEdicao(id) {
+  if (studioEdicaoMotivo(id)) return null
+  const m = MANCHETES_EST.find((x) => x.id === id)
+  const e = estBase()
+  const j = e.jornal
+  // denúncia e boato dependem da credibilidade do jornal
+  const p = clamp(m.p + (j.cred - 55) / 200, 0.1, 0.92)
+  const ok = R() < p
+  const mult = clamp(0.6 + j.cred / 150 + j.tir / 100, 0.6, 1.5)
+  const fx = {}
+  for (const k in (ok ? m.ok : m.bad)) fx[k] = (ok ? m.ok : m.bad)[k] * (ok ? mult : 1)
+  fx.cash = -m.cash
+  applyFx(fx, true)
+  j.cred = clamp(j.cred + (ok ? m.cred : Math.min(m.cred, 0) - 2), 0, 100)
+  j.ed++
+  if (m.rival && ok) { game.rivalMod = (game.rivalMod || 0) + m.rival; rvOdio(1) }
+  if (m.heat) game.heat = clamp(game.heat + m.heat)
+  if (m.dirty) { game.dirty++; game.termDirty++ }
+  e.cd['j:' + id] = game.total + 3
+  const txt = ok ? m.okT : m.badT
+  timelineAdd(m.icon, `${j.nome}: ${m.nome.toLowerCase()}. ${txt}`, ok ? 'up' : 'down')
+  if (!ok && m.dirty) { toast('🚨', 'Desinformação desmascarada!'); pushPosts(2, 'down', 'Escandalo') }
+  cnt(ok ? 'jornalok' : 'jornalruim')
+  save()
+  return { ok, txt }
+}
+// ---- coletiva de imprensa ----
+export const studioPosturas = () => POSTURAS_EST
+export function studioColetivaMotivo(id) {
+  const o = POSTURAS_EST.find((x) => x.id === id)
+  if (!o || !game.world) return 'Indisponível.'
+  const e = estNow()
+  const cd = e && e.cd.coletiva
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+export function studioColetiva(id) {
+  if (studioColetivaMotivo(id)) return null
+  const o = POSTURAS_EST.find((x) => x.id === id)
+  const e = estBase()
+  const rel = (game.contacts || []).find((x) => x.id === 'jornalista')
+  const p = clamp(o.p + ((rel ? rel.rel : 40) - 40) / 400 - (game.heat > 12 ? 0.08 : 0), 0.1, 0.92)
+  const ok = R() < p
+  const fx = { ...(ok ? o.ok : o.bad) }
+  if (o.cash) fx.cash = -o.cash
+  applyFx(fx, true)
+  if (rel) rel.rel = clampRel(rel.rel + (ok ? 2 : -2) + (id === 'dura' ? -3 : 0))
+  e.cd.coletiva = game.total + 5
+  const txt = ok ? o.okT : o.badT
+  timelineAdd('🎙️', `Coletiva de imprensa (${o.nome.toLowerCase()}). ${txt}`, ok ? 'up' : 'down')
+  cnt('coletiva')
+  save()
+  return { ok, txt }
+}
+// ---- escândalos ----
+const midiaPeso = () => {
+  const e = estNow()
+  let m = 0
+  if (e && e.canal && e.canal.insc >= 20) m += 0.05
+  if (e && e.jornal && e.jornal.cred >= 55) m += 0.08
+  return m
+}
+export const escandaloPendNow = () => {
+  const e = estNow()
+  if (!e || !e.pend) return null
+  const d = ESC_EST_POR_ID[e.pend.id]
+  if (!d) return null
+  const ctx = { sujo: game.dirty > 0, midia: midiaPeso() }
+  return { icon: d.icon, titulo: `Escândalo: ${d.nome}`, texto: d.texto, left: e.pend.left, ops: opsEscandalo(ctx) }
+}
+export function escandaloMotivo(op) {
+  const pn = escandaloPendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.need === 'midia' && !midiaPeso()) return 'Precisa de canal com público ou jornal crível.'
+  return ''
+}
+function escandaloAplicar(e, pn, opId, auto) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === PADRAO_ESC)
+  const ok = o.id === 'esperar' ? false : R() < o.p
+  const r = ok ? o.ok : o.bad
+  applyFx({ ...r.fx }, true)
+  game.heat = clamp(game.heat + (ok ? o.heat : (o.heatBad == null ? o.heat : o.heatBad)))
+  timelineAdd(pn.icon, `${pn.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}. ${r.t}`.trim(), ok ? 'up' : 'down')
+  e.pend = null
+  e.last = game.total
+  e.escandalos++
+  cnt(ok ? 'escok' : 'escruim')
+  return { o, ok, r }
+}
+export function escandaloEscolher(op) {
+  if (escandaloMotivo(op)) return null
+  const e = estBase()
+  const pn = escandaloPendNow()
+  const { o, ok, r } = escandaloAplicar(e, pn, op, false)
+  save()
+  return { ok, txt: o.id === 'esperar' ? 'Você esperou e o caso seguiu.' : r.t }
+}
+function roundEstudio() {
+  if (!game.world) return
+  const e = estBase()
+  // canal: inscritos crescem com a popularidade; público grande rende
+  if (e.canal) {
+    const c = e.canal
+    c.insc = Math.max(1, c.insc * (1 + (game.stats.pop - 45) / 1500))
+    if (c.insc >= 30) applyFx({ pop: Math.min(0.3, c.insc / 1500), cash: Math.min(0.3, c.insc / 800) })
+  }
+  // jornal: credibilidade puxa a tiragem; anúncios rendem; credibilidade se recompõe devagar
+  if (e.jornal) {
+    const j = e.jornal
+    j.tir = clamp(j.tir + (j.cred - 50) / 80, 3, 40)
+    if (j.cred >= 50) applyFx({ cash: Math.min(0.4, j.tir / 60) })
+    j.cred = clamp(j.cred + (60 - j.cred) * 0.02, 0, 100)
+  }
+  if (e.pend) {
+    e.pend.left--
+    if (e.pend.left < 0) {
+      const pn = escandaloPendNow()
+      if (pn) escandaloAplicar(e, pn, PADRAO_ESC, true)
+      else e.pend = null
+    }
+    return
+  }
+  if (game.total - e.last < 6 || game.total < 4) return
+  // escândalo nasce do jogo sujo, do calor e da pouca blindagem de mídia
+  const chance = clamp(0.03 + (game.heat || 0) / 400 + (game.dirty || 0) * 0.008 + (game.termDirty || 0) * 0.01 - midiaPeso() * 0.15, 0.02, 0.22)
+  if (R() > chance) return
+  const d = ESCANDALOS_EST[Math.floor(R() * ESCANDALOS_EST.length)]
+  e.pend = { id: d.id, left: 2 }
+  e.last = game.total
+  const pn = escandaloPendNow()
+  if (pn) toast(pn.icon, pn.titulo)
+  cnt('esc')
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -8159,6 +8407,7 @@ export function pendenciasNow() {
   const pp = popPendNow(); if (pp) dec('pop', pp.icon, pp.titulo, pp.left)
   const pt = partidoPendNow(); if (pt) dec('partido', pt.icon, pt.titulo, pt.left)
   const cr = crisePendNow(); if (cr) dec('crise', cr.icon, cr.titulo, cr.left)
+  const es = escandaloPendNow(); if (es) dec('escandalo', es.icon, es.titulo, es.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })
