@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { GRUPOS_SG, FORCA_NOME_SG, OPS_SG, OP_POR_ID_SG, REFORMA_SG, EMENDA_SG, CASOS_SG, CASO_SG_POR_ID, PADRAO_SG, FORNECEDORES_SG, FORNECEDOR_POR_ID_SG, MODALIDADES_SG, MAX_CONTRATOS_SG, ATRASO_SG, EMBARGO_SG, PD_SG, PD_POR_ID_SG, PD_PASSOS_SG, PD_CUSTO_SG, ACORDOS_SG, ACORDO_POR_ID_SG, MAX_ACORDOS_SG } from './bloco45b'
 import { CASOS, CASO_POR_ID, PADRAO_CASO, FASES, FASE_RODADAS, PROC_ACOES, PROC_NOME } from './bloco45'
 import { FORMATOS_EST, EQUIP_EST, LINHAS_EST, MANCHETES_EST, POSTURAS_EST, ESC_EST_POR_ID, ESCANDALOS_EST, opsEscandalo, PADRAO_ESC } from './bloco44'
 import { ESCALAS, ESCALAS_CARGO, CRISES_ESC, CRISE_ESC_POR_ID, opsCrise, PADRAO_CRISE, CHANCE_ESCALA, REVOLTA } from './bloco42'
@@ -4320,6 +4321,7 @@ export function roundAvancos() {
   roundCrises()
   roundEstudio()
   roundInst()
+  roundSeg()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -5821,6 +5823,361 @@ function roundInst() {
   const pn = casoPendNow()
   if (pn) toast(pn.icon, pn.titulo)
   cnt('caso')
+}
+
+/* ---------- BLOCO 45B: segurança pública, crime organizado, compras e pesquisa de armamento ---------- */
+const sgEsf = () => officeInfo().sphere
+export const sgForca = () => FORCA_NOME_SG[sgEsf()]
+function sgBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.sg) p.sg = { fac: { faccao: 35, milicia: 25, transnac: 20 }, corr: 25, equip: 30, reacao: 0, pend: null, last: -9, cd: {}, compras: [], pd: {}, pdRound: -1, acordos: [], ops: 0, okOps: 0, casos: 0, entregues: 0 }
+  return p.sg
+}
+const sgNow = () => (game.poder && game.poder.sg) || null
+const sgPd = (id) => { const s = sgNow(); return !!s && (s.pd[id] || 0) >= PD_PASSOS_SG }
+const sgAcordo = (id) => { const s = sgNow(); return !!s && s.acordos.some((a) => a.id === id) }
+const sgEscala = (fx, m) => Object.fromEntries(Object.entries(fx || {}).map(([k, v]) => [k, v * m]))
+export const sgView = () => {
+  const s = sgNow()
+  return { corr: Math.round(s ? s.corr : 25), equip: Math.round(s ? s.equip : 30), reacao: s ? s.reacao : 0, ops: s ? s.ops : 0, okOps: s ? s.okOps : 0, entregues: s ? s.entregues : 0 }
+}
+export const gruposSgNow = () => {
+  const s = sgNow()
+  return GRUPOS_SG.filter((g) => g.esf.includes(sgEsf())).map((g) => ({ ...g, v: Math.round(s ? s.fac[g.id] : { faccao: 35, milicia: 25, transnac: 20 }[g.id]) }))
+}
+export const opsSgNow = () => OPS_SG.filter((o) => !o.esf || o.esf.includes(sgEsf()))
+export function sgOpChance(o, alvo) {
+  if (o.base >= 1) return 1
+  const s = sgBase()
+  let c = o.base + s.equip / 250 + (humorPolicia() - 50) / 300 - s.corr / 300
+  if (sgPd('blindagem')) c += 0.05
+  if (sgPd('cameras')) c += 0.03
+  if (sgPd('ciber') && (alvo === 'transnac' || o.id === 'asfixia')) c += 0.08
+  if (alvo === 'transnac' && (sgAcordo('intel_eua') || sgAcordo('intel_ue'))) c += 0.08
+  if (alvo === 'transnac' && sgEsf() !== 'fed') c -= 0.1
+  if (sgEsf() === 'mun') c -= 0.05
+  return clamp(c, 0.1, 0.9)
+}
+export function opSgMotivo(opId, alvo) {
+  const o = OP_POR_ID_SG[opId]
+  if (!o || !isExec() || !game.world) return 'Indisponível.'
+  if (o.esf && !o.esf.includes(sgEsf())) return 'Indisponível neste cargo.'
+  if (!gruposSgNow().some((g) => g.id === alvo)) return 'Alvo indisponível.'
+  const i = sgNow()
+  if (i && i.cd[opId] && game.total < i.cd[opId]) return `Espere ${i.cd[opId] - game.total} rodada(s).`
+  if (game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+export function opSgAgir(opId, alvo) {
+  if (opSgMotivo(opId, alvo)) return null
+  const i = sgBase()
+  const o = OP_POR_ID_SG[opId]
+  const ok = o.base >= 1 ? true : R() < sgOpChance(o, alvo)
+  applyFx({ cash: -o.cash }, true)
+  const g = GRUPOS_SG.find((x) => x.id === alvo)
+  let txt
+  if (ok) {
+    i.fac[alvo] = clamp(i.fac[alvo] - o.dfac)
+    applyFx(o.ok || {}, true)
+    i.okOps++
+    txt = `${o.nome}: ${g.nome.toLowerCase()} perdem força.`
+    cnt('segopok')
+  } else {
+    applyFx(o.letal && sgPd('naoletal') ? sgEscala(o.bad, 0.5) : o.bad || {}, true)
+    if (o.letal) game.heat = clamp(game.heat + 3)
+    txt = `${o.nome}: a operação não deu o resultado esperado.`
+  }
+  if (o.letal || (o.id === 'asfixia' && ok)) i.reacao = 3
+  i.cd[opId] = game.total + o.cd
+  i.ops++
+  timelineAdd(o.icon, `${o.nome} contra ${g.nome.toLowerCase()}: ${ok ? 'sucesso' : 'falha'}.`, ok ? 'up' : 'down')
+  cnt('segop')
+  save()
+  return { ok, txt }
+}
+export function sgReformaMotivo() {
+  if (!isExec() || !game.world) return 'Indisponível.'
+  const i = sgNow()
+  if (i && i.cd.reforma && game.total < i.cd.reforma) return `Espere ${i.cd.reforma - game.total} rodada(s).`
+  if (game.stats.cash < REFORMA_SG.cash) return `Sem caixa (${REFORMA_SG.cash}).`
+  return ''
+}
+export function sgReforma() {
+  if (sgReformaMotivo()) return null
+  const i = sgBase()
+  applyFx({ cash: -REFORMA_SG.cash }, true)
+  const ok = R() < REFORMA_SG.p
+  if (ok) { i.corr = clamp(i.corr - REFORMA_SG.dcorr); applyFx({ img: 0.5 }, true) } else { i.corr = clamp(i.corr - 4); applyFx(REFORMA_SG.bad, true) }
+  i.cd.reforma = game.total + REFORMA_SG.cd
+  timelineAdd('🧹', `Corregedoria da ${sgForca()}: ${ok ? 'reforma avança' : 'reforma trava'}.`, ok ? 'up' : 'flat')
+  save()
+  return { ok, txt: ok ? 'A corregedoria ganhou força e a corrupção cedeu.' : 'A reforma travou, mas algo andou.' }
+}
+export function sgEmendaMotivo() {
+  if (isExec() || !game.world) return 'Indisponível.'
+  const i = sgNow()
+  if (i && i.cd.emenda && game.total < i.cd.emenda) return `Espere ${i.cd.emenda - game.total} rodada(s).`
+  if (game.stats.cash < EMENDA_SG.cash) return `Sem caixa (${EMENDA_SG.cash}).`
+  return ''
+}
+export function sgEmenda() {
+  if (sgEmendaMotivo()) return null
+  const i = sgBase()
+  applyFx({ cash: -EMENDA_SG.cash, seg: 0.3, pop: 0.3 }, true)
+  i.cd.emenda = game.total + EMENDA_SG.cd
+  timelineAdd('🚓', 'Emenda para viaturas e equipamento de segurança.', 'up')
+  save()
+  return { txt: 'A emenda comprou viaturas para a sua base.' }
+}
+// ---- casos da Agenda ----
+const sgCtx = () => ({ forca: sgForca() })
+export const segPendNow = () => {
+  const i = sgNow()
+  if (!i || !i.pend) return null
+  const d = CASO_SG_POR_ID[i.pend.id]
+  if (!d) return null
+  const oid = officeId()
+  return { icon: d.icon, titulo: `Segurança: ${d.nome}`, texto: d.texto(sgCtx()), left: i.pend.left, ops: d.ops.filter((o) => !o.quem || o.quem.includes(oid)) }
+}
+export function segMotivo(op) {
+  const pn = segPendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function sgCasoAplicar(i, pn, opId, auto) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === PADRAO_SG)
+  const ok = o.p >= 1 ? true : o.id === PADRAO_SG ? false : R() < o.p
+  const r = ok ? o.ok : o.bad
+  const letal = !ok && ['operacao', 'forca'].includes(o.id) && sgPd('naoletal')
+  const fx = letal ? sgEscala(r.fx, 0.5) : { ...(r.fx || {}) }
+  applyFx({ ...fx, cash: (fx.cash || 0) - (o.cash || 0) }, true)
+  for (const [k, v] of Object.entries(r.fac || {})) i.fac[k] = clamp(i.fac[k] + v)
+  const dc = r.corr != null ? r.corr : o.corr || 0
+  if (dc) i.corr = clamp(i.corr + dc)
+  if (r.pol) { ensurePoder(); game.poder.pol = clamp(humorPolicia() + r.pol) }
+  if (o.heat && !ok) game.heat = clamp(game.heat + o.heat)
+  if (r.sujo) { game.dirty++; game.termDirty++ }
+  timelineAdd(pn.icon, `${pn.titulo.replace('Segurança: ', '')}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}. ${r.t}`.trim(), ok ? 'up' : 'down')
+  i.pend = null
+  i.last = game.total
+  i.casos++
+  cnt(ok ? 'segcasook' : 'segcasoruim')
+  return { o, ok, r }
+}
+export function segEscolher(op) {
+  if (segMotivo(op)) return null
+  const i = sgBase()
+  const pn = segPendNow()
+  const { o, ok, r } = sgCasoAplicar(i, pn, op, false)
+  save()
+  return { ok, txt: o.id === PADRAO_SG ? 'Você esperou e o caso seguiu.' : r.t }
+}
+// ---- compras ----
+export const fornecedoresNow = () => FORNECEDORES_SG.filter((f) => !f.esf || f.esf.includes(sgEsf()))
+export const contratosSgNow = () => ((sgNow() && sgNow().compras) || []).map((c) => ({ ...c, f: FORNECEDOR_POR_ID_SG[c.id] }))
+export const modalidadesSg = () => MODALIDADES_SG
+export function precoSg(f, mod) {
+  let p = f.preco
+  if (f.pais === 'br') {
+    if (sgPd('municao')) p -= 1
+    if (f.id === 'br_blind' && techFeita('def1')) p -= 1
+  }
+  if (sgAcordo('conj_arg')) p -= 1
+  return Math.max(1, Math.round(Math.max(1, p) * mod.mult * 10) / 10)
+}
+export function compraSgMotivo(fid, modId) {
+  const f = FORNECEDOR_POR_ID_SG[fid]
+  const mod = MODALIDADES_SG.find((m) => m.id === modId)
+  if (!f || !mod || !isExec() || !game.world) return 'Indisponível.'
+  if (f.esf && !f.esf.includes(sgEsf())) return 'Indisponível neste cargo.'
+  const i = sgNow()
+  if (i && i.compras.length >= MAX_CONTRATOS_SG) return `No máximo ${MAX_CONTRATOS_SG} contratos ao mesmo tempo.`
+  if (i && i.compras.some((c) => c.id === fid)) return 'Já há contrato com este fornecedor.'
+  if (mod.so === 'ext' && f.pais === 'br') return 'Só vale para fornecedor estrangeiro.'
+  if (f.pais !== 'br') {
+    const need = f.nec + (mod.nec || 0)
+    if ((game.world.rel[f.pais] ?? 50) < need) return `Relação precisa de ${need}.`
+  }
+  if (game.stats.cash < precoSg(f, mod)) return `Sem caixa (${precoSg(f, mod)}).`
+  return ''
+}
+export function compraSg(fid, modId) {
+  if (compraSgMotivo(fid, modId)) return null
+  const i = sgBase()
+  const f = FORNECEDOR_POR_ID_SG[fid]
+  const mod = MODALIDADES_SG.find((m) => m.id === modId)
+  const preco = precoSg(f, mod)
+  applyFx({ cash: -preco }, true)
+  i.compras.push({ id: fid, left: Math.max(1, f.ent + mod.ent), mod: modId, preco, atraso: false })
+  if (mod.sujo && R() < mod.sujo) {
+    game.dirty++
+    game.termDirty++
+    game.heat = clamp(game.heat + 6)
+    i.corr = clamp(i.corr + 3)
+    timelineAdd('🧾', `Compra de ${f.item.toLowerCase()} por dispensa levanta suspeita de superfaturamento.`, 'down')
+    toast('🧾', 'A dispensa de licitação levantou suspeitas.')
+  }
+  if (f.pais !== 'br') shiftRel(f.pais, mod.rel || 1)
+  else applyFx({ eco: 0.3 }, true)
+  if (mod.offset) { sgPdAvanca(i); applyFx({ eco: 0.5 }, true) }
+  timelineAdd(f.icon, `Contrato fechado: ${f.item.toLowerCase()} (${f.nome}), por ${mod.nome.toLowerCase()}.`, 'flat')
+  cnt('segcompra')
+  save()
+  return { txt: `Contrato fechado com ${f.nome}. Entrega em ${Math.max(1, f.ent + mod.ent)} rodada(s).` }
+}
+function sgEntregas(i) {
+  const resto = []
+  for (const c of i.compras) {
+    c.left--
+    if (c.left > 0) { resto.push(c); continue }
+    const f = FORNECEDOR_POR_ID_SG[c.id]
+    if (!f) continue
+    if (f.pais !== 'br' && (game.world.rel[f.pais] ?? 50) < EMBARGO_SG.relMin && R() < EMBARGO_SG.chance) {
+      applyFx({ cash: c.preco * EMBARGO_SG.devolve }, true)
+      shiftRel(f.pais, -1)
+      timelineAdd('🚫', `${f.nome} suspendeu a entrega por embargo e devolveu parte do dinheiro.`, 'down')
+      toast('🚫', `Embargo: ${f.item} não chegou.`)
+      continue
+    }
+    if (!c.atraso && R() < ATRASO_SG) {
+      c.atraso = true
+      c.left = 2
+      toast('⏳', `${f.item}: a entrega atrasou.`)
+      resto.push(c)
+      continue
+    }
+    i.equip = clamp(i.equip + f.equip)
+    applyFx({ seg: f.equip / 20 }, true)
+    if (f.corr) i.corr = clamp(i.corr + f.corr)
+    ensurePoder()
+    game.poder.pol = clamp(humorPolicia() + 4)
+    i.entregues++
+    timelineAdd(f.icon, `${f.item} entregues por ${f.nome}.`, 'up')
+    toast(f.icon, `${f.item} entregues.`)
+    cnt('segentrega')
+  }
+  i.compras = resto
+}
+// ---- pesquisa de armamento ----
+export const pdSgNow = () => PD_SG.map((p) => ({ ...p, n: (sgNow() && sgNow().pd[p.id]) || 0, passos: PD_PASSOS_SG, feito: sgPd(p.id), custo: PD_CUSTO_SG }))
+function sgPdAvanca(i, id) {
+  const alvo = id || (PD_SG.find((p) => (i.pd[p.id] || 0) > 0 && (i.pd[p.id] || 0) < PD_PASSOS_SG) || PD_SG.find((p) => (i.pd[p.id] || 0) < PD_PASSOS_SG) || {}).id
+  if (!alvo) return
+  i.pd[alvo] = (i.pd[alvo] || 0) + 1
+  if (i.pd[alvo] >= PD_PASSOS_SG) {
+    const p = PD_POR_ID_SG[alvo]
+    applyFx({ eco: 0.3 }, true)
+    timelineAdd(p.icon, `Pesquisa concluída: ${p.nome.toLowerCase()}.`, 'up')
+    toast(p.icon, `Pesquisa concluída: ${p.nome}.`)
+    cnt('segpd')
+  }
+}
+export function pdSgMotivo(id) {
+  const p = PD_POR_ID_SG[id]
+  if (!p || !isPresident() || !game.world) return 'Só o presidente investe em pesquisa de armamento.'
+  if (sgPd(id)) return 'Pesquisa concluída.'
+  if (p.need && !techFeita(p.need)) return 'Exige a indústria nacional de defesa (aba de pesquisa).'
+  const i = sgNow()
+  if (i && i.pdRound === game.total) return 'Uma pesquisa por rodada.'
+  if (game.stats.cash < PD_CUSTO_SG) return `Sem caixa (${PD_CUSTO_SG}).`
+  return ''
+}
+export function pdSgInvestir(id) {
+  if (pdSgMotivo(id)) return null
+  const i = sgBase()
+  applyFx({ cash: -PD_CUSTO_SG }, true)
+  i.pdRound = game.total
+  sgPdAvanca(i, id)
+  save()
+  const n = i.pd[id]
+  return { txt: n >= PD_PASSOS_SG ? `${PD_POR_ID_SG[id].nome}: pesquisa concluída.` : `${PD_POR_ID_SG[id].nome}: ${n}/${PD_PASSOS_SG}.` }
+}
+// ---- acordos internacionais ----
+export const acordosSgNow = () => ACORDOS_SG.map((a) => ({ ...a, ativo: sgAcordo(a.id), relNow: Math.round((game.world && game.world.rel[a.partner]) ?? 50) }))
+export function acordoSgMotivo(id) {
+  const a = ACORDO_POR_ID_SG[id]
+  if (!a || !isPresident() || !game.world) return 'Só o presidente firma acordos internacionais.'
+  if (sgAcordo(id)) return 'Já em vigor.'
+  const i = sgNow()
+  if (i && i.acordos.length >= MAX_ACORDOS_SG) return `No máximo ${MAX_ACORDOS_SG} acordos ao mesmo tempo.`
+  if ((game.world.rel[a.partner] ?? 50) < a.nec) return `Relação precisa de ${a.nec}.`
+  if (a.need && !techFeita(a.need)) return 'Exige a indústria nacional de defesa (aba de pesquisa).'
+  if (game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function acordoSgFirmar(id) {
+  if (acordoSgMotivo(id)) return null
+  const i = sgBase()
+  const a = ACORDO_POR_ID_SG[id]
+  applyFx({ ...a.fx, cash: -a.cash }, true)
+  shiftRel(a.partner, a.rel)
+  for (const [k, v] of Object.entries(a.outro || {})) shiftRel(k, v)
+  i.acordos.push({ id, partner: a.partner, desde: game.total })
+  timelineAdd(a.icon, `${game.name} firma acordo: ${a.nome.toLowerCase()}.`, 'up')
+  cnt('segacordo')
+  save()
+  return { txt: `Acordo firmado: ${a.nome}.` }
+}
+export function acordoSgRomper(id) {
+  const i = sgNow()
+  const a = ACORDO_POR_ID_SG[id]
+  if (!i || !a || !sgAcordo(id)) return null
+  i.acordos = i.acordos.filter((x) => x.id !== id)
+  applyFx({ img: -1 }, true)
+  shiftRel(a.partner, -3)
+  timelineAdd('✂️', `${game.name} rompe o acordo: ${a.nome.toLowerCase()}.`, 'down')
+  save()
+  return { txt: 'Acordo rompido.' }
+}
+// ---- rodada ----
+function roundSeg() {
+  if (!game.world) return
+  const i = sgBase()
+  const exec = isExec()
+  const esf = sgEsf()
+  i.equip = clamp(i.equip - (sgPd('blindagem') ? 0.5 : 0.8) + (sgAcordo('tec_japao') ? 0.3 : 0) + (sgAcordo('rus_arm') ? 0.4 : 0))
+  const ct = clamp(25 + (50 - humorPolicia()) * 0.4 + i.fac.milicia * 0.2 - (sgPd('cameras') ? 10 : 0) - (sgAcordo('intel_ue') ? 5 : 0), 0, 90)
+  i.corr = clamp(i.corr + (ct - i.corr) * 0.05)
+  const base = clamp(100 - game.stats.seg * 1.1 - i.equip * 0.15 + i.corr * 0.2, 5, 95)
+  const alvo = {
+    faccao: base,
+    milicia: clamp(base * 0.8 + i.corr * 0.3 - 10, 5, 90),
+    transnac: clamp(i.fac.faccao * 0.7 + i.corr * 0.2 - (sgAcordo('intel_eua') ? 15 : 0) - (sgAcordo('intel_ue') ? 12 : 0) - (sgAcordo('controle_onu') ? 15 : 0) - (sgAcordo('conj_arg') ? 5 : 0) - (sgPd('ciber') ? 10 : 0), 5, 90),
+  }
+  for (const k of Object.keys(alvo)) i.fac[k] = clamp(i.fac[k] + (alvo[k] - i.fac[k]) * 0.04 + (R() - 0.5) * 0.6)
+  if (i.reacao > 0) i.reacao--
+  if (!exec) return
+  const f = Math.max(i.fac.faccao, i.fac.milicia)
+  if (f > 60) applyFx({ seg: -(f - 60) * 0.015, pop: -(f - 60) * 0.01 }, true)
+  if (i.equip > 55) applyFx({ seg: (i.equip - 55) * 0.008 }, true)
+  if (game.total % 3 === 0) {
+    if (sgAcordo('export_ori')) applyFx({ cash: 1, img: -0.3 }, true)
+    if (sgAcordo('tec_china') || sgAcordo('tec_japao')) sgPdAvanca(i)
+  }
+  sgEntregas(i)
+  if (i.pend) {
+    i.pend.left--
+    if (i.pend.left < 0) {
+      const pn = segPendNow()
+      if (pn) sgCasoAplicar(i, pn, PADRAO_SG, true)
+      else i.pend = null
+    }
+    return
+  }
+  if (game.total < 5 || game.total - i.last < 6) return
+  for (const c of CASOS_SG) {
+    if (!c.esf.includes(esf) || !c.when(i) || R() >= c.prob) continue
+    i.pend = { id: c.id, left: 2 }
+    i.last = game.total
+    const pn = segPendNow()
+    if (pn) toast(pn.icon, pn.titulo)
+    cnt('segcaso')
+    break
+  }
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -8606,6 +8963,7 @@ export function pendenciasNow() {
   const cr = crisePendNow(); if (cr) dec('crise', cr.icon, cr.titulo, cr.left)
   const es = escandaloPendNow(); if (es) dec('escandalo', es.icon, es.titulo, es.left)
   const cso = casoPendNow(); if (cso) dec('caso', cso.icon, cso.titulo, cso.left)
+  const sgp = segPendNow(); if (sgp) dec('segpend', sgp.icon, sgp.titulo, sgp.left)
   const pcs = procNow(); if (pcs) dec('processo', '🔨', `${pcs.nome}: ${pcs.fase.nome}`, pcs.faltam)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()

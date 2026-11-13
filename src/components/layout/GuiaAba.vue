@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher, arcoPendNow, arcoMotivo, arcoEscolher, pressPendNow, pressMotivo, pressEscolher, cenPendNow, cenMotivo, cenEscolher, cenarioNow, perfilEstado, obraPendNow, obraMotivoOp, obraEscolher, euPendNow, euPendMotivo, euEscolher, ecoPendNow, ecoMotivo, ecoEscolher, popPendNow, popMotivo, popEscolher, partidoPendNow, partidoPendMotivo, partidoEscolher, crisePendNow, crisePMotivo, criseEscolher, escandaloPendNow, escandaloMotivo, escandaloEscolher, casoPendNow, casoMotivo, casoEscolher, pendenciasNow } from '../../game/engine'
+import { game, acaoPendente, inquerito, cstEstado, convitesNow, reuniaoDef, reuniaoMotivo, reuniaoAbrir, industriasNow, vidaNow, eventoDef, figurasNow, vidaMotivo, vidaEscolher, cadeiaNow, cadeiaDef, famPend, famEscolhaMotivo, famEscolher, rvPendNow, rvMotivo, rvEscolher, minPendNow, minMotivo, minEscolher, missaoView, missaoMotivo, missaoEscolher, misPendNow, misPendMotivo, misPendEscolher, histPendNow, histMotivo, histEscolher, coalPendNow, coalPendMotivo, coalPendEscolher, legadoPendNow, legadoMotivo, legadoEscolher, arcoPendNow, arcoMotivo, arcoEscolher, pressPendNow, pressMotivo, pressEscolher, cenPendNow, cenMotivo, cenEscolher, cenarioNow, perfilEstado, obraPendNow, obraMotivoOp, obraEscolher, euPendNow, euPendMotivo, euEscolher, ecoPendNow, ecoMotivo, ecoEscolher, popPendNow, popMotivo, popEscolher, partidoPendNow, partidoPendMotivo, partidoEscolher, crisePendNow, crisePMotivo, criseEscolher, escandaloPendNow, escandaloMotivo, escandaloEscolher, casoPendNow, casoMotivo, casoEscolher, segPendNow, segMotivo, segEscolher, pendenciasNow } from '../../game/engine'
 import { GUIAS, FASES } from '../../game/avancos'
 
 const props = defineProps({ tab: { type: String, default: 'agenda' } })
@@ -36,6 +36,7 @@ const partP = computed(() => partidoPendNow())
 const criseP = computed(() => crisePendNow())
 const escP = computed(() => escandaloPendNow())
 const casoP = computed(() => casoPendNow())
+const segP = computed(() => segPendNow())
 const cenario = computed(() => (game.world ? cenarioNow() : null))
 const perfil = computed(() => (game.world ? perfilEstado() : null))
 // fora da Agenda, as decisões ficam numa linha só (os cartões completos moram na Agenda)
@@ -197,6 +198,13 @@ const cadeia = computed(() => {
       <br /><small>{{ casoP.texto }}</small>
       <span class="ops">
         <button v-for="o in casoP.ops" :key="o.id" type="button" class="mini" :disabled="!!casoMotivo(o.id)" :title="o.desc + (o.p && o.p < 1 ? ' Chance ' + Math.round(o.p * 100) + '%.' : '')" @click="casoEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
+      </span>
+    </div>
+    <div v-if="segP" class="aviso conv">
+      {{ segP.icon }} <b>{{ segP.titulo }}</b> <small>({{ segP.left + 1 }} rodada(s) para decidir)</small>
+      <br /><small>{{ segP.texto }}</small>
+      <span class="ops">
+        <button v-for="o in segP.ops" :key="o.id" type="button" class="mini" :disabled="!!segMotivo(o.id)" :title="o.desc + (o.p && o.p < 1 ? ' Chance ' + Math.round(o.p * 100) + '%.' : '')" @click="segEscolher(o.id)">{{ o.icon }} {{ o.name }}</button>
       </span>
     </div>
     <div v-if="press" class="aviso conv">

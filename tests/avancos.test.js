@@ -2609,3 +2609,170 @@ describe('BLOCO 45 — justiça e instituições', () => {
     expect(v.inst.proc.votos).toBe(33)
   })
 })
+
+describe('BLOCO 45B — segurança pública, compras, pesquisa e acordos', () => {
+  const inicia = (office = 'governador') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 80
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é coerente', async () => {
+    const B = await import('../src/game/bloco45b.js')
+    for (const c of B.CASOS_SG) {
+      expect(c.ops.find((o) => o.id === B.PADRAO_SG), c.id).toBeTruthy()
+      expect(c.esf.length).toBeGreaterThan(0)
+    }
+    for (const f of B.FORNECEDORES_SG) expect(f.preco > 0 && f.equip > 0 && f.ent > 0, f.id).toBe(true)
+    expect(B.PD_SG.length).toBe(5)
+    expect(B.ACORDOS_SG.length).toBeGreaterThanOrEqual(8)
+  })
+  it('os grupos mudam conforme o cargo', () => {
+    inicia('prefeito')
+    rodada()
+    expect(E.gruposSgNow().map((g) => g.id)).toEqual(['faccao', 'milicia'])
+    inicia('presidente')
+    rodada()
+    expect(E.gruposSgNow().map((g) => g.id)).toEqual(['faccao', 'transnac'])
+    expect(E.sgForca()).toMatch(/Federal/)
+  })
+  it('operação paga o custo, tem espera e pode derrubar o grupo', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.sg
+    i.fac.faccao = 70
+    let ok = 0
+    for (let k = 0; k < 40; k++) {
+      i.cd = {}
+      i.fac.faccao = 70
+      const r = E.opSgAgir('inteligencia', 'faccao')
+      expect(r).toBeTruthy()
+      if (r.ok) { ok++; expect(i.fac.faccao).toBeLessThan(70) }
+      E.game.stats.cash = 80
+    }
+    expect(ok).toBeGreaterThan(5)
+    expect(E.opSgMotivo('inteligencia', 'faccao')).toMatch(/Espere/)
+  })
+  it('asfixia financeira não existe para prefeito', () => {
+    inicia('prefeito')
+    rodada()
+    expect(E.opSgMotivo('asfixia', 'faccao')).toMatch(/Indisponível/)
+  })
+  it('caso de guerra aparece, é decidido e a opção padrão resolve sozinha', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.sg
+    i.pend = { id: 'guerra', left: 2 }
+    expect(E.segPendNow().ops.some((o) => o.id === 'forca')).toBe(true)
+    expect(E.segPendNow().ops.some((o) => o.id === 'pedir')).toBe(false)
+    expect(E.segEscolher('inteligencia')).toBeTruthy()
+    expect(E.segPendNow()).toBeNull()
+    i.pend = { id: 'chacina', left: 0 }
+    i.last = E.game.total
+    rodada()
+    rodada()
+    expect(E.segPendNow()).toBeNull()
+    expect(i.casos).toBe(2)
+  })
+  it('prefeito vê a opção de pedir ajuda à União', () => {
+    inicia('prefeito')
+    rodada()
+    E.game.poder.sg.pend = { id: 'guerra', left: 2 }
+    const ids = E.segPendNow().ops.map((o) => o.id)
+    expect(ids).toContain('pedir')
+    expect(ids).not.toContain('forca')
+  })
+  it('compra gera contrato, entrega equipamento e respeita limites', () => {
+    inicia('presidente')
+    rodada()
+    const i = E.game.poder.sg
+    i.equip = 20
+    expect(E.compraSg('br_viat', 'licitacao')).toBeTruthy()
+    expect(E.compraSgMotivo('br_viat', 'licitacao')).toMatch(/Já há contrato/)
+    expect(E.compraSgMotivo('br_viat', 'g2g')).toBeTruthy()
+    expect(E.compraSg('br_nl', 'licitacao')).toBeTruthy()
+    expect(E.compraSgMotivo('arg_equ', 'licitacao')).toMatch(/No máximo/)
+    for (let k = 0; k < 8; k++) { E.game.stats.pop = 55; rodada() }
+    expect(i.entregues).toBeGreaterThanOrEqual(1)
+    expect(i.compras.length).toBe(0)
+  })
+  it('fornecedor estrangeiro exige relação e acordo G2G só vale fora do país', () => {
+    inicia('presidente')
+    rodada()
+    E.game.world.rel.eua = 10
+    expect(E.compraSgMotivo('eua_viat', 'licitacao')).toMatch(/Relação/)
+    E.game.world.rel.eua = 90
+    expect(E.compraSgMotivo('eua_viat', 'g2g')).toBe('')
+    expect(E.compraSgMotivo('br_viat', 'offset')).toMatch(/estrangeiro/)
+    const f = E.fornecedoresNow().find((x) => x.id === 'eua_viat')
+    const mods = E.modalidadesSg()
+    expect(E.precoSg(f, mods.find((m) => m.id === 'g2g'))).toBeLessThan(E.precoSg(f, mods.find((m) => m.id === 'licitacao')))
+  })
+  it('governador não compra helicóptero russo (só a União)', () => {
+    inicia('governador')
+    rodada()
+    expect(E.fornecedoresNow().some((f) => f.id === 'rus_heli')).toBe(false)
+  })
+  it('pesquisa de armamento avança até concluir e só o presidente investe', () => {
+    inicia('governador')
+    rodada()
+    expect(E.pdSgMotivo('cameras')).toMatch(/presidente/)
+    inicia('presidente')
+    rodada()
+    for (let k = 0; k < 4; k++) {
+      expect(E.pdSgInvestir('cameras')).toBeTruthy()
+      expect(E.pdSgMotivo('cameras')).toBeTruthy()
+      E.game.total++
+    }
+    expect(E.pdSgNow().find((p) => p.id === 'cameras').feito).toBe(true)
+    expect(E.pdSgMotivo('cameras')).toMatch(/concluída/)
+  })
+  it('acordos exigem relação, têm limite e afetam terceiros', () => {
+    inicia('presidente')
+    rodada()
+    E.game.world.rel.eua = 90
+    E.game.world.rel.china = 90
+    E.game.world.rel.onu = 90
+    E.game.world.rel.ue = 90
+    expect(E.acordoSgFirmar('intel_eua')).toBeTruthy()
+    expect(E.acordoSgMotivo('intel_eua')).toMatch(/vigor/)
+    const eua = E.game.world.rel.eua
+    expect(E.acordoSgFirmar('tec_china')).toBeTruthy()
+    expect(E.game.world.rel.eua).toBeLessThan(eua)
+    expect(E.acordoSgFirmar('controle_onu')).toBeTruthy()
+    expect(E.acordoSgMotivo('intel_ue')).toMatch(/No máximo/)
+    expect(E.acordoSgRomper('tec_china')).toBeTruthy()
+    expect(E.acordoSgMotivo('intel_ue')).toBe('')
+  })
+  it('os grupos se estabilizam com segurança alta e crescem com segurança baixa', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.sg
+    for (let k = 0; k < 80; k++) { E.game.stats.seg = 90; E.game.stats.pop = 55; E.game.stats.img = 55; rodada(); i.pend = null; E.game.over = null }
+    const baixo = i.fac.faccao
+    for (let k = 0; k < 80; k++) { E.game.stats.seg = 5; E.game.stats.pop = 55; E.game.stats.img = 55; rodada(); i.pend = null; E.game.over = null }
+    expect(i.fac.faccao).toBeGreaterThan(baixo + 20)
+  })
+  it('legislador só destina emenda e o estado sobrevive ao salvamento', () => {
+    inicia('dep_federal')
+    rodada()
+    expect(E.sgEmenda()).toBeTruthy()
+    expect(E.sgEmendaMotivo()).toMatch(/Espere/)
+    expect(E.opSgMotivo('inteligencia', 'faccao')).toMatch(/Indisponível/)
+    inicia('presidente')
+    rodada()
+    E.compraSg('br_viat', 'licitacao')
+    E.acordoSgFirmar('intel_ue')
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.sg.compras.length).toBe(1)
+    expect(v.sg.acordos[0].id).toBe('intel_ue')
+  })
+})
