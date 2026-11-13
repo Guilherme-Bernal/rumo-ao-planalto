@@ -2132,3 +2132,118 @@ describe('BLOCO 40 — população e pautas', () => {
     expect(Object.keys(v.pop.apoio).length).toBeGreaterThan(5)
   })
 })
+
+describe('BLOCO 41 — partido próprio: doutrina, filiados e cisões', () => {
+  const inicia = (own = true) => {
+    E.startGame({ name: 'Teste', regionId: 'SP', ownParty: own ? { name: 'Partido Teste', sigla: 'PTX', color: '#c0392b', slogan: 'Teste', focus: 'votos' } : null })
+    E.game.office = 'prefeito'
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.stats.pop = 60
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('doutrinas usam temas e segmentos que existem', async () => {
+    const B = await import('../src/game/bloco41.js')
+    const B40 = await import('../src/game/bloco40.js')
+    const temas = E.worldTemas().map((t) => t.id)
+    for (const d of B.DOUTRINAS) {
+      for (const t of d.temas) expect(temas, d.id).toContain(t)
+      for (const g of [...d.gosta, ...d.estranha]) expect(B40.SEG_POR_ID[g], d.id + ':' + g).toBeTruthy()
+    }
+    expect(B.PERFIS_PART.length).toBe(5)
+  })
+  it('sem partido próprio nada acontece e nenhuma ação vale', () => {
+    inicia(false)
+    for (let i = 0; i < 20; i++) rodada()
+    expect(E.partidoProprio()).toBe(false)
+    expect(E.game.poder.partido).toBeUndefined()
+    expect(E.partidoMotivo('convencao')).toMatch(/fundou/)
+    expect(E.escolherDoutrina('liberal')).toBeNull()
+  })
+  it('a primeira doutrina é de graça e trocar custa', () => {
+    inicia()
+    rodada()
+    const c = E.game.stats.cash
+    expect(E.escolherDoutrina('trabalhista')).toBeTruthy()
+    expect(E.game.stats.cash).toBe(c)
+    expect(E.doutrinaAtual().id).toBe('trabalhista')
+    expect(E.escolherDoutrina('trabalhista')).toBeNull()
+    expect(E.escolherDoutrina('liberal')).toBeTruthy()
+    expect(E.game.stats.cash).toBeLessThan(c)
+  })
+  it('a doutrina move a simpatia dos segmentos da população', () => {
+    inicia()
+    E.escolherDoutrina('trabalhista')
+    for (let i = 0; i < 30; i++) rodada()
+    const s = Object.fromEntries(E.segmentosNow().map((x) => [x.id, x.apoio]))
+    expect(s.trabalhadores).toBeGreaterThan(s.classe_media)
+  })
+  it('convidar escolhe o perfil, tem espera e limite; expulsar tira', () => {
+    inicia()
+    rodada()
+    expect(E.partidoConvidar('oportunista')).toBeNull()
+    expect(E.partidoConvidar('tecnico')).toBeTruthy()
+    expect(E.partidoMotivo('convidar', 'tecnico')).toMatch(/Espere/)
+    expect(E.filiadosNow().length).toBe(1)
+    const id = E.filiadosNow()[0].id
+    expect(E.partidoExpulsar(id)).toBeTruthy()
+    expect(E.filiadosNow().length).toBe(0)
+    expect(E.partidoNow().expulsos).toBe(1)
+  })
+  it('convenção exige 2 filiados e sobe a lealdade', () => {
+    inicia()
+    rodada()
+    expect(E.partidoMotivo('convencao')).toMatch(/2 filiados/)
+    E.partidoConvidar('idealista')
+    E.game.poder.partido.cd.convidar = 0
+    E.partidoConvidar('popular')
+    const l0 = E.filiadosNow()[0].leal
+    expect(E.partidoConvencao()).toBeTruthy()
+    expect(E.filiadosNow()[0].leal).toBeGreaterThan(l0)
+  })
+  it('pedido de filiação aparece e o aceite cria o filiado; o padrão recusa', () => {
+    inicia()
+    rodada()
+    const p = E.game.poder.partido
+    p.pend = { tipo: 'filiacao', nome: 'Fulano Teste', perfil: 'pragmatico', v: 0, left: 2 }
+    expect(E.pendenciasNow().some((x) => x.id === 'partido')).toBe(true)
+    expect(E.partidoEscolher('aceitar')).toBeTruthy()
+    expect(E.filiadosNow().some((f) => f.nome === 'Fulano Teste')).toBe(true)
+    p.pend = { tipo: 'filiacao', nome: 'Ciclano Teste', perfil: 'tecnico', v: 1, left: 0 }
+    p.last = -9
+    rodada()
+    expect(E.partidoPendNow()).toBeNull()
+    expect(E.filiadosNow().some((f) => f.nome === 'Ciclano Teste')).toBe(false)
+  })
+  it('filiado desleal vira racha; deixar sair é o padrão e custa seguidores', () => {
+    inicia()
+    rodada()
+    E.partidoConvidar('oportunista') // bloqueado; entra por pedido
+    const p = E.game.poder.partido
+    p.pend = { tipo: 'filiacao', nome: 'Oportuno Teste', perfil: 'oportunista', v: 0, left: 2 }
+    E.partidoEscolher('aceitar')
+    p.filiados[0].leal = 10
+    p.last = -9
+    p.seg = 50
+    rodada()
+    expect(E.partidoPendNow()?.tipo).toBe('cisao')
+    for (let i = 0; i < 4; i++) rodada()
+    expect(E.partidoPendNow()).toBeNull()
+    expect(E.partidoNow().cisoes).toBe(1)
+    expect(E.partidoNow().seg).toBeLessThan(45)
+  })
+  it('o estado do partido sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    E.escolherDoutrina('verde')
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.partido.dout).toBe('verde')
+  })
+})

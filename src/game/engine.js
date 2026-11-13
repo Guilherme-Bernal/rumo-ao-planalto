@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { DOUTRINAS, DOUT_POR_ID, PERFIS_PART, PERFIL_PART_POR_ID, MAX_FILIADOS, CUSTO_DOUTRINA, PEDIDOS_FILIACAO, OPS_FILIACAO, OPS_CISAO, PADRAO_CISAO, PADRAO_FILIACAO } from './bloco41'
 import { SEGMENTOS, SEG_POR_ID, PROTESTOS, opsProtesto, PADRAO_PROTESTO, PAUTA_ACOES } from './bloco40'
 import { ECO_IDS, TAG_SETOR, PEDIDOS, opsPara, PEND_INFO, DOACOES, GREVES, ESCANDALO_DOACAO } from './bloco39'
 import { ESTILOS, estiloFx, EU_ACOES, EU_POR_ID, VISUAL_CUSTO, VISUAL_CD, EU_PEND, FALAS_EU } from './bloco38'
@@ -2219,6 +2220,7 @@ export function proposeLaw(temaId, ousId) {
     if (cx.resiste) applyFx({ eco: -CTX.resisteEco * o.id }, true)
     cnt('leictx')
     popLei(t.id, o.id)
+    doutrinaLei(t.id)
     if (t.id === 'educacao') eduAdd(o.id * 1.5)
     if (t.id === 'ciencia') {
       eduAdd(o.id)
@@ -4308,6 +4310,7 @@ export function roundAvancos() {
   roundEu()
   roundEco()
   roundPop()
+  roundPartido()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -4972,7 +4975,7 @@ function roundPop() {
     const a = apoioDe(x.id)
     // sem lei na pauta do segmento, o apoio puxa para baixo; com lei vigente do tema, puxa para cima
     const vig = lawsActive().map((l) => l.tema)
-    const alvo = (vig.includes(p.pauta[x.id]) ? 56 : x.quer.some((t) => vig.includes(t)) ? 48 : 40) + (hash01(x.id + game.name) - 0.5) * 8
+    const alvo = (vig.includes(p.pauta[x.id]) ? 56 : x.quer.some((t) => vig.includes(t)) ? 48 : 40) + (hash01(x.id + game.name) - 0.5) * 8 + doutrinaBonus(x.id)
     p.apoio[x.id] = clamp(a + (alvo - a) * 0.05, 0, 100)
     // quem está contrariado vai se mobilizando; quem está satisfeito esfria
     p.mob[x.id] = clamp(p.mob[x.id] + (50 - a) / 6, 0, 100)
@@ -5010,6 +5013,212 @@ function roundPop() {
   p.last = game.total
   const pn = popPendNow()
   if (pn) toast(pn.icon, pn.titulo)
+}
+
+/* ---------- BLOCO 41: ideias e partidos (partido próprio: doutrina, filiados, seguidores, cisões) ---------- */
+export const partidoProprio = () => game.party === 'own' && !!game.myParty
+function partBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.partido) p.partido = { dout: null, filiados: [], seg: 10, pend: null, last: -9, cd: {}, expulsos: 0, cisoes: 0, n: 0, conv: -99 }
+  return p.partido
+}
+const partNow = () => (game.poder && game.poder.partido) || null
+export const doutrinaAtual = () => { const p = partNow(); return p && p.dout ? DOUT_POR_ID[p.dout] : null }
+function doutrinaBonus(segId) {
+  if (!partidoProprio()) return 0
+  const d = doutrinaAtual()
+  if (!d) return 0
+  return d.gosta.includes(segId) ? 4 : d.estranha.includes(segId) ? -4 : 0
+}
+function doutrinaLei(temaId) {
+  if (!partidoProprio()) return
+  const d = doutrinaAtual()
+  if (!d) return
+  const p = partBase()
+  if (d.temas.includes(temaId)) {
+    applyFx({ cong: 0.5 }, true)
+    p.seg = clamp(p.seg + 2, 0, 100)
+    for (const f of p.filiados) f.leal = clamp(f.leal + 2, 0, 100)
+    cnt('partcoer')
+  } else if (!d.temas.length) return
+}
+export const partidoNow = () => {
+  const p = partNow()
+  return p ? { dout: p.dout, seg: Math.round(p.seg), n: p.filiados.length, cisoes: p.cisoes, expulsos: p.expulsos } : { dout: null, seg: 10, n: 0, cisoes: 0, expulsos: 0 }
+}
+export const doutrinasNow = () => DOUTRINAS
+export const filiadosNow = () => ((partNow() && partNow().filiados) || []).map((f) => ({ ...f, perfilNome: PERFIL_PART_POR_ID[f.perfil].nome, icon: PERFIL_PART_POR_ID[f.perfil].icon }))
+export function partidoMotivo(acao, arg) {
+  if (!game.world || !partidoProprio()) return 'Só vale para o partido que você fundou.'
+  const p = partNow()
+  const cd = p && p.cd[acao]
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  if (acao === 'doutrina') {
+    if (!DOUT_POR_ID[arg]) return 'Indisponível.'
+    if (p && p.dout === arg) return 'Essa já é a doutrina do partido.'
+    if (p && p.dout && game.stats.cash < CUSTO_DOUTRINA) return `Sem caixa (${CUSTO_DOUTRINA}).`
+  }
+  if (acao === 'convidar') {
+    if (!PERFIL_PART_POR_ID[arg] || arg === 'oportunista') return 'Indisponível.'
+    if (p && p.filiados.length >= MAX_FILIADOS) return 'O partido já tem filiados demais.'
+    if (game.stats.cash < 1) return 'Sem caixa (1).'
+  }
+  if (acao === 'convencao') {
+    if (game.stats.cash < 2) return 'Sem caixa (2).'
+    if (!p || p.filiados.length < 2) return 'Precisa de pelo menos 2 filiados.'
+  }
+  return ''
+}
+export function escolherDoutrina(id) {
+  if (partidoMotivo('doutrina', id)) return null
+  const p = partBase()
+  const d = DOUT_POR_ID[id]
+  const primeira = !p.dout
+  if (!primeira) { applyFx({ cash: -CUSTO_DOUTRINA, img: -1 }, true); p.seg = clamp(p.seg - 10, 0, 100); for (const f of p.filiados) f.leal = clamp(f.leal - 8, 0, 100) }
+  p.dout = id
+  timelineAdd(d.icon, primeira ? `O ${game.myParty.sigla} adotou a doutrina: ${d.nome.toLowerCase()}.` : `O ${game.myParty.sigla} mudou de doutrina para ${d.nome.toLowerCase()}. Parte da base estranhou.`, 'flat')
+  cnt('part')
+  save()
+  return { txt: `Doutrina do partido: ${d.nome}.` }
+}
+function novoFiliado(perfilId, leal0) {
+  const p = partBase()
+  const pf = PERFIL_PART_POR_ID[perfilId]
+  p.n++
+  const f = { id: 'f' + p.n, nome: candName(R), perfil: perfilId, leal: leal0 == null ? pf.leal : leal0 }
+  p.filiados.push(f)
+  applyFx({ ...pf.fx }, true)
+  if (pf.seg) p.seg = clamp(p.seg + pf.seg, 0, 100)
+  return f
+}
+export function partidoConvidar(perfilId) {
+  if (partidoMotivo('convidar', perfilId)) return null
+  const p = partBase()
+  applyFx({ cash: -1 }, true)
+  const f = novoFiliado(perfilId, PERFIL_PART_POR_ID[perfilId].leal + 10)
+  p.cd.convidar = game.total + 3
+  timelineAdd(PERFIL_PART_POR_ID[perfilId].icon, `${f.nome} aceitou o convite e se filiou ao ${game.myParty.sigla}.`, 'up')
+  cnt('part')
+  save()
+  return { txt: `${f.nome} se filiou ao partido.` }
+}
+export function partidoExpulsar(id) {
+  if (!partidoProprio()) return null
+  const p = partBase()
+  const i = p.filiados.findIndex((f) => f.id === id)
+  if (i < 0) return null
+  const f = p.filiados.splice(i, 1)[0]
+  p.expulsos++
+  applyFx({ cong: -0.5 }, true)
+  for (const o of p.filiados) o.leal = clamp(o.leal + (o.leal < f.leal ? -3 : 2), 0, 100)
+  timelineAdd('🚫', `${f.nome} foi expulso do ${game.myParty.sigla}.`, 'flat')
+  cnt('part')
+  save()
+  return { txt: `${f.nome} foi expulso do partido.` }
+}
+export function partidoConvencao() {
+  if (partidoMotivo('convencao')) return null
+  const p = partBase()
+  applyFx({ cash: -2, img: 0.3 }, true)
+  for (const f of p.filiados) f.leal = clamp(f.leal + 8, 0, 100)
+  p.seg = clamp(p.seg + 5, 0, 100)
+  p.cd.convencao = game.total + 8
+  timelineAdd('🎤', `Convenção do ${game.myParty.sigla}: a base saiu animada.`, 'up')
+  cnt('part')
+  save()
+  return { txt: 'Convenção feita: lealdade e seguidores subiram.' }
+}
+export const partidoPendNow = () => {
+  const p = partNow()
+  if (!p || !p.pend) return null
+  if (p.pend.tipo === 'filiacao') {
+    const pf = PERFIL_PART_POR_ID[p.pend.perfil]
+    return { icon: '🪪', titulo: `Pedido de filiação: ${p.pend.nome}`, texto: PEDIDOS_FILIACAO[p.pend.v % PEDIDOS_FILIACAO.length](p.pend.nome, pf.nome) + ` ${pf.desc}`, left: p.pend.left, tipo: 'filiacao', ops: OPS_FILIACAO }
+  }
+  const f = p.filiados.find((x) => x.id === p.pend.fid)
+  if (!f) return null
+  return { icon: '⚡', titulo: `Racha no partido: ${f.nome}`, texto: `${f.nome} (${PERFIL_PART_POR_ID[f.perfil].nome.toLowerCase()}) reclama da direção e arrasta um grupo. Ameaça se desfiliar.`, left: p.pend.left, tipo: 'cisao', ops: OPS_CISAO }
+}
+export function partidoPendMotivo(op) {
+  const pn = partidoPendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.fx && o.fx.cash < 0 && game.stats.cash < -o.fx.cash) return `Sem caixa (${-o.fx.cash}).`
+  if (pn.tipo === 'filiacao' && op === 'aceitar' && partNow().filiados.length >= MAX_FILIADOS) return 'O partido já tem filiados demais.'
+  return ''
+}
+function partidoAplicar(p, pn, opId, auto) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === (pn.tipo === 'cisao' ? PADRAO_CISAO : PADRAO_FILIACAO))
+  if (pn.tipo === 'filiacao') {
+    if (o.id === 'aceitar' && p.filiados.length < MAX_FILIADOS) {
+      const f = novoFiliado(p.pend.perfil)
+      f.nome = p.pend.nome
+      timelineAdd('✅', `${f.nome} foi aceito no ${game.myParty.sigla}.`, 'up')
+    } else timelineAdd('🚪', `A filiação de ${p.pend.nome} foi recusada.`, 'flat')
+  } else {
+    const f = p.filiados.find((x) => x.id === p.pend.fid)
+    applyFx({ ...o.fx }, true)
+    if (o.leal && f) f.leal = clamp(f.leal + o.leal, 0, 100)
+    p.seg = clamp(p.seg + o.seg, 0, 100)
+    if (o.expulsa || o.sai) {
+      // sair leva mais um do grupo
+      const idx = p.filiados.findIndex((x) => x.id === p.pend.fid)
+      if (idx >= 0) p.filiados.splice(idx, 1)
+      if (o.sai) { p.cisoes++; const outro = p.filiados.filter((x) => x.leal < 45)[0]; if (outro) p.filiados.splice(p.filiados.indexOf(outro), 1) }
+      else p.expulsos++
+    }
+    timelineAdd(pn.icon, `${pn.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, o.sai ? 'down' : 'flat')
+  }
+  p.pend = null
+  p.last = game.total
+  cnt('partpend')
+  return o
+}
+export function partidoEscolher(op) {
+  if (partidoPendMotivo(op)) return null
+  const p = partBase()
+  const pn = partidoPendNow()
+  const o = partidoAplicar(p, pn, op, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+function roundPartido() {
+  if (!game.world || !partidoProprio()) return
+  const p = partBase()
+  const d = doutrinaAtual()
+  // seguidores crescem com popularidade; o partido sem doutrina cresce pouco
+  p.seg = clamp(p.seg + (game.stats.pop - 50) / 40 + (d ? 0.15 : -0.1) - (p.seg > 70 ? 0.2 : 0), 0, 100)
+  if (p.seg >= 30) applyFx({ cash: Math.min(0.5, p.seg / 200) })
+  // lealdade: partido forte segura, fraco perde gente; oportunista é o primeiro a ir embora
+  for (const f of p.filiados) {
+    f.leal = clamp(f.leal + (game.stats.pop >= 50 ? 0.4 : -0.7) + (f.perfil === 'oportunista' && game.stats.pop < 45 ? -1.2 : 0), 0, 100)
+  }
+  if (p.pend) {
+    p.pend.left--
+    if (p.pend.left < 0) {
+      const pn = partidoPendNow()
+      if (pn) partidoAplicar(p, pn, pn.tipo === 'cisao' ? PADRAO_CISAO : PADRAO_FILIACAO, true)
+      else p.pend = null
+    }
+    return
+  }
+  if (game.total - p.last < 3) return
+  const rebelde = p.filiados.filter((f) => f.leal <= 25)[0]
+  if (rebelde) {
+    p.pend = { tipo: 'cisao', fid: rebelde.id, left: 2 }
+    p.last = game.total
+    toast('⚡', `Racha no partido: ${rebelde.nome}`)
+    return
+  }
+  // pedido de filiação: mais frequente com partido popular; perfil depende da doutrina e do momento
+  const chance = 0.1 + clamp((game.stats.pop - 40) / 300, 0, 0.12)
+  if (p.filiados.length >= MAX_FILIADOS || R() > chance) return
+  const perfil = PERFIS_PART[Math.floor(R() * PERFIS_PART.length)]
+  p.pend = { tipo: 'filiacao', nome: candName(R), perfil: perfil.id, v: Math.floor(R() * 3), left: 2 }
+  p.last = game.total
+  toast('🪪', `Pedido de filiação: ${p.pend.nome}`)
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -7791,6 +8000,7 @@ export function pendenciasNow() {
   const eu = euPendNow(); if (eu) dec('eu', eu.d.icon, eu.d.titulo, eu.left)
   const ec = ecoPendNow(); if (ec) dec('eco', ec.icon, ec.titulo, ec.left)
   const pp = popPendNow(); if (pp) dec('pop', pp.icon, pp.titulo, pp.left)
+  const pt = partidoPendNow(); if (pt) dec('partido', pt.icon, pt.titulo, pt.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })

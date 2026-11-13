@@ -5,6 +5,7 @@ import { AFF_TEXT, affinity } from '../../game/countries/brasil-parties'
 import { perkChips } from '../../game/ideas'
 import SecCoalizao from './SecCoalizao.vue'
 import PartyFounder from '../character/PartyFounder.vue'
+import SecPartido from './SecPartido.vue'
 
 const msg = ref('')
 const open = ref(false)
@@ -40,6 +41,7 @@ function found(p) {
       <small class="muted">{{ me().own ? 'Você é o(a) fundador(a) deste partido.' : `Afinidade com você: ${AFF_TEXT[affinity(ideology(), me())]}` }}</small>
     </div>
     <p v-else class="muted">Você está sem partido.</p>
+    <SecPartido />
 
     <div v-if="!game.myParty" class="pc-new" :class="{ open }">
       <div class="pc-newhead">
