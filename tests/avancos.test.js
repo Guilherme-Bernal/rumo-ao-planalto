@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { CENARIOS, SETORES_UF, PERFIL_UF } from '../src/game/bloco36'
 
 const mem = new Map()
 globalThis.localStorage = {
@@ -1484,5 +1485,130 @@ describe('BLOCO 35 — família na criação, rival ativo, pressão e pendência
     const cat = brasilTraits.find((c) => c.id === 'familia')
     expect(cat.options.length).toBeGreaterThanOrEqual(6)
     expect(cat.options.map((o) => o.id)).toContain(cat.def)
+  })
+})
+
+describe('BLOCO 36 — cenário por mandato, identidade do estado e leis com contexto', () => {
+  const inicia = (regionId = 'MT', office = 'prefeito') => {
+    E.startGame({ name: 'Teste', regionId })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.stats.cong = 60
+    E.game.total = 5
+  }
+  it('todo estado tem perfil e todo tema citado existe', () => {
+    const temas = E.worldTemas().map((t) => t.id)
+    for (const r of E.country().regions) {
+      const p = PERFIL_UF[r.id]
+      expect(p, r.id).toBeTruthy()
+      expect(SETORES_UF[p.tag], r.id).toBeTruthy()
+      expect(temas).toContain(p.dor)
+      expect(temas).toContain(p.resiste)
+    }
+    for (const c of CENARIOS) {
+      for (const t of [...c.quente, ...c.frio]) expect(temas).toContain(t)
+      expect(c.eventos.length).toBeGreaterThanOrEqual(3)
+      for (const e of c.eventos) expect(e.ops.some((o) => o.id === e.padrao)).toBe(true)
+    }
+  })
+  it('a carreira começa com um cenário e o perfil do estado', () => {
+    inicia('MT')
+    expect(E.cenarioNow()).toBeTruthy()
+    expect(E.perfilEstado().tag).toBe('agro')
+  })
+  it('o cenário muda quando a carreira muda de cargo ou ganha novo mandato', () => {
+    inicia()
+    const a = E.game.cenario.id
+    const n = E.game.cenario.n
+    E.game.election = { target: 'prefeito', result: { won: true, share: 55, h2h: 55 } }
+    E.game.phase = 'result'
+    E.continueAfterResult()
+    expect(E.game.cenario.n).toBeGreaterThan(n)
+    expect(E.game.cenario.id).not.toBe(a)
+  })
+  it('leis em alta aprovam mais fácil e em baixa, mais difícil', () => {
+    inicia('SP')
+    const c = E.cenarioNow()
+    const quente = c.quente[0]
+    const frio = c.frio[0]
+    expect(E.leiCtx(quente, 2).quente).toBe(true)
+    expect(E.leiCtx(quente, 2).mult).toBeGreaterThan(1)
+    expect(E.leiCtx(frio, 2).frio).toBe(true)
+    expect(E.leiCtx(frio, 2).mult).toBeLessThan(1)
+  })
+  it('a resistência do setor derruba a chance e a dor do estado ajuda', () => {
+    inicia('MT')
+    E.game.cenario = { id: 'boom', n: 1, desde: 0, pend: null, last: 0, vistos: [] }
+    const p = E.perfilEstado()
+    expect(E.leiCtx(p.resiste, 2).resiste).toBe(true)
+    expect(E.leiCtx(p.resiste, 2).chance).toBeLessThan(0)
+    expect(E.leiCtx(p.dor, 2).dor).toBe(true)
+    expect(E.leiCtx(p.dor, 2).popExtra).toBeGreaterThan(0)
+  })
+  it('o nome da lei muda com o contexto, mas é estável dentro do mesmo cenário', () => {
+    inicia('GO')
+    const nome1 = E.lawName('saude', 2)
+    expect(E.lawName('saude', 2)).toBe(nome1)
+    expect(nome1).toMatch(/\(.+\)/)
+    E.game.cenario = { id: 'seca', n: 9, desde: 0, pend: null, last: 0, vistos: [] }
+    const nomes = new Set()
+    for (const id of ['saude', 'educacao', 'seguranca', 'economia']) nomes.add(E.lawName(id, 1).replace(/^[^:]+:\s*/, '').replace(/^.*?\(/, '('))
+    expect(nomes.size).toBeGreaterThan(1)
+  })
+  it('lei aprovada guarda o multiplicador do contexto e rende mais em alta', () => {
+    // o motor guarda a referência de Math.random ao iniciar a carreira, então o espião entra antes
+    const spy = vi.spyOn(Math, 'random')
+    inicia('SP', 'prefeito')
+    E.game.cenario = { id: 'boom', n: 1, desde: 0, pend: null, last: 0, vistos: [] }
+    E.game.stats.cong = 95
+    E.game.world.lawUsed = false
+    E.game.world.lawN = 0
+    spy.mockReturnValue(0.01)
+    const ok = E.proposeLaw('ciencia', 1)
+    spy.mockRestore()
+    expect(ok).toBe(true)
+    const l = E.game.world.laws[0]
+    expect(l.mult).toBeGreaterThan(1)
+  })
+  it('evento de cenário aparece, vira decisão com padrão e entra nas pendências', () => {
+    inicia()
+    E.game.cenario = { id: 'fiscal', n: 1, desde: 0, pend: { k: 'fiscal:0', left: 2 }, last: 0, vistos: [] }
+    const pn = E.cenPendNow()
+    expect(pn.titulo).toBeTruthy()
+    expect(E.pendenciasNow().some((x) => x.id === 'cen')).toBe(true)
+    const cash = E.game.stats.cash
+    expect(E.cenEscolher('ajuste')).toBeTruthy()
+    expect(E.game.stats.cash).toBeGreaterThan(cash)
+    expect(E.cenPendNow()).toBeNull()
+  })
+  it('deixar o prazo passar aplica a opção padrão', () => {
+    inicia()
+    E.game.cenario = { id: 'fiscal', n: 1, desde: 0, pend: { k: 'fiscal:0', left: 0 }, last: 0, vistos: [] }
+    E.game.world.ameacas = []
+    E.roundAvancos()
+    E.roundAvancos()
+    expect(E.cenPendNow()).toBeNull()
+    expect(E.game.cenario.vistos).toContain('fiscal:0')
+  })
+  it('save antigo sem cenário ganha um na primeira rodada', () => {
+    inicia()
+    E.game.cenario = null
+    E.roundAvancos()
+    expect(E.cenarioNow()).toBeTruthy()
+  })
+  it('sinergia: seca pesa mais num estado do agro do que num estado de serviços', () => {
+    inicia('MT')
+    E.game.cenario = { id: 'seca', n: 1, desde: 0, pend: null, last: 99, vistos: [] }
+    E.game.total = 5
+    E.game.stats.eco = 60
+    E.roundAvancos()
+    const mt = E.game.stats.eco
+    inicia('SP')
+    E.game.cenario = { id: 'seca', n: 1, desde: 0, pend: null, last: 99, vistos: [] }
+    E.game.total = 5
+    E.game.stats.eco = 60
+    E.roundAvancos()
+    expect(E.game.stats.eco).toBeGreaterThan(mt)
   })
 })

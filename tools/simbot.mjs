@@ -57,7 +57,7 @@ function jogaCarreira(estilo) {
   const regs = ['SP', 'MG', 'RJ', 'BA', 'RS', 'PE', 'GO', 'AM']
   E.startGame({ name: 'Bot', regionId: pick(regs) })
   if (estilo === 'estrategista' || estilo === 'equilibrado') E.setBudget({ soc: 22, seg: 18, eco: 20, com: 25 })
-  const out = { estilo, fim: '', ok: false, stage: 0, rodadas: 0, erro: null, stats: null, ev: {}, minCash: 100, minPop: 100 }
+  const out = { estilo, fim: '', ok: false, stage: 0, rodadas: 0, erro: null, stats: null, ev: {}, minCash: 100, minPop: 100, evIds: new Set(), cens: [], uf: '' }
   if (CARGO) {
     const info = OFFICES[CARGO]
     game.office = CARGO
@@ -79,6 +79,7 @@ function jogaCarreira(estilo) {
       if (ph === 'event') {
         if (game.bigOffer && estilo === 'agressivo' && Math.random() < 0.3 && E.chooseBig) { /* ignora grandes obras: segue evento */ }
         const ev = E.currentEvent()
+        out.evIds.add(ev.id)
         let best = 0
         let bs = -1e9
         ev.choices.forEach((c, i) => {
@@ -95,6 +96,16 @@ function jogaCarreira(estilo) {
           const sorted = poss.map((a) => ({ a, s: fxScore(a.fx, estilo) + (a.dirty && estilo === 'cauteloso' ? -5 : 0) })).sort((x, y) => y.s - x.s)
           const a = estilo === 'aleatorio' ? pick(poss) : sorted[0].a
           E.doAction(a.id)
+        }
+        if (process.env.LEIS && game.world && !game.world.lawUsed) {
+          const tem = E.worldTemas(); const ous = E.worldOusadia()
+          let best = null
+          for (const t of tem) for (const o of ous) {
+            if (E.lawHas(t.id, o.id) || game.stats.cash < o.cost) continue
+            const sc = E.lawChance(t.id, o.id) * o.one * E.leiCtx(t.id, o.id).mult
+            if (!best || sc > best.sc) best = { t, o, sc }
+          }
+          if (best) E.proposeLaw(best.t.id, best.o.id)
         }
         E.endTurn()
       } else if (ph === 'recap') E.continueRecap()
@@ -147,6 +158,7 @@ function jogaCarreira(estilo) {
     }
     out.rodadas = game.total
     out.stage = game.stage
+    if (game.cenario && out.cens[out.cens.length - 1] !== game.cenario.id) out.cens.push(game.cenario.id)
     for (const t of game.toasts) {
       if (t.id <= vistoT) continue
       vistoT = t.id
@@ -180,11 +192,13 @@ function jogaCarreira(estilo) {
   }
   if (guard >= 4000) out.erro = 'loop: fase ' + game.phase
   out.stats = { ...game.stats }
+  out.uf = game.region && game.region.id
+  out.leis = ((game.world && game.world.laws) || []).map((l) => l.tema + l.ous)
   out.pts = game.points
   out.office = game.office
   out.vit = game.history.length
   const c = (game.poder && game.poder.cnt) || {}
-  out.blk = { ministro: 0, historia: 0, missao: 0, conspira: 0, redes: 0, rival: 0, pressao: 0, familia: 0 }
+  out.blk = { ministro: 0, historia: 0, missao: 0, conspira: 0, redes: 0, rival: 0, pressao: 0, familia: 0, cenario: 0, leictx: 0 }
   for (const [k, v] of Object.entries(c)) { const n = k.split(':')[1]; if (n in out.blk) out.blk[n] += v }
   const ms = game.poder && game.poder.mist
   out.mist = !ms ? 'nenhuma' : ms.fim ? ms.fim.tipo : 'ativa'
@@ -234,7 +248,7 @@ if (CARGO) {
   const rt = res.reduce((a, x) => a + x.rodadas, 0) || 1
   const sum = (k) => res.reduce((a, x) => a + ((x.blk || {})[k] || 0), 0)
   console.log('\n=== BLOCOS 31/32: interações por 100 rodadas jogadas ===')
-  for (const k of ['ministro', 'historia', 'missao', 'conspira', 'redes', 'rival', 'pressao', 'familia']) console.log(k.padEnd(10), ((100 * sum(k)) / rt).toFixed(2))
+  for (const k of ['ministro', 'historia', 'missao', 'conspira', 'redes', 'rival', 'pressao', 'familia', 'cenario', 'leictx']) console.log(k.padEnd(10), ((100 * sum(k)) / rt).toFixed(2))
   console.log('missões concluídas por carreira:', media(res, (x) => x.missoes || 0).toFixed(2))
   console.log('conspiração (fim):', Object.entries(por(res, (x) => x.mist || 'nenhuma')).map(([k, v]) => `${k} ${pct(v, res.length)}`).join(' | '))
 }
@@ -247,6 +261,22 @@ if (CARGO) {
   }
   console.log('\n=== eleições por trajeto (vitórias / folga média = nota do bot − nota do rival) ===')
   Object.entries(el).sort((a, b) => b[1].n - a[1].n).forEach(([k, v]) => console.log(k.padEnd(34), String(v.n).padStart(4), pct(v.w, v.n).padStart(7), (v.gap / v.n).toFixed(1).padStart(6)))
+}
+{
+  console.log('\n=== REPETIÇÃO (BLOCO 36) ===')
+  const jac = (a, b) => { const i = [...a].filter((x) => b.has(x)).length; return i / (a.size + b.size - i || 1) }
+  for (const est of estilos) {
+    const r = res.filter((x) => x.estilo === est && x.evIds.size)
+    let sj = 0, nj = 0
+    for (let i = 0; i + 1 < r.length; i += 2) { sj += jac(r[i].evIds, r[i + 1].evIds); nj++ }
+    console.log(est.padEnd(12), 'eventos distintos/carreira:', media(r, (x) => x.evIds.size).toFixed(1), ' sobreposição entre pares:', nj ? ((100 * sj) / nj).toFixed(0) + '%' : '-', ' cenários/carreira:', media(r, (x) => x.cens.length).toFixed(1))
+  }
+  const dist = por(res.flatMap((x) => x.cens), (c) => c)
+  console.log('cenários sorteados:', Object.entries(dist).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(' | '))
+  const porUF = {}
+  for (const r of res) { const k = r.uf || '?'; (porUF[k] = porUF[k] || []).push(r) }
+  console.log('por UF (carreiras, vitórias médias, caixa final):', Object.entries(porUF).map(([k, v]) => `${k} n${v.length} v${media(v, (x) => x.vit).toFixed(2)} c${media(v, (x) => x.stats ? x.stats.cash : 0).toFixed(0)}`).join(' | '))
+  console.log('leis distintas por carreira:', media(res, (x) => new Set(x.leis || []).size).toFixed(1))
 }
 const erros = res.filter((x) => x.erro)
 if (erros.length) process.exitCode = 1

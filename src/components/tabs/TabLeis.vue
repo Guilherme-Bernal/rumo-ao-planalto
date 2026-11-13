@@ -5,7 +5,7 @@ import { billsOf } from '../../game/bills'
 import SecEducacao from './SecEducacao.vue'
 import SecDefesa from './SecDefesa.vue'
 import SecConstituicao from './SecConstituicao.vue'
-import { pastasNow, pesquisas, aprovacao, protesto, responderProtesto, consultaFeita, consultaChance, consultar, officeId, emCrise, articular, goalsNow, courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition } from '../../game/engine'
+import { pastasNow, pesquisas, aprovacao, protesto, responderProtesto, consultaFeita, consultaChance, consultar, officeId, emCrise, articular, goalsNow, courtName, acaoPendente, upholdChance, defenderAcao, acatarAcao, inquerito, defesaInquerito, game, isExec, exeCan, exeLeft, cargoName, PASTAS, PERFIS, nomear, nomeadoDe, liberarEmendas, DECRETOS, decretar, sustarChance, isLeg, legCan, legLeft, legScope, VISITS, fiscalizar, COMISSOES, comissaoAtiva, escolherComissao, relatar, CPIS, cpiChance, cpiDone, abrirCPI, EMENDAS, emendar, obstruir, obstrucaoAtiva, statutesActive, officeInfo, worldTemas, worldOusadia, lawChance, lawName, lawHas, lawsActive, proposeLaw, coalition, leiCtx, cenarioNow, perfilEstado } from '../../game/engine'
 
 const w = computed(() => game.world)
 const co = computed(() => coalition())
@@ -13,6 +13,12 @@ const active = computed(() => lawsActive())
 const old = computed(() => w.value.laws.filter((l) => !active.value.includes(l)))
 const can = computed(() => game.phase === 'actions' && !w.value.lawUsed)
 const why = computed(() => (game.phase !== 'actions' ? 'Disponível na fase de ações da rodada.' : w.value.lawUsed ? 'Você já propôs uma lei nesta rodada.' : ''))
+const cenario = computed(() => cenarioNow())
+const perfil = computed(() => perfilEstado())
+const ctxTags = (t) => {
+  const x = leiCtx(t, 2)
+  return [x.quente ? '🔥 em alta no cenário' : '', x.frio ? '❄️ em baixa no cenário' : '', x.dor ? '🩹 dor do estado' : '', x.resiste ? `🏭 resistência do setor de ${perfil.value.setor}` : ''].filter(Boolean)
+}
 const pct = (t, o) => Math.round(lawChance(t, o) * 100)
 const col = (p) => (p < 30 ? 'var(--bad)' : p < 55 ? 'var(--warn)' : 'var(--good)')
 const stat = computed(() => statutesActive())
@@ -52,10 +58,15 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
       ({{ Math.round(game.stats.cong) }}), da coalizão ({{ co.votes }} voto(s) garantido(s){{ co.angry ? ', insatisfeita' : '' }}) e da ousadia. Lei aprovada rende na hora e um pouco por rodada, enquanto você estiver neste nível de poder.
       <span v-if="why"> · {{ why }}</span>
     </p>
+    <p v-if="cenario" class="sumbox">
+      {{ cenario.ico }} <b>Cenário: {{ cenario.nome }}.</b> {{ cenario.desc }}
+      <span v-if="perfil"> · <b>{{ game.region.name }}</b>: forte em {{ perfil.setor }}.</span>
+      <span class="muted"> Temas em alta aprovam mais fácil e rendem mais. O cenário muda a cada mandato.</span>
+    </p>
     <p v-if="w.last && /(Aprovada|Rejeitada)/.test(w.last.text)" class="sumbox" :style="{ marginTop: '8px', borderColor: w.last.ok ? 'var(--good)' : 'var(--bad)' }">{{ w.last.ok ? '✅' : '⚠️' }} {{ w.last.text }}</p>
 
     <div v-for="t in worldTemas()" :key="t.id" class="tema">
-      <div><b>{{ t.ico }} {{ t.name }}</b> <small class="muted">mexe com {{ statName[t.stat] }}</small></div>
+      <div><b>{{ t.ico }} {{ t.name }}</b> <small class="muted">mexe com {{ statName[t.stat] }}</small> <small v-for="x in ctxTags(t.id)" :key="x" class="ctxtag">{{ x }}</small></div>
       <div class="acts">
         <button v-for="o in worldOusadia()" :key="o.id" type="button" :disabled="!can || lawHas(t.id, o.id) || game.stats.cash < o.cost" :title="lawName(t.id, o.id)" @click="proposeLaw(t.id, o.id)">
           <b>{{ o.name }}</b>
@@ -194,6 +205,7 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
 </template>
 
 <style scoped>
+.ctxtag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: color-mix(in srgb, var(--accent, #4a7) 18%, transparent); font-size: 0.72rem; }
 .tema { margin: 12px 0; }
 .acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px; margin-top: 6px; }
 .acts button { text-align: left; padding: 8px 10px; }

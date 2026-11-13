@@ -36,6 +36,7 @@ import { DEALS, STUDIES, POWER_ACTIONS, ESTUDAR, ACORDO, MAX_DEALS, STUDY_MAX, s
 export { DEALS, STUDIES, ESTUDAR, ACORDO, MAX_DEALS, STUDY_MAX, studyNeed }
 import { MIN_AGE_OFFICE } from './countries/brasil-traits'
 import { STAGE_SPHERE, FAME_OFFSETS, BAND_STAT, DEFAULT_FLAGS, randomIdeologyName, makeOwnParty } from './ideas'
+import { CENARIOS, CEN_POR_ID, SETORES_UF, PERFIL_UF, CTX } from './bloco36'
 import { PARTNERS, PARTNER_PASSIVE, RIVALRY, DIPLO_ACTIONS, WARS, STANCE, DEF_ACTIONS, NUC, FED, FED_ACTIONS, TEMAS, OUSADIA, LAW_PREFIX } from './world'
 
 export const STATS = [
@@ -128,6 +129,7 @@ const blank = () => ({
   daily: false,
   weekly: false,
   seed: 0,
+  cenario: null,
   rngN: 0,
   dirty: 0,
   toasts: [],
@@ -551,6 +553,7 @@ export function startGame({ countryId = 'brasil', name, archetypeId, regionId, c
   resetFame()
   autoTeam()
   ensureWorld()
+  cenarioSortear(true)
   game.delta = {}
   log(`Começa a carreira como ${stageInfo().office} em ${game.city.name} (${game.region.id}).`)
   if (ownParty) log(`Fundou o partido ${partyObj().sigla}.`)
@@ -1625,6 +1628,7 @@ export function continueAfterResult() {
   game.rival = (game.poder && game.poder.rv && game.poder.rv.nome) || makeRival(R)
   if (same) {
     game.term++
+    cenarioSortear()
     applyFx({ cong: 50 - game.stats.cong, cash: 10 })
     log(game.term > 2 ? 'Reeleito(a) mais uma vez! Novo mandato começa.' : 'Reeleito(a)! Segundo mandato começa.')
   } else {
@@ -1634,6 +1638,7 @@ export function continueAfterResult() {
     game.stage = OFFICES[tgt].tier
     game.term = 1
     game.seen = []
+    cenarioSortear()
     applyFx({ cong: 50 - game.stats.cong, cash: 15, pop: 5 })
     log(`Eleito(a) ${officeInfo().name}!`)
     game.team = { vice: null, supl: [], slots: {} }
@@ -2145,7 +2150,9 @@ export function fedAct(targetId, actionId) {
 // Leis
 export const lawName = (temaId, ousId) => {
   const t = TEMAS.find((x) => x.id === temaId)
-  return t ? `${LAW_PREFIX[officeId()] || 'Projeto:'} ${t.nomes[ousId - 1]}` : ''
+  if (!t) return ''
+  const foco = leiFoco(temaId, ousId)
+  return `${LAW_PREFIX[officeId()] || 'Projeto:'} ${t.nomes[ousId - 1]}${foco ? ` (${foco})` : ''}`
 }
 export const lawHas = (temaId, ousId) => game.world.laws.some((l) => l.name === lawName(temaId, ousId))
 export function lawChance(temaId, ousId) {
@@ -2155,6 +2162,7 @@ export function lawChance(temaId, ousId) {
   let p = 0.28 + (game.stats.cong - 50) / 130 + co.votes * 0.05 + cb - (co.angry ? 0.12 : 0) - (ousId - 1) * 0.13
   if (peer) p += ((game.world.fed[peer.id] ?? 50) - 50) / 250
   p += comissaoBonus(temaId)
+  p += leiCtx(temaId, ousId).chance
   return Math.min(0.92, Math.max(0.06, p))
 }
 export function lawsActive() {
@@ -2169,21 +2177,24 @@ export function proposeLaw(temaId, ousId) {
   if (w.lawN >= lawCap()) w.lawUsed = true
   game.delta = {}
   const name = lawName(temaId, ousId)
+  const cx = leiCtx(temaId, ousId)
   if (R() < lawChance(temaId, ousId)) {
-    w.laws.unshift({ id: Math.random().toString(36).slice(2), name, tema: t.id, stat: t.stat, ous: o.id, stage: game.stage, office: officeId() })
+    w.laws.unshift({ id: Math.random().toString(36).slice(2), name, tema: t.id, stat: t.stat, ous: o.id, stage: game.stage, office: officeId(), mult: cx.mult })
     if (w.laws.length > 16) w.laws.pop()
-    applyFx({ [t.stat]: o.one, pop: o.id * 0.5, cash: -o.cost }, true)
+    applyFx({ [t.stat]: o.one * cx.mult, pop: o.id * 0.5 + cx.popExtra, cash: -o.cost }, true)
+    if (cx.resiste) applyFx({ eco: -CTX.resisteEco * o.id }, true)
+    cnt('leictx')
     if (t.id === 'educacao') eduAdd(o.id * 1.5)
     if (t.id === 'ciencia') {
       eduAdd(o.id)
       cienAdd(1)
     }
-    w.last = { text: `Aprovada: ${name}`, ok: true }
+    w.last = { text: `Aprovada: ${name}${cx.quente ? ' (pegou a onda do momento)' : ''}${cx.dor ? ' (era uma dor do estado)' : ''}${cx.resiste ? ` (o setor de ${perfilEstado().setor} reagiu)` : ''}`, ok: true }
     log(`Lei aprovada: ${name}.`)
     toast('⚖️', 'Lei aprovada!')
   } else {
-    applyFx({ img: -o.failImg, cong: -o.failCong, cash: -o.cost }, true)
-    w.last = { text: `Rejeitada: ${name}. A base não segurou os votos.`, ok: false }
+    applyFx({ img: -o.failImg, cong: -o.failCong - (cx.resiste ? 1 : 0), cash: -o.cost }, true)
+    w.last = { text: `Rejeitada: ${name}. ${cx.resiste ? `O lobby de ${perfilEstado().setor} trabalhou contra.` : 'A base não segurou os votos.'}`, ok: false }
     log(`Lei rejeitada: ${name}.`)
   }
   save()
@@ -2195,7 +2206,7 @@ function lawPassive() {
   const fx = {}
   for (const l of lawsActive()) {
     const o = OUSADIA.find((x) => x.id === l.ous)
-    fx[l.stat] = Math.min(1.2, (fx[l.stat] || 0) + o.pass)
+    fx[l.stat] = Math.min(1.2, (fx[l.stat] || 0) + o.pass * (l.mult || 1))
   }
   return fx
 }
@@ -4256,7 +4267,113 @@ export function roundAvancos() {
   roundCoalizao()
   roundLegado()
   roundArcos()
+  roundCenario()
   roundPressao()
+}
+
+/* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
+export const perfilEstado = () => {
+  const p = game.region && PERFIL_UF[game.region.id]
+  return p ? { ...p, setor: SETORES_UF[p.tag].nome } : null
+}
+export const cenarioNow = () => {
+  const c = game.cenario && CEN_POR_ID[game.cenario.id]
+  return c ? { ...c, n: game.cenario.n } : null
+}
+export const cenarioTemas = () => CENARIOS.map((c) => c.id)
+function cenarioSortear(inicio = false) {
+  const prev = game.cenario
+  const pool = CENARIOS.filter((c) => !prev || c.id !== prev.id)
+  const c = pool[Math.floor(R() * pool.length)]
+  game.cenario = { id: c.id, n: ((prev && prev.n) || 0) + 1, desde: game.total, pend: null, last: game.total, vistos: (prev && prev.vistos) || [] }
+  log(`Cenário do ${inicio ? 'início' : 'novo mandato'}: ${c.nome}.`)
+  if (!inicio) {
+    timelineAdd(c.ico, `Novo cenário: ${c.nome}. ${c.desc}`, 'flat')
+    toast(c.ico, `Cenário: ${c.nome}`)
+  }
+}
+const cenSubst = (t) => t.replaceAll('{estado}', (game.region && game.region.name) || 'seu estado').replaceAll('{setor}', (perfilEstado() || { setor: 'produção' }).setor)
+// foco do texto da lei: estável dentro do mesmo cenário
+function leiFoco(temaId, ousId) {
+  const c = cenarioNow()
+  const p = perfilEstado()
+  if (!c && !p) return ''
+  const h = hash01(`${game.seed}|${game.name}|${c ? c.n : 0}|${temaId}|${ousId}`)
+  const h2 = hash01(`x${game.name}|${temaId}${ousId}|${c ? c.id : ''}`)
+  const usaEstado = p && (!c || h < 0.5)
+  const lista = usaEstado ? SETORES_UF[p.tag].focos : c.focos
+  return lista[Math.floor(h2 * lista.length)]
+}
+export function leiCtx(temaId, ousId) {
+  const c = cenarioNow()
+  const p = perfilEstado()
+  const quente = !!c && c.quente.includes(temaId)
+  const frio = !!c && c.frio.includes(temaId)
+  const dor = !!p && p.dor === temaId
+  const resiste = !!p && p.resiste === temaId
+  let chance = 0
+  let mult = 1
+  if (quente) { chance += CTX.quenteChance; mult *= CTX.quenteMult }
+  if (frio) { chance += CTX.frioChance; mult *= CTX.frioMult }
+  if (dor) chance += CTX.dorChance
+  if (resiste) chance += CTX.resisteChance
+  return { quente, frio, dor, resiste, chance, mult, popExtra: dor ? CTX.dorPop * ousId : 0 }
+}
+export const cenPendNow = () => {
+  const s = game.cenario
+  if (!s || !s.pend) return null
+  const [cid, i] = s.pend.k.split(':')
+  const d = CEN_POR_ID[cid] && CEN_POR_ID[cid].eventos[+i]
+  return d ? { k: s.pend.k, d, titulo: cenSubst(d.titulo), texto: cenSubst(d.texto), left: s.pend.left, ico: CEN_POR_ID[cid].ico } : null
+}
+export function cenMotivo(op) {
+  const pn = cenPendNow()
+  if (!pn) return 'Indisponível.'
+  return pn.d.ops.some((x) => x.id === op) ? '' : 'Indisponível.'
+}
+function cenAplicar(s, pn, opId, auto) {
+  const o = pn.d.ops.find((x) => x.id === opId) || pn.d.ops[0]
+  applyFx({ ...o.fx }, true)
+  timelineAdd(pn.ico, `${pn.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, 'flat')
+  s.pend = null
+  s.last = game.total
+  s.vistos = [...(s.vistos || []), pn.k].slice(-30)
+  cnt('cenario')
+  return o
+}
+export function cenEscolher(op) {
+  if (cenMotivo(op)) return null
+  const pn = cenPendNow()
+  const o = cenAplicar(game.cenario, pn, op, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+function roundCenario() {
+  if (!game.world) return
+  if (!game.cenario) cenarioSortear(true)
+  const s = game.cenario
+  const c = cenarioNow()
+  if (!c) return
+  const fx = { ...c.fx }
+  const p = perfilEstado()
+  if (p && c.sin[p.tag]) for (const k in c.sin[p.tag]) fx[k] = (fx[k] || 0) + c.sin[p.tag][k]
+  applyFx(fx)
+  if (s.pend) {
+    s.pend.left--
+    if (s.pend.left < 0) {
+      const pn = cenPendNow()
+      if (pn) cenAplicar(s, pn, pn.d.padrao, true)
+      else s.pend = null
+    }
+    return
+  }
+  if (game.total < 2 || game.total - s.last < 3 || R() > 0.34) return
+  const todos = c.eventos.map((_, i) => `${c.id}:${i}`)
+  const novos = todos.filter((k) => !(s.vistos || []).includes(k))
+  const pool = novos.length ? novos : todos
+  s.pend = { k: pool[Math.floor(R() * pool.length)], left: 2 }
+  s.last = game.total
+  toast(c.ico, cenPendNow().titulo)
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -7028,6 +7145,7 @@ export function pendenciasNow() {
   const lp = legadoPendNow(); if (lp) dec('leg', lp.e.icon, lp.titulo, lp.left)
   const ap = arcoPendNow(); if (ap) dec('arco', ap.e.icon, ap.titulo, ap.left)
   const pr = pressPendNow(); if (pr) dec('press', pr.d.icon, pr.d.titulo, pr.left)
+  const cn = cenPendNow(); if (cn) dec('cen', cn.ico, cn.titulo, cn.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })
