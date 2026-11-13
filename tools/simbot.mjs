@@ -57,7 +57,7 @@ function jogaCarreira(estilo) {
   const regs = ['SP', 'MG', 'RJ', 'BA', 'RS', 'PE', 'GO', 'AM']
   E.startGame({ name: 'Bot', regionId: pick(regs) })
   if (estilo === 'estrategista' || estilo === 'equilibrado') E.setBudget({ soc: 22, seg: 18, eco: 20, com: 25 })
-  const out = { estilo, fim: '', ok: false, stage: 0, rodadas: 0, erro: null, stats: null, ev: {}, minCash: 100, minPop: 100, evIds: new Set(), cens: [], uf: '' }
+  const out = { estilo, fim: '', ok: false, stage: 0, rodadas: 0, erro: null, stats: null, ev: {}, minCash: 100, minPop: 100, evIds: new Set(), cens: [], uf: '', bigIds: new Set() }
   if (CARGO) {
     const info = OFFICES[CARGO]
     game.office = CARGO
@@ -158,6 +158,7 @@ function jogaCarreira(estilo) {
     }
     out.rodadas = game.total
     out.stage = game.stage
+    if (game.bigOffer && !out.bigIds.has(game.bigOffer.id + ':' + game.bigOffer.year)) { out.bigIds.add(game.bigOffer.id + ':' + game.bigOffer.year); out.bigs = (out.bigs || []).concat(game.bigOffer.id) }
     if (game.cenario && out.cens[out.cens.length - 1] !== game.cenario.id) out.cens.push(game.cenario.id)
     for (const t of game.toasts) {
       if (t.id <= vistoT) continue
@@ -276,6 +277,7 @@ if (CARGO) {
   const porUF = {}
   for (const r of res) { const k = r.uf || '?'; (porUF[k] = porUF[k] || []).push(r) }
   console.log('por UF (carreiras, vitórias médias, caixa final):', Object.entries(porUF).map(([k, v]) => `${k} n${v.length} v${media(v, (x) => x.vit).toFixed(2)} c${media(v, (x) => x.stats ? x.stats.cash : 0).toFixed(0)}`).join(' | '))
+  { const bg = res.flatMap((x) => x.bigs || []); const g = bg.filter((x) => x.startsWith('gen:')); console.log('grandes eventos por carreira:', (bg.length / res.length).toFixed(1), ' gerados:', pct(g.length, bg.length || 1), ' tipos distintos:', new Set(bg).size, ' futebol fixo (estadual+copa do brasil+copa):', pct(bg.filter((x) => ['estadual', 'copadobrasil', 'copa'].includes(x)).length, bg.length || 1)) }
   console.log('leis distintas por carreira:', media(res, (x) => new Set(x.leis || []).size).toFixed(1))
 }
 const erros = res.filter((x) => x.erro)

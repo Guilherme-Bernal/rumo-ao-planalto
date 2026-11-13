@@ -14,6 +14,7 @@ import { PARTIES } from './countries/brasil-parties'
 import { DAY_FLAVOR, ACTION_ICON, holidayOf, makePost, slug, GENERIC_TAGS, candName } from './social'
 import { MORE_FLAVOR } from './flavor'
 import { BIG, bigWhen, BIG_TAGS } from './bigevents'
+import { GEN_BASES, montarGen, pesoGen } from './bloco43'
 import { CRISES, CRISE_RESP, EMB, VIAGEM, SANCAO, ESPIO_ACOES } from './mundo24'
 import { SETORES, SETOR_ACOES, MOVIMENTOS, MOV_RESP, VEICULOS, LINHAS, MIDIA_ACOES, CATASTROFES, CATAST_RESP } from './sociedade'
 import { INIMIGOS, AMEACAS, GUERRA_ACOES } from './ameacas'
@@ -153,6 +154,7 @@ const blank = () => ({
   poder: { statutes: [], timeline: [], pending: null, press: [], seen: [] },
   bigOffer: null,
   bigDone: [],
+  bigGen: [],
   flavorSeen: [],
   contacts: [],
   approach: null,
@@ -732,14 +734,42 @@ function pickBig() {
       c.push({ id: b.id, m: i, icon: b.icon, name: b.name, year: Math.floor(abs / 12) })
     }
   }
-  if (!c.length || R() > 0.9) return null
-  return c[Math.floor(R() * c.length)]
+  // BLOCO 43: os eventos fixos aparecem só parte das vezes, e as rodadas livres sorteiam eventos gerados
+  let pick = c.length && R() < 0.6 ? c[Math.floor(R() * c.length)] : null
+  if (!pick && R() < 0.7) pick = genBig(mp, start)
+  return pick
+}
+
+function genBig(mp, start) {
+  game.bigGen = game.bigGen || []
+  const recentes = game.bigGen.slice(-8)
+  const pf = perfilEstado()
+  const pool = GEN_BASES.filter((b) => !recentes.includes(b.id))
+  const pesos = pool.map((b) => pesoGen(b, pf && pf.tag, game.traits && game.traits.paixao))
+  let r = R() * pesos.reduce((a, x) => a + x, 0)
+  let k = 0
+  while (k < pool.length - 1 && r >= pesos[k]) r -= pesos[k++]
+  const b = pool[k]
+  game.bigGen.push(b.id)
+  game.bigGen = game.bigGen.slice(-20)
+  const m = Math.floor(R() * mp)
+  const cn = cenarioNow()
+  return { id: 'gen:' + b.id, base: b.id, m, icon: b.icon, name: b.nome, year: Math.floor((start + m) / 12), cen: cn ? cn.id : null }
 }
 
 export function currentBig() {
   const o = game.bigOffer
   if (!o || o.done) return null
-  const b = BIG.find((x) => x.id === o.id)
+  let b
+  if (o.base) {
+    const base = GEN_BASES.find((x) => x.id === o.base)
+    if (!base) return null
+    const pf = perfilEstado()
+    const cn = cenarioNow()
+    const dorT = pf && TEMAS.find((t) => t.id === pf.dor)
+    b = montarGen(base, o.cen, dorT ? dorT.name.toLowerCase() : 'os problemas do estado', !!(pf && cn && cn.quente.includes(pf.dor)))
+  } else b = BIG.find((x) => x.id === o.id)
+  if (!b) return null
   return { ...b, title: subst(b.title), text: subst(b.text), choices: b.choices.map((c) => ({ ...c, label: subst(c.label) })) }
 }
 
@@ -757,7 +787,7 @@ export function chooseBig(i) {
   curSphere = b.sphere
   applyFx(res.fx, true)
   curSphere = null
-  const loved = (BIG_TAGS[b.id] || []).includes(game.traits.paixao)
+  const loved = (b.tags || BIG_TAGS[b.id] || []).includes(game.traits.paixao)
   if (loved) applyFx({ pop: 2, img: 1 }, true)
   if ((res.fx.img || 0) <= -6) {
     game.dirty++
@@ -4380,11 +4410,12 @@ function roundCenario() {
 function pressBase() {
   ensurePoder()
   const p = game.poder
-  if (!p.press) p.press = { pend: null, last: -9 }
-  return p.press
+  // 'press' é a lista de notas da imprensa; o estado da pressão do Congresso mora em 'pressao'
+  if (!p.pressao) p.pressao = { pend: null, last: -9 }
+  return p.pressao
 }
 export const pressPendNow = () => {
-  const s = game.poder && game.poder.press
+  const s = game.poder && game.poder.pressao
   if (!s || !s.pend) return null
   const d = PRESS_EVENTOS[s.pend.id]
   return d ? { id: s.pend.id, d, left: s.pend.left } : null

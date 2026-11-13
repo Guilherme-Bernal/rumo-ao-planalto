@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { CENARIOS, SETORES_UF, PERFIL_UF } from '../src/game/bloco36'
+import { GEN_BASES, GEN_CENARIO, montarGen, pesoGen } from '../src/game/bloco43'
 
 const mem = new Map()
 globalThis.localStorage = {
@@ -1441,13 +1442,13 @@ describe('BLOCO 35 — família na criação, rival ativo, pressão e pendência
   it('pressão do Congresso aparece, tem prazo e cai na opção padrão', () => {
     comOrigem('solteiro')
     E.game.total = 6
-    const s = (E.game.poder.press = { pend: { id: 'pauta_bomba', left: 0 }, last: -9 })
+    const s = (E.game.poder.pressao = { pend: { id: 'pauta_bomba', left: 0 }, last: -9 })
     expect(E.pressPendNow().id).toBe('pauta_bomba')
     const cash = E.game.stats.cash
     E.roundAvancos()
     expect(E.pressPendNow()).toBeNull()
     expect(E.game.stats.cash).toBeLessThan(cash)
-    E.game.poder.press = { pend: { id: 'convocacao', left: 2 }, last: -9 }
+    E.game.poder.pressao = { pend: { id: 'convocacao', left: 2 }, last: -9 }
     const cong = E.game.stats.cong
     expect(E.pressEscolher('trocar')).toBeTruthy()
     expect(E.game.stats.cong).toBeGreaterThan(cong - 0.01)
@@ -1468,7 +1469,7 @@ describe('BLOCO 35 — família na criação, rival ativo, pressão e pendência
     comOrigem('solteiro')
     E.game.phase = 'actions'
     E.game.ap = 2
-    E.game.poder.press = { pend: { id: 'obstrucao', left: 1 }, last: -9 }
+    E.game.poder.pressao = { pend: { id: 'obstrucao', left: 1 }, last: -9 }
     const l = E.pendenciasNow()
     expect(l.find((x) => x.id === 'press').tipo).toBe('decisao')
     expect(l.find((x) => x.id === 'press').left).toBe(2)
@@ -1485,6 +1486,16 @@ describe('BLOCO 35 — família na criação, rival ativo, pressão e pendência
     const cat = brasilTraits.find((c) => c.id === 'familia')
     expect(cat.options.length).toBeGreaterThanOrEqual(6)
     expect(cat.options.map((o) => o.id)).toContain(cat.def)
+  })
+  it('o estado da pressão do Congresso não colide com as notas da imprensa e sobrevive ao salvamento', () => {
+    comOrigem('solteiro')
+    E.game.total = 6
+    E.game.poder.pressao = { pend: { id: 'pauta_bomba', left: 2 }, last: 5 }
+    expect(Array.isArray(E.game.poder.press)).toBe(true)
+    E.game.poder.press.push({ icon: '📰', text: 'nota' })
+    const volta = JSON.parse(JSON.stringify(E.game.poder))
+    expect(volta.pressao.pend.id).toBe('pauta_bomba')
+    expect(volta.press.length).toBeGreaterThan(0)
   })
 })
 
@@ -1610,5 +1621,89 @@ describe('BLOCO 36 — cenário por mandato, identidade do estado e leis com con
     E.game.stats.eco = 60
     E.roundAvancos()
     expect(E.game.stats.eco).toBeGreaterThan(mt)
+  })
+})
+
+describe('BLOCO 43 — eventos esportivos e culturais gerados', () => {
+  const oferta = (base, cen = 'boom') => ({ id: 'gen:' + base, base, m: 0, icon: '🎉', name: 'Teste', year: 2027, cen })
+  const joga = (regionId = 'SP', traits = {}) => {
+    E.startGame({ name: 'Teste', regionId, traits })
+    E.game.phase = 'actions'
+  }
+  it('toda base monta um evento completo, com texto, 4 escolhas e uma jogada de risco', () => {
+    for (const b of GEN_BASES) {
+      for (const cen of Object.keys(GEN_CENARIO)) {
+        const e = montarGen(b, cen, 'saúde', true)
+        expect(e.title.length, b.id).toBeGreaterThan(8)
+        expect(e.choices.length).toBe(4)
+        expect(e.choices.filter((c) => c.risk).length).toBe(1)
+        expect(e.choices.every((c) => c.label && c.out && c.fx), b.id).toBe(true)
+      }
+    }
+    expect(new Set(GEN_BASES.map((b) => b.id)).size).toBe(GEN_BASES.length)
+  })
+  it('o cenário muda o texto e o custo da escolha de investir', () => {
+    const b = GEN_BASES[0]
+    const fiscal = montarGen(b, 'fiscal', 'saúde', false)
+    const boom = montarGen(b, 'boom', 'saúde', false)
+    expect(fiscal.text).not.toBe(boom.text)
+    expect(boom.choices[1].fx.cash).toBeGreaterThan(fiscal.choices[1].fx.cash)
+  })
+  it('falar da dor do estado rende mais quando o tema está em alta no cenário', () => {
+    const b = GEN_BASES[0]
+    const alta = montarGen(b, 'boom', 'saúde', true).choices[3].fx
+    const baixa = montarGen(b, 'boom', 'saúde', false).choices[3].fx
+    expect(alta.pop).toBeGreaterThan(baixa.pop)
+  })
+  it('a paixão e o setor do estado puxam o sorteio', () => {
+    const volei = GEN_BASES.find((b) => b.id === 'volei')
+    const rodeio = GEN_BASES.find((b) => b.id === 'rodeio')
+    expect(pesoGen(volei, 'agro', 'volei')).toBeGreaterThan(pesoGen(volei, 'agro', 'nenhuma'))
+    expect(pesoGen(rodeio, 'agro', null)).toBeGreaterThan(pesoGen(rodeio, 'industria', null))
+  })
+  it('evento gerado abre, aceita a escolha e aplica o resultado', () => {
+    joga('SP')
+    E.game.bigOffer = oferta('volei')
+    const b = E.currentBig()
+    expect(b.title).toMatch(/vôlei/i)
+    expect(b.title).not.toMatch(/\{/)
+    const pop = E.game.stats.pop
+    E.chooseBig(0)
+    expect(E.game.stats.pop).toBeGreaterThan(pop)
+    expect(E.game.bigOffer.done).toBe(true)
+    expect(E.currentBig()).toBeNull()
+  })
+  it('a paixão do personagem rende bônus no evento gerado que combina', () => {
+    joga('SP', { paixao: 'volei' })
+    E.game.bigOffer = oferta('volei')
+    const pop = E.game.stats.pop
+    E.chooseBig(0)
+    const comPaixao = E.game.stats.pop - pop
+    joga('SP', { paixao: 'nenhuma' })
+    E.game.bigOffer = oferta('volei')
+    const pop2 = E.game.stats.pop
+    E.chooseBig(0)
+    expect(comPaixao).toBeGreaterThan(E.game.stats.pop - pop2)
+  })
+  it('as ofertas variam: muitos tipos diferentes em várias carreiras', () => {
+    const ids = new Set()
+    let gerados = 0
+    for (let i = 0; i < 160; i++) {
+      E.startGame({ name: 'Teste', regionId: ['SP', 'MT', 'BA', 'AM'][i % 4] })
+      const o = E.game.bigOffer
+      if (o) {
+        ids.add(o.id)
+        if (o.base) gerados++
+      }
+    }
+    expect(ids.size).toBeGreaterThan(8)
+    expect(gerados).toBeGreaterThan(10)
+  })
+  it('save antigo com oferta fixa continua funcionando', () => {
+    joga('SP')
+    E.game.bigOffer = { id: 'estadual', m: 0, icon: '⚽', name: 'Final do Estadual', year: 2027 }
+    expect(E.currentBig().title).toMatch(/Estadual/)
+    E.chooseBig(3)
+    expect(E.game.bigOffer.done).toBe(true)
   })
 })
