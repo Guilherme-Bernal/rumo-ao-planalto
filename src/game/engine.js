@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { CASOS, CASO_POR_ID, PADRAO_CASO, FASES, FASE_RODADAS, PROC_ACOES, PROC_NOME } from './bloco45'
 import { FORMATOS_EST, EQUIP_EST, LINHAS_EST, MANCHETES_EST, POSTURAS_EST, ESC_EST_POR_ID, ESCANDALOS_EST, opsEscandalo, PADRAO_ESC } from './bloco44'
 import { ESCALAS, ESCALAS_CARGO, CRISES_ESC, CRISE_ESC_POR_ID, opsCrise, PADRAO_CRISE, CHANCE_ESCALA, REVOLTA } from './bloco42'
 import { DOUTRINAS, DOUT_POR_ID, PERFIS_PART, PERFIL_PART_POR_ID, MAX_FILIADOS, CUSTO_DOUTRINA, PEDIDOS_FILIACAO, OPS_FILIACAO, OPS_CISAO, PADRAO_CISAO, PADRAO_FILIACAO } from './bloco41'
@@ -1320,7 +1321,7 @@ const viceNote = () => {
   return officeInfo().kind === 'exec' && v ? ` O vice (${v.name.toLowerCase()}) assumiu o cargo, como manda a lei.` : ''
 }
 
-function checkOver() {
+export function checkOver() {
   if (game.god) return false
   const s = game.stats
   const st = game.stage
@@ -1328,13 +1329,16 @@ function checkOver() {
   const exec = officeInfo().kind === 'exec'
   const v = game.team && game.team.vice
   const plot = !!(v && (v.conspire || v.amb >= 0.3))
-  let o = null
-  if (s.pop <= 3) {
+  let o = instCai()
+  const emProc = !!procNow()
+  if (o) {
+    // o processo de impeachment/cassação terminou contra você
+  } else if (s.pop <= 3) {
     o = {
       title: exec ? 'Renúncia sob pressão' : 'Fim de linha política',
       text: 'A popularidade zerou. Ninguém atende mais o seu telefone.' + viceNote(),
     }
-  } else if (oid === 'presidente' && ((s.pop <= 15 && s.cong <= 20) || (plot && s.pop <= (v.conspire ? 24 : 19) && s.cong <= (v.conspire ? 36 : 26)))) {
+  } else if (!emProc && oid === 'presidente' && ((s.pop <= 15 && s.cong <= 20) || (plot && s.pop <= (v.conspire ? 24 : 19) && s.cong <= (v.conspire ? 36 : 26)))) {
     o = {
       title: 'Impeachment',
       text: 'Sem povo e sem Congresso, o processo andou em tempo recorde. Você foi afastado(a) do cargo.' + (plot ? ' O vice articulou nos bastidores.' : '') + viceNote(),
@@ -1344,17 +1348,17 @@ function checkOver() {
       title: 'Crise institucional',
       text: 'Os comandantes retiraram o apoio, as ruas estavam cheias e o governo caiu. A história vai julgar.' + viceNote(),
     }
-  } else if (oid === 'governador' && ((s.pop <= 12 && s.cong <= 18) || (v && v.conspire && s.pop <= 20 && s.cong <= 28))) {
+  } else if (!emProc && oid === 'governador' && ((s.pop <= 12 && s.cong <= 18) || (v && v.conspire && s.pop <= 20 && s.cong <= 28))) {
     o = {
       title: 'Impeachment',
       text: 'A Assembleia Legislativa abriu o processo e afastou você do governo.' + (plot ? ' O vice articulou nos bastidores.' : '') + viceNote(),
     }
-  } else if (oid === 'prefeito' && ((s.pop <= 12 && s.cong <= 18) || (v && v.conspire && s.pop <= 20 && s.cong <= 28))) {
+  } else if (!emProc && oid === 'prefeito' && ((s.pop <= 12 && s.cong <= 18) || (v && v.conspire && s.pop <= 20 && s.cong <= 28))) {
     o = {
       title: 'Cassação',
       text: 'A Câmara de Vereadores cassou o seu mandato.' + (plot ? ' O vice articulou nos bastidores.' : '') + viceNote(),
     }
-  } else if (exec && ['prefeito', 'governador', 'presidente'].includes(oid) && s.img <= 6 && s.cong <= 40) {
+  } else if (exec && ['prefeito', 'governador', 'presidente'].includes(oid) && s.img <= 6 && s.cong <= 40 && !emProc) {
     // escândalo sem base política: o Legislativo abre o processo (a imagem no chão deixa de ser só um número)
     o = {
       title: oid === 'prefeito' ? 'Cassação' : 'Impeachment',
@@ -3139,14 +3143,14 @@ export const acaoPendente = () => (game.poder && game.poder.acao) || null
 export const upholdChance = () => {
   const a = acaoPendente()
   const pol = a ? a.pol : 1
-  return Math.max(0.15, Math.min(0.9, 0.58 + (game.stats.img - 50) / 300 - pol * 0.1 + 0.04 * ((game.know && game.know.dir) || 0) + (a && a.defended ? 0.15 : 0)))
+  return Math.max(0.15, Math.min(0.9, 0.58 + (game.stats.img - 50) / 300 - pol * 0.1 + 0.04 * ((game.know && game.know.dir) || 0) + (a && a.defended ? 0.15 : 0) + judBonus()))
 }
 function roundJudiciario() {
   const p = game.poder
   const a = p.acao
   if (a) {
     const st = p.statutes.find((x) => x.id === a.id)
-    const chance = Math.max(0.15, Math.min(0.9, 0.58 + (game.stats.img - 50) / 300 - a.pol * 0.1 + 0.04 * ((game.know && game.know.dir) || 0) + (a.defended ? 0.15 : 0)))
+    const chance = Math.max(0.15, Math.min(0.9, 0.58 + (game.stats.img - 50) / 300 - a.pol * 0.1 + 0.04 * ((game.know && game.know.dir) || 0) + (a.defended ? 0.15 : 0) + judBonus()))
     p.acao = null
     if (st && st.left > 0) {
       if (R() < chance) {
@@ -3181,7 +3185,7 @@ function roundJudiciario() {
     q.round++
     applyFx({ img: -0.5 }, true)
     if (q.round >= 3) {
-      const ok = R() < 0.45 + (q.def ? 0.2 : 0) + (q.col ? 0.15 : 0) + (game.stats.img - 50) / 300
+      const ok = R() < 0.45 + (q.def ? 0.2 : 0) + (q.col ? 0.15 : 0) + (game.stats.img - 50) / 300 + judBonus()
       p.inq = null
       game.heat = clamp(game.heat - 15)
       if (ok) {
@@ -4315,6 +4319,7 @@ export function roundAvancos() {
   roundPartido()
   roundCrises()
   roundEstudio()
+  roundInst()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -5624,6 +5629,198 @@ function roundEstudio() {
   const pn = escandaloPendNow()
   if (pn) toast(pn.icon, pn.titulo)
   cnt('esc')
+}
+
+/* ---------- BLOCO 45: justiça e instituições (processo gradual, casos de tribunais, relação com o Judiciário) ---------- */
+function instBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.inst) p.inst = { jud: 50, caso: null, proc: null, cai: null, last: -9, lastProc: -99, cd: {}, procs: 0, vencidos: 0, casos: 0 }
+  return p.inst
+}
+const instNow = () => (game.poder && game.poder.inst) || null
+export function judBonus() {
+  const i = instNow()
+  return i ? clamp((i.jud - 50) / 400, -0.1, 0.1) : 0
+}
+export const judRelNow = () => { const i = instNow(); return Math.round(i ? i.jud : 50) }
+function instCai() {
+  const i = instNow()
+  return i && i.cai ? i.cai : null
+}
+const procCfg = () => PROC_NOME[officeInfo().kind === 'exec' ? officeId() : 'leg']
+export function procNow() {
+  const i = instNow()
+  if (!i || !i.proc) return null
+  const c = procCfg()
+  const pr = i.proc
+  return {
+    nome: c.nome, casa: c.casa, fase: FASES[pr.fase - 1], n: pr.fase, faltam: pr.left, votos: Math.round(pr.votos), agiu: pr.agiu,
+    chance: clamp((pr.votos - 30) / 45, 0.03, 0.97),
+    acoes: PROC_ACOES.filter((a) => (!a.exec || isExec()) && (!a.leg || !isExec())),
+  }
+}
+export function procMotivo(id) {
+  const pr = procNow()
+  const a = PROC_ACOES.find((x) => x.id === id)
+  if (!pr || !a) return 'Indisponível.'
+  if (pr.agiu) return 'Você já agiu nesta rodada.'
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function procAgir(id) {
+  if (procMotivo(id)) return null
+  const i = instBase()
+  const a = PROC_ACOES.find((x) => x.id === id)
+  const ganho = a.votos === 'rua' ? (game.stats.pop >= 60 ? 10 : game.stats.pop >= 45 ? 6 : 3) : a.votos
+  applyFx({ ...(a.fx || {}), cash: -(a.cash || 0) }, true)
+  i.proc.votos = clamp(i.proc.votos + ganho, 0, 100)
+  i.proc.agiu = true
+  timelineAdd(a.icon, `${procCfg().nome}: ${a.nome.toLowerCase()} (+${ganho} votos).`, 'up')
+  cnt('procacao')
+  save()
+  return { txt: `${a.nome}: +${ganho} votos.` }
+}
+function procAbrir(i) {
+  i.proc = { fase: 1, left: FASE_RODADAS, agiu: false, votos: clamp(game.stats.cong * 0.6 + game.stats.pop * 0.3 + (i.jud - 50) * 0.1, 5, 90) }
+  i.procs++
+  const c = procCfg()
+  timelineAdd('🔨', `Abre-se contra ${game.name} o processo de ${c.nome.toLowerCase()} em ${c.casa}.`, 'down')
+  toast('🔨', `${c.nome}: o processo foi aberto.`)
+  pushPosts(3, 'down', slug(c.nome))
+  cnt('proc')
+}
+function procVotar(i) {
+  const pr = i.proc
+  const c = procCfg()
+  const ch = clamp((pr.votos - 30) / 45, 0.03, 0.97)
+  i.proc = null
+  i.lastProc = game.total
+  if (R() < ch) {
+    applyFx({ img: 2, pop: 1, cong: 1 }, true)
+    game.heat = clamp(game.heat - 20)
+    i.vencidos++
+    timelineAdd('🛡️', `${game.name} escapa do processo de ${c.nome.toLowerCase()}.`, 'up')
+    toast('🛡️', `Você sobreviveu ao processo (${c.nome.toLowerCase()}).`)
+    cnt('procok')
+  } else if (isExec()) {
+    i.cai = { title: c.nome, text: `${c.casa[0].toUpperCase()}${c.casa.slice(1)} votou pelo seu afastamento depois de um processo que você não conseguiu barrar.${viceNote()}` }
+  } else if (pr.votos < 20) {
+    i.cai = { title: 'Cassação', text: 'O Conselho de Ética recomendou e o plenário cassou o seu mandato.' }
+  } else {
+    applyFx({ img: -6, cong: -3, pop: -3 }, true)
+    game.termDirty = Math.max(0, game.termDirty - 2)
+    game.heat = clamp(game.heat - 20)
+    timelineAdd('⛔', `${game.name} é suspenso(a) pelo Conselho de Ética.`, 'down')
+    toast('⛔', 'O Conselho de Ética aplicou suspensão.')
+    cnt('procruim')
+  }
+}
+// ---- casos de tribunais ----
+function casoCtx() {
+  const exec = isExec()
+  const oid = officeId()
+  const casaN = PROC_NOME[exec ? oid : 'leg'].casa
+  return { gov: exec ? 'o seu governo' : 'o seu mandato', corte: courtName(), casa: casaN[0].toUpperCase() + casaN.slice(1) }
+}
+export const casoPendNow = () => {
+  const i = instNow()
+  if (!i || !i.caso) return null
+  const d = CASO_POR_ID[i.caso.id]
+  if (!d) return null
+  return { icon: d.icon, titulo: `Instituições: ${d.nome}`, texto: d.texto(casoCtx()), left: i.caso.left, ops: d.ops }
+}
+export function casoMotivo(op) {
+  const pn = casoPendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+function casoAplicar(i, pn, opId, auto) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === PADRAO_CASO)
+  const ok = o.p >= 1 ? true : o.id === PADRAO_CASO ? false : R() < o.p
+  const r = ok ? o.ok : o.bad
+  applyFx({ ...(r.fx || {}), cash: (r.fx && r.fx.cash ? r.fx.cash : 0) - (o.cash || 0) }, true)
+  if (o.heat != null) game.heat = clamp(game.heat + (ok ? o.heat : (o.heatBad == null ? o.heat : o.heatBad)))
+  if (o.jud) i.jud = clamp(i.jud + o.jud, 0, 100)
+  if (o.sujo) { game.dirty++; game.termDirty++ }
+  timelineAdd(pn.icon, `${pn.titulo.replace('Instituições: ', '')}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}. ${r.t}`.trim(), ok ? 'up' : 'down')
+  i.caso = null
+  i.last = game.total
+  i.casos++
+  cnt(ok ? 'casook' : 'casoruim')
+  return { o, ok, r }
+}
+export function casoEscolher(op) {
+  if (casoMotivo(op)) return null
+  const i = instBase()
+  const pn = casoPendNow()
+  const { o, ok, r } = casoAplicar(i, pn, op, false)
+  save()
+  return { ok, txt: o.id === PADRAO_CASO ? 'Você esperou e o caso seguiu.' : r.t }
+}
+export function judAudMotivo() {
+  if (!game.world) return 'Indisponível.'
+  const i = instNow()
+  if (i && i.cd.aud && game.total < i.cd.aud) return `Espere ${i.cd.aud - game.total} rodada(s).`
+  if (game.stats.cash < 1) return 'Sem caixa (1).'
+  return ''
+}
+export function judAudiencia() {
+  if (judAudMotivo()) return null
+  const i = instBase()
+  applyFx({ cash: -1 }, true)
+  i.jud = clamp(i.jud + 8, 0, 100)
+  i.cd.aud = game.total + 5
+  timelineAdd('🧑‍⚖️', `Audiência institucional com ministros do ${courtShort()}.`, 'flat')
+  cnt('inst')
+  save()
+  return { txt: `Audiência feita: relação com o ${courtShort()} melhorou.` }
+}
+function casoSorteia() {
+  const oid = officeId()
+  const exec = isExec()
+  const pool = CASOS.filter((c) => (exec && c.quem.includes('exec')) || (!exec && c.quem.includes('leg')) || (c.quem.includes('vaga') && ['presidente', 'governador'].includes(oid)))
+  return pool.length ? pool[Math.floor(R() * pool.length)] : null
+}
+function roundInst() {
+  if (!game.world) return
+  const i = instBase() // nasce na primeira rodada; saves antigos ganham sem reiniciar
+  i.jud = clamp(i.jud + (50 - i.jud) * 0.03, 0, 100)
+  if (i.proc) {
+    const pr = i.proc
+    pr.votos = clamp(pr.votos + (game.stats.pop - 50) / 30 + (game.stats.cong - 50) / 40, 0, 100)
+    pr.agiu = false
+    pr.left--
+    if (pr.left <= 0) {
+      if (pr.fase < 3) { pr.fase++; pr.left = FASE_RODADAS } else procVotar(i)
+    }
+    return
+  }
+  if (i.cai) return
+  if (i.caso) {
+    i.caso.left--
+    if (i.caso.left < 0) {
+      const pn = casoPendNow()
+      if (pn) casoAplicar(i, pn, PADRAO_CASO, true)
+      else i.caso = null
+    }
+    return
+  }
+  // processo gradual: nasce de imagem no chão, calor ou jogo sujo, com base política fraca
+  const exec = isExec()
+  const risco = exec ? (game.stats.img <= 25 || (game.heat || 0) >= 45 || game.termDirty >= 4) && game.stats.cong <= 48 : (game.heat || 0) >= 40 || game.termDirty >= 3
+  if (risco && game.total >= 6 && game.total - i.lastProc >= 18 && R() < 0.18) return procAbrir(i)
+  if (game.total - i.last < 6 || game.total < 4 || R() > 0.12) return
+  const d = casoSorteia()
+  if (!d) return
+  i.caso = { id: d.id, left: 2 }
+  i.last = game.total
+  const pn = casoPendNow()
+  if (pn) toast(pn.icon, pn.titulo)
+  cnt('caso')
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -8408,6 +8605,8 @@ export function pendenciasNow() {
   const pt = partidoPendNow(); if (pt) dec('partido', pt.icon, pt.titulo, pt.left)
   const cr = crisePendNow(); if (cr) dec('crise', cr.icon, cr.titulo, cr.left)
   const es = escandaloPendNow(); if (es) dec('escandalo', es.icon, es.titulo, es.left)
+  const cso = casoPendNow(); if (cso) dec('caso', cso.icon, cso.titulo, cso.left)
+  const pcs = procNow(); if (pcs) dec('processo', '🔨', `${pcs.nome}: ${pcs.fase.nome}`, pcs.faltam)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })

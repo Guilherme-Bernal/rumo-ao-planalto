@@ -2485,3 +2485,127 @@ describe('BLOCO 44 — canal, jornal próprio, coletiva e escândalos', () => {
     expect(v.studio.canal.vids).toBe(1)
   })
 })
+
+describe('BLOCO 45 — justiça e instituições', () => {
+  const inicia = (office = 'prefeito') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é coerente', async () => {
+    const B = await import('../src/game/bloco45.js')
+    for (const c of B.CASOS) {
+      expect(c.ops.find((o) => o.id === B.PADRAO_CASO), c.id).toBeTruthy()
+      for (const o of c.ops) expect(o.p >= 0 && o.p <= 1, c.id + o.id).toBe(true)
+    }
+    expect(B.FASES.length).toBe(3)
+  })
+  it('um caso pendente é decidido e aplica o efeito', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.inst
+    i.caso = { id: 'mp', left: 2 }
+    expect(E.casoPendNow().ops.length).toBe(4)
+    const r = E.casoEscolher('acordo')
+    expect(r.ok).toBe(true)
+    expect(E.casoPendNow()).toBeNull()
+    expect(i.casos).toBe(1)
+  })
+  it('sem decisão, o caso resolve sozinho pela opção padrão', () => {
+    inicia()
+    rodada()
+    E.game.poder.inst.caso = { id: 'contas', left: 0 }
+    E.game.poder.inst.last = E.game.total
+    rodada()
+    rodada()
+    expect(E.casoPendNow()).toBeNull()
+    expect(E.game.poder.inst.casos).toBe(1)
+  })
+  it('a audiência melhora a relação e tem espera', () => {
+    inicia()
+    rodada()
+    const antes = E.judRelNow()
+    expect(E.judAudiencia()).toBeTruthy()
+    expect(E.judRelNow()).toBe(antes + 8)
+    expect(E.judAudMotivo()).toMatch(/Espere/)
+  })
+  it('o processo anda por fases e as ações somam votos', () => {
+    inicia('presidente')
+    rodada()
+    const i = E.game.poder.inst
+    i.proc = { fase: 1, left: 2, agiu: false, votos: 20 }
+    expect(E.procNow().n).toBe(1)
+    const r = E.procAgir('negociar')
+    expect(r).toBeTruthy()
+    expect(i.proc.votos).toBe(30)
+    expect(E.procMotivo('negociar')).toMatch(/já agiu/)
+    E.game.stats.pop = 50
+    E.game.stats.cong = 50
+    rodada()
+    rodada()
+    expect(i.proc.fase).toBe(2)
+  })
+  it('perder a votação encerra a carreira com título de impeachment', () => {
+    inicia('presidente')
+    rodada()
+    const i = E.game.poder.inst
+    E.game.stats.pop = 50
+    E.game.stats.cong = 50
+    i.proc = { fase: 3, left: 1, agiu: false, votos: 0 }
+    rodada()
+    E.checkOver()
+    // chance mínima de 3% de escapar: o desfecho precisa ser coerente com o sorteio
+    if (i.vencidos) expect(E.game.over).toBeFalsy()
+    else expect(E.game.over && E.game.over.title).toBe('Impeachment')
+  })
+  it('vencer a votação preserva o mandato', () => {
+    inicia('prefeito')
+    rodada()
+    const i = E.game.poder.inst
+    E.game.stats.pop = 50
+    E.game.stats.cong = 60
+    i.proc = { fase: 3, left: 1, agiu: false, votos: 100 }
+    rodada()
+    expect(E.procNow()).toBeNull()
+    E.checkOver()
+    if (i.vencidos) expect(E.game.over).toBeFalsy()
+    else expect(E.game.over && E.game.over.title).toBe('Cassação')
+  })
+  it('legislador perde no Conselho de Ética com suspensão ou cassação', () => {
+    inicia('dep_federal')
+    rodada()
+    const i = E.game.poder.inst
+    E.game.stats.pop = 50
+    E.game.stats.cong = 50
+    i.proc = { fase: 3, left: 1, agiu: false, votos: 40 }
+    rodada()
+    expect(E.procNow()).toBeNull()
+  })
+  it('a relação com o Judiciário desloca a chance dos julgamentos', () => {
+    inicia()
+    rodada()
+    E.game.poder.inst.jud = 100
+    const alto = E.judBonus()
+    E.game.poder.inst.jud = 0
+    const baixo = E.judBonus()
+    expect(alto).toBeGreaterThan(baixo)
+  })
+  it('o estado sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    E.game.poder.inst.caso = { id: 'corte', left: 1 }
+    E.game.poder.inst.proc = { fase: 2, left: 1, agiu: false, votos: 33 }
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.inst.caso.id).toBe('corte')
+    expect(v.inst.proc.votos).toBe(33)
+  })
+})
