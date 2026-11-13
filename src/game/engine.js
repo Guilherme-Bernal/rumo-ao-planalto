@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { ECO_IDS, TAG_SETOR, PEDIDOS, opsPara, PEND_INFO, DOACOES, GREVES, ESCANDALO_DOACAO } from './bloco39'
 import { ESTILOS, estiloFx, EU_ACOES, EU_POR_ID, VISUAL_CUSTO, VISUAL_CD, EU_PEND, FALAS_EU } from './bloco38'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
 import { finalOf, saveFinal } from './finais'
@@ -4303,6 +4304,7 @@ export function roundAvancos() {
   roundObras()
   roundPressao()
   roundEu()
+  roundEco()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -4720,6 +4722,146 @@ function roundEu() {
     e.last = game.total
     toast('🤒', EU_PEND.malestar.titulo)
   }
+}
+
+/* ---------- BLOCO 39: indústria e economia (lobbies, doações, greves; satisfação vem de sociedade.js) ---------- */
+function ecoBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.eco) p.eco = { divida: {}, doacoes: 0, pend: null, last: -9, esc: -99, cd: {} }
+  return p.eco
+}
+const setorDef = (id) => SETORES.find((x) => x.id === id)
+const satEco = (id) => { const v = socNow().setores[id]; return v == null ? 50 : v }
+// setor forte do estado pesa mais (mais pedidos e mais greves)
+const setorDoEstado = () => {
+  const pf = game.region && PERFIL_UF[game.region.id]
+  return pf ? TAG_SETOR[pf.tag] || null : null
+}
+export const ecoSetoresNow = () => {
+  const e = game.poder && game.poder.eco
+  const forte = setorDoEstado()
+  return ECO_IDS.map((id) => { const d = setorDef(id); return { id, icon: d.icon, nome: d.name, sat: Math.round(satEco(id)), divida: e ? e.divida[id] || 0 : 0, forte: id === forte } })
+}
+export const ecoNow = () => {
+  const e = game.poder && game.poder.eco
+  return { doacoes: e ? e.doacoes : 0 }
+}
+export function ecoSetorMotivo(id, acao) {
+  if (!game.world || !ECO_IDS.includes(id)) return 'Indisponível.'
+  const e = game.poder && game.poder.eco
+  const cd = e && e.cd[acao + ':' + id]
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  if (acao === 'doacao' && satEco(id) < 50) return 'O setor precisa estar satisfeito (50 ou mais).'
+  return ''
+}
+function ecoMexe(id, d) { const sc = socEnsure(); sc.setores[id] = clamp(sc.setores[id] + d) }
+function ecoEscandalo(e) {
+  e.esc = game.total
+  e.doacoes = 1
+  applyFx({ img: -3, cong: -1 }, true)
+  timelineAdd('🕵️', ESCANDALO_DOACAO, 'down')
+  toast('🕵️', 'Investigação sobre doações')
+  cnt('ecoesc')
+}
+function ecoDoou(e, id) {
+  e.divida[id] = (e.divida[id] || 0) + 1
+  e.doacoes++
+  if (e.doacoes >= 3 && game.total - e.esc >= 8 && R() < 0.3) ecoEscandalo(e)
+}
+export function ecoPedirDoacao(id) {
+  if (ecoSetorMotivo(id, 'doacao')) return null
+  const e = ecoBase()
+  applyFx({ cash: isExec() ? 3 : 2 }, true)
+  ecoDoou(e, id)
+  e.cd['doacao:' + id] = game.total + 6
+  const nome = setorDef(id).name.toLowerCase()
+  timelineAdd('💼', `Doação de campanha de ${nome}.`, 'flat')
+  cnt('eco')
+  save()
+  return { txt: `Doação recebida de ${nome}. Eles vão esperar um favor.` }
+}
+export const ecoPendNow = () => {
+  const e = game.poder && game.poder.eco
+  if (!e || !e.pend) return null
+  const st = setorDef(e.pend.setor)
+  if (!st) return null
+  const n = st.name.toLowerCase()
+  const t = e.pend.tipo
+  const ped = PEDIDOS[st.id][e.pend.ped % PEDIDOS[st.id].length]
+  const titulo = t === 'lobby' ? (e.pend.cobranca ? `Cobrança de favor: ${st.name}` : ped.titulo) : t === 'doacao' ? `Doação de ${n}` : `Greve em ${n}`
+  const texto = t === 'lobby' ? (e.pend.cobranca ? `${st.name} lembra que ajudou a sua campanha e agora quer um favor.` : ped.texto) : t === 'doacao' ? DOACOES[e.pend.v % DOACOES.length](n) : GREVES[e.pend.v % GREVES.length](n)
+  return { icon: t === 'lobby' ? st.icon : PEND_INFO[t].icon, titulo, texto, left: e.pend.left, tipo: t, setor: st.id, ops: opsPara(t, st.id, e.pend.ped % PEDIDOS[st.id].length, e.pend.cobranca) }
+}
+export function ecoMotivo(op) {
+  const pn = ecoPendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.fx && o.fx.cash < 0 && game.stats.cash < -o.fx.cash) return `Sem caixa (${-o.fx.cash}).`
+  return ''
+}
+function ecoAplicar(e, pn, opId, auto) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === PEND_INFO[pn.tipo].padrao) || pn.ops[0]
+  applyFx({ ...o.fx }, true)
+  ecoMexe(pn.setor, o.sat)
+  if (o.div) e.divida[pn.setor] = Math.max(0, (e.divida[pn.setor] || 0) + o.div)
+  if (o.doa) ecoDoou(e, pn.setor)
+  timelineAdd(pn.icon, `${pn.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, 'flat')
+  e.pend = null
+  e.last = game.total
+  cnt('ecopend')
+  return o
+}
+export function ecoEscolher(op) {
+  if (ecoMotivo(op)) return null
+  const e = ecoBase()
+  const pn = ecoPendNow()
+  const o = ecoAplicar(e, pn, op, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+function ecoSorteiaSetor(filtro) {
+  const forte = setorDoEstado()
+  const pool = ECO_IDS.filter(filtro)
+  if (!pool.length) return null
+  const pesos = pool.map((id) => (id === forte ? 2 : 1))
+  let r = R() * pesos.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < pool.length; i++) { r -= pesos[i]; if (r < 0) return pool[i] }
+  return pool[pool.length - 1]
+}
+function roundEco() {
+  if (!game.world) return
+  const e = ecoBase() // nasce na primeira rodada; saves antigos ganham sem reiniciar
+  if (e.pend) {
+    e.pend.left--
+    if (e.pend.left < 0) {
+      const pn = ecoPendNow()
+      if (pn) ecoAplicar(e, pn, PEND_INFO[pn.tipo].padrao, true)
+      else e.pend = null
+    }
+    return
+  }
+  if (game.total - e.last < 3) return
+  // dívida com quem doou: o setor cobra
+  const dev = ECO_IDS.find((id) => (e.divida[id] || 0) >= 2)
+  if (dev && R() < 0.5) {
+    e.pend = { tipo: 'lobby', setor: dev, ped: Math.floor(R() * 3), cobranca: true, v: 0, left: 2 }
+    e.last = game.total
+    toast(setorDef(dev).icon, `Cobrança de favor: ${setorDef(dev).name}`)
+    return
+  }
+  if (R() > 0.22) return
+  const k = R()
+  const alta = ecoSorteiaSetor((id) => satEco(id) >= 55)
+  const baixa = ecoSorteiaSetor((id) => satEco(id) <= 35)
+  let tipo = 'lobby'
+  let setor
+  if (k < 0.25 && alta) { tipo = 'doacao'; setor = alta } else if (k < 0.5 && baixa) { tipo = 'greve'; setor = baixa } else setor = ecoSorteiaSetor(() => true)
+  e.pend = { tipo, setor, ped: Math.floor(R() * 3), cobranca: false, v: Math.floor(R() * 3), left: 2 }
+  e.last = game.total
+  const pn = ecoPendNow()
+  if (pn) toast(pn.icon, pn.titulo)
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -7499,6 +7641,7 @@ export function pendenciasNow() {
   const cn = cenPendNow(); if (cn) dec('cen', cn.ico, cn.titulo, cn.left)
   const ob = obraPendNow(); if (ob) dec('obra', ob.d.icon, ob.titulo, ob.left)
   const eu = euPendNow(); if (eu) dec('eu', eu.d.icon, eu.d.titulo, eu.left)
+  const ec = ecoPendNow(); if (ec) dec('eco', ec.icon, ec.titulo, ec.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })

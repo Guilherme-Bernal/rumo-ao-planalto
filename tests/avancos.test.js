@@ -1941,3 +1941,106 @@ describe('BLOCO 38 — personagem: sexo, cabelos, visual e rotina', () => {
     expect(v.eu.cd.paixao).toBeGreaterThan(E.game.total)
   })
 })
+
+describe('BLOCO 39 — setores, lobbies, doações e greves', () => {
+  const inicia = (office = 'prefeito', regionId = 'SP') => {
+    E.startGame({ name: 'Teste', regionId })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('todo setor tem pedidos, e toda decisão tem a opção padrão', async () => {
+    const B = await import('../src/game/bloco39.js')
+    for (const id of B.ECO_IDS) {
+      expect(B.PEDIDOS[id].length, id).toBe(3)
+      expect(E.setoresDef().some((x) => x.id === id), id).toBe(true)
+    }
+    for (const t of ['lobby', 'doacao', 'greve']) {
+      const ops = B.opsPara(t, 'agro', 0, false)
+      expect(ops.some((o) => o.id === B.PEND_INFO[t].padrao), t).toBe(true)
+    }
+    for (const sx of Object.values(B.TAG_SETOR)) expect(B.ECO_IDS).toContain(sx)
+  })
+  it('uma carreira longa sorteia pedidos, doações e greves e a pendência vence sozinha', () => {
+    inicia()
+    const tipos = new Set()
+    for (let i = 0; i < 400; i++) {
+      const sc = E.socNow().setores
+      if (i % 40 === 0) { sc.agro = 80; sc.industria = 20 }
+      rodada()
+      const p = E.ecoPendNow()
+      if (p) tipos.add(p.tipo)
+      E.game.stats.cash = 60
+    }
+    expect(tipos.has('lobby')).toBe(true)
+    expect(tipos.size).toBeGreaterThanOrEqual(2)
+  })
+  it('atender um pedido agrada o setor; negar o contraria', () => {
+    inicia()
+    rodada()
+    const e = E.game.poder.eco
+    e.pend = { tipo: 'lobby', setor: 'industria', ped: 0, cobranca: false, v: 0, left: 2 }
+    const a = E.socNow().setores.industria
+    expect(E.ecoEscolher('atender')).toBeTruthy()
+    expect(E.socNow().setores.industria).toBeGreaterThan(a)
+    e.pend = { tipo: 'lobby', setor: 'industria', ped: 1, cobranca: false, v: 0, left: 2 }
+    const b = E.socNow().setores.industria
+    E.ecoEscolher('negar')
+    expect(E.socNow().setores.industria).toBeLessThan(b)
+  })
+  it('doação dá caixa e cria dívida; dívida alta vira cobrança', () => {
+    inicia()
+    rodada()
+    const e = E.game.poder.eco
+    E.socNow().setores.tecnologia = 80
+    const c = E.game.stats.cash
+    expect(E.ecoPedirDoacao('tecnologia')).toBeTruthy()
+    expect(E.game.stats.cash).toBeGreaterThan(c)
+    expect(e.divida.tecnologia).toBe(1)
+    expect(E.ecoSetorMotivo('tecnologia', 'doacao')).toMatch(/Espere/)
+    e.divida.tecnologia = 2
+    e.last = -9
+    let cob = null
+    for (let i = 0; i < 30 && !cob; i++) { rodada(); const p = E.ecoPendNow(); if (p && p.titulo.startsWith('Cobrança')) cob = p }
+    expect(cob).toBeTruthy()
+    E.ecoEscolher('atender')
+    expect(e.divida.tecnologia).toBe(0)
+  })
+  it('setor contrariado não pode doar', () => {
+    inicia()
+    rodada()
+    E.socNow().setores.agro = 30
+    expect(E.ecoSetorMotivo('agro', 'doacao')).toMatch(/satisfeito/)
+  })
+  it('doações em série viram investigação', () => {
+    inicia()
+    rodada()
+    const e = E.game.poder.eco
+    vi.spyOn(Math, 'random').mockReturnValue(0.01)
+    e.doacoes = 2
+    e.esc = -99
+    const img = E.game.stats.img
+    E.socNow().setores.industria = 90
+    E.ecoPedirDoacao('industria')
+    vi.restoreAllMocks()
+    expect(E.game.stats.img).toBeLessThanOrEqual(img)
+  })
+  it('a greve ignorada cobra da economia; o estado pessoal sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    const e = E.game.poder.eco
+    e.pend = { tipo: 'greve', setor: 'industria', ped: 0, cobranca: false, v: 1, left: 0 }
+    expect(E.pendenciasNow().some((p) => p.id === 'eco')).toBe(true)
+    rodada()
+    expect(E.ecoPendNow()).toBeNull()
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.eco.divida).toBeTruthy()
+  })
+})
