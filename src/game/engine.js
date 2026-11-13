@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { SEGMENTOS, SEG_POR_ID, PROTESTOS, opsProtesto, PADRAO_PROTESTO, PAUTA_ACOES } from './bloco40'
 import { ECO_IDS, TAG_SETOR, PEDIDOS, opsPara, PEND_INFO, DOACOES, GREVES, ESCANDALO_DOACAO } from './bloco39'
 import { ESTILOS, estiloFx, EU_ACOES, EU_POR_ID, VISUAL_CUSTO, VISUAL_CD, EU_PEND, FALAS_EU } from './bloco38'
 import { RV_TRAITS, RV_ESTAGIOS, RV_EVENTOS, RV_AUTO, RV_ACOES } from './rival30'
@@ -2217,6 +2218,7 @@ export function proposeLaw(temaId, ousId) {
     applyFx({ [t.stat]: o.one * cx.mult, pop: o.id * 0.5 + cx.popExtra, cash: -o.cost }, true)
     if (cx.resiste) applyFx({ eco: -CTX.resisteEco * o.id }, true)
     cnt('leictx')
+    popLei(t.id, o.id)
     if (t.id === 'educacao') eduAdd(o.id * 1.5)
     if (t.id === 'ciencia') {
       eduAdd(o.id)
@@ -4305,6 +4307,7 @@ export function roundAvancos() {
   roundPressao()
   roundEu()
   roundEco()
+  roundPop()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -4861,6 +4864,151 @@ function roundEco() {
   e.pend = { tipo, setor, ped: Math.floor(R() * 3), cobranca: false, v: Math.floor(R() * 3), left: 2 }
   e.last = game.total
   const pn = ecoPendNow()
+  if (pn) toast(pn.icon, pn.titulo)
+}
+
+/* ---------- BLOCO 40: população e movimentos (segmentos, pautas, promessas, protestos) ---------- */
+function popBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.pop) {
+    p.pop = { apoio: {}, mob: {}, pauta: {}, prom: [], pend: null, last: -9, cd: {}, quebradas: 0 }
+    for (const x of SEGMENTOS) { p.pop.apoio[x.id] = 50; p.pop.mob[x.id] = 30; p.pop.pauta[x.id] = x.quer[0] }
+  }
+  return p.pop
+}
+const apoioDe = (id) => { const p = game.poder && game.poder.pop; return p && p.apoio[id] != null ? p.apoio[id] : 50 }
+const popMexe = (id, d) => { const p = popBase(); p.apoio[id] = clamp((p.apoio[id] == null ? 50 : p.apoio[id]) + d, 0, 100) }
+const temaNome = (id) => { const t = TEMAS.find((x) => x.id === id); return t ? t.name : id }
+export const segmentosNow = () => {
+  const p = game.poder && game.poder.pop
+  return SEGMENTOS.map((x) => ({
+    id: x.id, icon: x.icon, nome: x.nome, fala: x.fala,
+    apoio: Math.round(apoioDe(x.id)), mob: Math.round(p ? p.mob[x.id] : 20),
+    pauta: p ? p.pauta[x.id] : x.quer[0], pautaNome: temaNome(p ? p.pauta[x.id] : x.quer[0]),
+    contra: x.contra.map(temaNome),
+  }))
+}
+export const promessasNow = () => ((game.poder && game.poder.pop && game.poder.pop.prom) || []).map((x) => ({ ...x, segNome: SEG_POR_ID[x.seg].nome, temaNome: temaNome(x.tema), resta: x.venc - game.total }))
+export function popAcaoMotivo(id, acao) {
+  if (!game.world || !SEG_POR_ID[id]) return 'Indisponível.'
+  const p = game.poder && game.poder.pop
+  const cd = p && p.cd[acao + ':' + id]
+  if (cd && game.total < cd) return `Espere ${cd - game.total} rodada(s).`
+  return ''
+}
+export function popAgir(id, acao) {
+  if (popAcaoMotivo(id, acao)) return null
+  const a = PAUTA_ACOES.find((x) => x.id === acao)
+  if (!a) return null
+  const p = popBase()
+  popMexe(id, a.apoio)
+  if (a.irrita) for (const o of SEGMENTOS) if (o.id !== id && o.contra.includes(p.pauta[id])) popMexe(o.id, -a.irrita)
+  if (Object.keys(a.fx).length) applyFx({ ...a.fx }, true)
+  p.mob[id] = Math.max(0, p.mob[id] - 8)
+  p.cd[acao + ':' + id] = game.total + a.cd
+  const sg = SEG_POR_ID[id]
+  timelineAdd(sg.icon, acao === 'abracar' ? `Você abraçou a pauta de ${sg.nome.toLowerCase()}: ${temaNome(p.pauta[id]).toLowerCase()}.` : `Conversa com ${sg.nome.toLowerCase()}.`, 'flat')
+  cnt('pop')
+  save()
+  return { txt: acao === 'abracar' ? `${sg.nome} gostou de ouvir a pauta (${temaNome(p.pauta[id]).toLowerCase()}).` : `${sg.nome} se sentiu ouvido.` }
+}
+// lei por tema aprovada: agrada quem quer o tema, irrita quem é contra, e cumpre promessas
+function popLei(temaId, ousId) {
+  const p = popBase()
+  for (const x of SEGMENTOS) {
+    if (x.quer.includes(temaId)) popMexe(x.id, 5 + 2 * ousId + (p.pauta[x.id] === temaId ? 4 : 0))
+    if (x.contra.includes(temaId)) popMexe(x.id, -(2 + ousId))
+  }
+  const cumpridas = p.prom.filter((m) => m.tema === temaId)
+  for (const m of cumpridas) {
+    popMexe(m.seg, 8)
+    applyFx({ img: 0.8 }, true)
+    timelineAdd('✅', `Promessa cumprida a ${SEG_POR_ID[m.seg].nome.toLowerCase()}: ${temaNome(m.tema).toLowerCase()}.`, 'up')
+    cnt('popprom')
+  }
+  p.prom = p.prom.filter((m) => m.tema !== temaId)
+}
+export const popPendNow = () => {
+  const p = game.poder && game.poder.pop
+  if (!p || !p.pend) return null
+  const sg = SEG_POR_ID[p.pend.seg]
+  if (!sg) return null
+  return { icon: '📢', titulo: `Protesto: ${sg.nome}`, texto: PROTESTOS[p.pend.v % PROTESTOS.length](sg.nome) + ` A pauta é ${temaNome(p.pauta[sg.id]).toLowerCase()}.`, left: p.pend.left, seg: sg.id, ops: opsProtesto(sg) }
+}
+export function popMotivo(op) {
+  const pn = popPendNow()
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.fx && o.fx.cash < 0 && game.stats.cash < -o.fx.cash) return `Sem caixa (${-o.fx.cash}).`
+  return ''
+}
+function popAplicar(p, pn, opId, auto) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === PADRAO_PROTESTO)
+  applyFx({ ...o.fx }, true)
+  popMexe(pn.seg, o.apoio)
+  p.mob[pn.seg] = clamp(p.mob[pn.seg] + o.mob, 0, 100)
+  if (o.prom) p.prom.push({ seg: pn.seg, tema: p.pauta[pn.seg], venc: game.total + 8 })
+  timelineAdd(pn.icon, `${pn.titulo}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}.`, o.id === 'reprimir' ? 'down' : 'flat')
+  p.pend = null
+  p.last = game.total
+  cnt('poppend')
+  return o
+}
+export function popEscolher(op) {
+  if (popMotivo(op)) return null
+  const p = popBase()
+  const pn = popPendNow()
+  const o = popAplicar(p, pn, op, false)
+  save()
+  return { txt: `${pn.titulo}: ${o.name.toLowerCase()}.` }
+}
+function roundPop() {
+  if (!game.world) return
+  const p = popBase() // nasce na primeira rodada; saves antigos ganham sem reiniciar
+  let soma = 0
+  for (const x of SEGMENTOS) {
+    const a = apoioDe(x.id)
+    // sem lei na pauta do segmento, o apoio puxa para baixo; com lei vigente do tema, puxa para cima
+    const vig = lawsActive().map((l) => l.tema)
+    const alvo = (vig.includes(p.pauta[x.id]) ? 56 : x.quer.some((t) => vig.includes(t)) ? 48 : 40) + (hash01(x.id + game.name) - 0.5) * 8
+    p.apoio[x.id] = clamp(a + (alvo - a) * 0.05, 0, 100)
+    // quem está contrariado vai se mobilizando; quem está satisfeito esfria
+    p.mob[x.id] = clamp(p.mob[x.id] + (50 - a) / 6, 0, 100)
+    soma += (a - 50) / 50
+  }
+  applyFx({ pop: clamp(soma / SEGMENTOS.length / 3, -0.3, 0.3) })
+  // pauta nova de vez em quando: o segmento passa a cobrar outro dos seus temas
+  if (R() < 0.06) {
+    const x = SEGMENTOS[Math.floor(R() * SEGMENTOS.length)]
+    p.pauta[x.id] = x.quer[Math.floor(R() * x.quer.length)]
+  }
+  // promessas vencidas viram cobrança
+  for (const m of p.prom.filter((q) => q.venc < game.total)) {
+    popMexe(m.seg, -20)
+    p.mob[m.seg] = clamp(p.mob[m.seg] + 25, 0, 100)
+    applyFx({ img: -1.5 }, true)
+    p.quebradas++
+    timelineAdd('💔', `Promessa quebrada a ${SEG_POR_ID[m.seg].nome.toLowerCase()}: ${temaNome(m.tema).toLowerCase()}.`, 'down')
+    cnt('popquebra')
+  }
+  p.prom = p.prom.filter((m) => m.venc >= game.total)
+  if (p.pend) {
+    p.pend.left--
+    if (p.pend.left < 0) {
+      const pn = popPendNow()
+      if (pn) popAplicar(p, pn, PADRAO_PROTESTO, true)
+      else p.pend = null
+    }
+    return
+  }
+  if (game.total - p.last < 4) return
+  const quente = SEGMENTOS.filter((x) => p.mob[x.id] >= 65 && apoioDe(x.id) <= 45).sort((a, b) => p.mob[b.id] - p.mob[a.id])[0]
+  if (!quente) return
+  p.pend = { seg: quente.id, v: Math.floor(R() * 3), left: 2 }
+  p.last = game.total
+  const pn = popPendNow()
   if (pn) toast(pn.icon, pn.titulo)
 }
 
@@ -7642,6 +7790,7 @@ export function pendenciasNow() {
   const ob = obraPendNow(); if (ob) dec('obra', ob.d.icon, ob.titulo, ob.left)
   const eu = euPendNow(); if (eu) dec('eu', eu.d.icon, eu.d.titulo, eu.left)
   const ec = ecoPendNow(); if (ec) dec('eco', ec.icon, ec.titulo, ec.left)
+  const pp = popPendNow(); if (pp) dec('pop', pp.icon, pp.titulo, pp.left)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })
   const cv = convitesNow()
   if (cv.length) out.push({ id: 'convites', icon: '✉️', txt: `${cv.length} convite(s) de reunião esperando`, left: 0, tab: 'agenda', tipo: 'acao', n: cv.length })

@@ -2044,3 +2044,91 @@ describe('BLOCO 39 — setores, lobbies, doações e greves', () => {
     expect(v.eco.divida).toBeTruthy()
   })
 })
+
+describe('BLOCO 40 — população e pautas', () => {
+  const inicia = (office = 'prefeito') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 60
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('os segmentos usam temas que existem e têm pauta e contra', async () => {
+    const B = await import('../src/game/bloco40.js')
+    const temas = E.worldTemas().map((t) => t.id)
+    for (const s of B.SEGMENTOS) {
+      expect(s.quer.length, s.id).toBeGreaterThan(1)
+      for (const t of [...s.quer, ...s.contra]) expect(temas, s.id + ':' + t).toContain(t)
+      expect(s.quer.some((t) => s.contra.includes(t))).toBe(false)
+    }
+    expect(B.opsProtesto(B.SEGMENTOS[0]).some((o) => o.id === B.PADRAO_PROTESTO)).toBe(true)
+  })
+  it('lei por tema agrada quem quer e irrita quem é contra', () => {
+    inicia()
+    rodada()
+    for (let i = 0; i < 60 && !E.lawsActive().some((l) => l.tema === 'social'); i++) {
+      E.game.world.lawUsed = false
+      E.game.world.lawN = 0
+      E.game.stats.cash = 60
+      E.game.phase = 'actions'
+      E.proposeLaw('social', 1)
+    }
+    expect(E.lawsActive().some((l) => l.tema === 'social')).toBe(true)
+    const s = Object.fromEntries(E.segmentosNow().map((x) => [x.id, x.apoio]))
+    expect(s.trabalhadores).toBeGreaterThan(50)
+    expect(s.classe_media).toBeLessThan(50)
+  })
+  it('abraçar a pauta sobe o apoio e irrita quem é contra', () => {
+    inicia()
+    rodada()
+    const antes = Object.fromEntries(E.segmentosNow().map((x) => [x.id, x.apoio]))
+    const pauta = E.segmentosNow().find((x) => x.id === 'jovens').pauta
+    expect(E.popAgir('jovens', 'abracar')).toBeTruthy()
+    const dep = Object.fromEntries(E.segmentosNow().map((x) => [x.id, x.apoio]))
+    expect(dep.jovens).toBeGreaterThan(antes.jovens)
+    expect(E.popAcaoMotivo('jovens', 'abracar')).toMatch(/Espere/)
+    expect(typeof pauta).toBe('string')
+  })
+  it('segmento contrariado se mobiliza e leva ao protesto, que vence sozinho', () => {
+    inicia()
+    rodada()
+    const p = E.game.poder.pop
+    p.apoio.periferia = 10
+    p.mob.periferia = 90
+    p.last = -9
+    rodada()
+    expect(E.popPendNow()).toBeTruthy()
+    expect(E.pendenciasNow().some((x) => x.id === 'pop')).toBe(true)
+    for (let i = 0; i < 4; i++) rodada()
+    expect(E.popPendNow()).toBeNull()
+  })
+  it('prometer cria a promessa; cumprir com lei do tema paga, deixar vencer cobra', () => {
+    inicia()
+    rodada()
+    const p = E.game.poder.pop
+    p.pend = { seg: 'idosos', v: 0, left: 2 }
+    expect(E.popEscolher('prometer')).toBeTruthy()
+    expect(E.promessasNow().length).toBe(1)
+    const tema = E.promessasNow()[0].tema
+    const a = E.segmentosNow().find((x) => x.id === 'idosos').apoio
+    p.prom[0].venc = E.game.total - 1
+    rodada()
+    expect(E.promessasNow().length).toBe(0)
+    expect(p.quebradas).toBe(1)
+    expect(E.segmentosNow().find((x) => x.id === 'idosos').apoio).toBeLessThan(a)
+    expect(typeof tema).toBe('string')
+  })
+  it('o estado sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(Object.keys(v.pop.apoio).length).toBeGreaterThan(5)
+  })
+})
