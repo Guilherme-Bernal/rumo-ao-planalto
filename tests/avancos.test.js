@@ -2966,3 +2966,134 @@ describe('BLOCO 45D — QG de campanha', () => {
     }
   })
 })
+
+describe('BLOCO 45E — corrupção sistêmica', () => {
+  const inicia = (office = 'governador') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 80
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é coerente', async () => {
+    const B = await import('../src/game/bloco45e.js')
+    for (const c of B.CASOS_CR) {
+      expect(c.ops.find((o) => o.id === B.PADRAO_CR), c.id).toBeTruthy()
+      expect(['exec', 'leg', 'todos']).toContain(c.quem)
+    }
+    expect(B.ACOES_CR.filter((a) => a.tipo === 'esquema').every((a) => a.dirty)).toBe(true)
+    expect(B.OP_FASES.length).toBe(3)
+  })
+  it('executivo e legislador veem ações diferentes', () => {
+    inicia('governador')
+    rodada()
+    expect(E.crAcoesNow().some((a) => a.id === 'controladoria')).toBe(true)
+    expect(E.crAcoesNow().some((a) => a.id === 'rachadinha')).toBe(false)
+    inicia('dep_federal')
+    rodada()
+    expect(E.crAcoesNow().some((a) => a.id === 'rachadinha')).toBe(true)
+    expect(E.crAcaoMotivo('controladoria')).toMatch(/Indisponível/)
+  })
+  it('atalho aumenta o esquema, conta como sujo e rende o que promete', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.cr
+    const d = E.game.dirty
+    const cong = E.game.stats.cong
+    const antes = i.m.esquema
+    expect(E.crAcaoAgir('emendas')).toBeTruthy()
+    expect(i.m.esquema).toBe(antes + 14)
+    expect(E.game.dirty).toBe(d + 1)
+    expect(E.game.stats.cong).toBeGreaterThan(cong)
+    expect(E.crAcaoMotivo('emendas')).toMatch(/Espere/)
+  })
+  it('controle reduz o esquema e fortalece os órgãos', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.cr
+    i.m.esquema = 40
+    i.m.integr = 40
+    E.crAcaoAgir('controladoria')
+    expect(i.m.esquema).toBe(34)
+    expect(i.m.integr).toBe(52)
+  })
+  it('caso pendente é decidido e padrão resolve sozinho', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.cr
+    i.pend = { id: 'tentacao', left: 2 }
+    const cash = E.game.stats.cash
+    expect(E.crEscolher('aceitar')).toBeTruthy()
+    expect(E.game.stats.cash).toBeGreaterThan(cash)
+    expect(E.crPendNow()).toBeNull()
+    i.pend = { id: 'delacao', left: 0 }
+    i.last = E.game.total
+    rodada()
+    rodada()
+    expect(E.crPendNow()).toBeNull()
+    expect(i.casos).toBe(2)
+  })
+  it('casos de legislador só aparecem para legisladores', () => {
+    inicia('governador')
+    rodada()
+    const B = E.game.poder.cr
+    expect(B).toBeTruthy()
+    inicia('dep_federal')
+    rodada()
+    E.game.poder.cr.pend = { id: 'rachadinha_cs', left: 2 }
+    expect(E.crPendNow().ops.length).toBe(3)
+  })
+  it('a operação anda por fases, aceita respostas e termina em veredito coerente', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.cr
+    i.op = { fase: 1, left: 2, agiu: false, colab: false, forca: 70 }
+    expect(E.crOpNow().n).toBe(1)
+    expect(E.crOpResp('defesa')).toBeTruthy()
+    expect(i.op.forca).toBeLessThan(70)
+    expect(E.crOpRespMotivo('defesa')).toMatch(/já respondeu/)
+    expect(E.crOpResp('colaborar')).toBeNull()
+    E.game.heat = 0
+    rodada()
+    expect(E.crOpRespMotivo('colaborar')).toBe('')
+    E.crOpResp('colaborar')
+    rodada()
+    expect(i.op.fase).toBe(2)
+    i.op.fase = 3
+    i.op.left = 1
+    E.game.stats.pop = 55
+    rodada()
+    expect(i.op).toBeNull()
+    expect(i.absolv + i.condenados).toBe(1)
+  })
+  it('condenação sem colaboração abre processo de afastamento', () => {
+    let abriu = 0
+    for (let k = 0; k < 30 && !abriu; k++) {
+      inicia('presidente')
+      rodada()
+      const i = E.game.poder.cr
+      i.op = { fase: 3, left: 1, agiu: false, colab: false, forca: 100 }
+      i.m.blind = 0
+      E.game.poder.inst = E.game.poder.inst || undefined
+      rodada()
+      if (i.condenados) { expect(E.procNow() || E.game.poder.inst.proc).toBeTruthy(); abriu++ }
+    }
+    expect(abriu).toBe(1)
+  })
+  it('o estado sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    E.crAcaoAgir('transparencia')
+    E.game.poder.cr.op = { fase: 2, left: 1, agiu: false, colab: true, forca: 55 }
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.cr.acoes).toBe(1)
+    expect(v.cr.op.colab).toBe(true)
+  })
+})

@@ -8,6 +8,7 @@ import SecPop from './SecPop.vue'
 import SecCrise from './SecCrise.vue'
 import SecInst from './SecInst.vue'
 import SecSeg from './SecSeg.vue'
+import SecCorrup from './SecCorrup.vue'
 import SecMundo24 from './SecMundo24.vue'
 import { game, ptsOf, STATS, officeInfo, worldPartners, worldWars, worldNuc, worldStances, diploActions, defActions, fedDefs, fedActions, isPresident, canDiplo, worldReady, diplo, defAct, nucInvest, fedAct, diploChance, askChance } from '../../game/engine'
 
@@ -142,6 +143,7 @@ const why = computed(() => (game.phase === 'actions' ? (w.value.pts > 0 ? '' : '
     <SecCrise />
     <SecInst />
     <SecSeg />
+    <SecCorrup />
   </div>
 </template>
 

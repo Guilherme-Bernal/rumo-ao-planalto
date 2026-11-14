@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { MET_CR, PADRAO_CR, ACOES_CR, ACAO_CR_POR_ID, CASOS_CR, CASO_CR_POR_ID, OP_FASES, OP_FASE_RODADAS, OP_RESP, OP_CD_RODADAS } from './bloco45e'
 import { DIAS_CAMP, M_CAMP_INI, CAMP_BONUS_MAX, MARQUETEIROS, MARQUETEIRO_CUSTO, AGENDA_CAMP, AGENDA_POR_ID, TV_EST, TV_DIAS, TV_CUSTO, TEMPO_TV_BASE, FINANC, FIN_POR_ID, PADRAO_CAMP, CASOS_CAMP, CASO_CAMP_POR_ID, PROB_CASO_DIA } from './bloco45d'
 import { PADRAO_GC, MET_SV, SAUDE_MET, EDU_MET, ACOES_SV, ACAO_SV_POR_ID, EMENDAS_SV, CASOS_SV, CASO_SV_POR_ID } from './bloco45c'
 import { GRUPOS_SG, FORCA_NOME_SG, OPS_SG, OP_POR_ID_SG, REFORMA_SG, EMENDA_SG, CASOS_SG, CASO_SG_POR_ID, PADRAO_SG, FORNECEDORES_SG, FORNECEDOR_POR_ID_SG, MODALIDADES_SG, MAX_CONTRATOS_SG, ATRASO_SG, EMBARGO_SG, PD_SG, PD_POR_ID_SG, PD_PASSOS_SG, PD_CUSTO_SG, ACORDOS_SG, ACORDO_POR_ID_SG, MAX_ACORDOS_SG } from './bloco45b'
@@ -4328,6 +4329,7 @@ export function roundAvancos() {
   roundInst()
   roundSeg()
   roundSv()
+  roundCr()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -6496,6 +6498,173 @@ export function campFin(id) {
   cnt('campacao')
   save()
   return { txt: `${f.nome}: +${f.cash} de caixa.` }
+}
+
+/* ---------- BLOCO 45E: corrupção sistêmica ---------- */
+function crBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.cr) p.cr = { m: Object.fromEntries(Object.entries(MET_CR).map(([k, v]) => [k, v.ini])), pend: null, last: -9, cd: {}, acoes: 0, casos: 0, op: null, lastOp: -99, ops: 0, absolv: 0, condenados: 0 }
+  return p.cr
+}
+const crNow = () => (game.poder && game.poder.cr) || null
+const crQuem = (q) => q === 'todos' || (q === 'exec') === isExec()
+export const crView = () => {
+  const i = crNow()
+  return Object.entries(MET_CR).map(([k, d]) => ({ id: k, ...d, v: Math.round(i ? i.m[k] : d.ini) }))
+}
+export const crAcoesNow = () => ACOES_CR.filter((a) => crQuem(a.quem))
+export function crAcaoMotivo(id) {
+  const a = ACAO_CR_POR_ID[id]
+  if (!a || !game.world || !crQuem(a.quem)) return 'Indisponível.'
+  const i = crNow()
+  if (i && i.cd[id] && game.total < i.cd[id]) return `Espere ${i.cd[id] - game.total} rodada(s).`
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function crAcaoAgir(id) {
+  if (crAcaoMotivo(id)) return null
+  const i = crBase()
+  const a = ACAO_CR_POR_ID[id]
+  applyFx({ ...a.fx, cash: (a.fx.cash || 0) - (a.cash || 0) }, true)
+  for (const [k, v] of Object.entries(a.m)) i.m[k] = clamp(i.m[k] + v)
+  if (a.dirty) { game.dirty++; game.termDirty++ }
+  if (a.heat) game.heat = clamp(game.heat + a.heat)
+  i.cd[id] = game.total + a.cd
+  i.acoes++
+  timelineAdd(a.icon, `${a.nome}.`, a.dirty ? 'down' : 'up')
+  cnt('cracao')
+  save()
+  return { txt: `${a.nome}: feito.` }
+}
+export const crPendNow = () => gcView(crNow(), CASO_CR_POR_ID, {})
+export const crMotivo = (op) => gcMotivo(crPendNow(), op)
+export function crEscolher(op) {
+  if (crMotivo(op)) return null
+  const i = crBase()
+  const { o, ok, r } = gcAplicar(i, crPendNow(), op, false, 'cr', i.m)
+  save()
+  return { ok, txt: o.id === PADRAO_CR ? 'Você esperou e o caso seguiu.' : r.t }
+}
+export function crOpNow() {
+  const i = crNow()
+  if (!i || !i.op) return null
+  const o = i.op
+  return { fase: OP_FASES[o.fase - 1], n: o.fase, faltam: o.left, forca: Math.round(o.forca), agiu: o.agiu, colab: o.colab, chance: Math.round(clamp(0.9 - o.forca / 110 + (i.m.blind - 50) / 300, 0.05, 0.92) * 100), resp: OP_RESP }
+}
+export function crOpRespMotivo(id) {
+  const o = crNow() && crNow().op
+  const r = OP_RESP.find((x) => x.id === id)
+  if (!o || !r) return 'Indisponível.'
+  if (o.agiu) return 'Você já respondeu nesta rodada.'
+  if (r.uma && o.colab) return 'Você já colaborou.'
+  if (r.cash && game.stats.cash < r.cash) return `Sem caixa (${r.cash}).`
+  return ''
+}
+export function crOpResp(id) {
+  if (crOpRespMotivo(id)) return null
+  const i = crBase()
+  const o = i.op
+  const r = OP_RESP.find((x) => x.id === id)
+  let df = r.forca
+  let txt = `${r.nome}: operação enfraquece.`
+  if (r.forca === 'narrativa') df = game.stats.pop >= 60 ? -8 : game.stats.pop >= 45 ? -5 : -3
+  if (r.forca === 'blindar') {
+    game.dirty++
+    game.termDirty++
+    if (R() < clamp(i.m.blind / 100, 0.1, 0.85)) {
+      df = -12
+      i.m.blind = clamp(i.m.blind - 6)
+      applyFx({ cong: 0.3 }, true)
+    } else {
+      df = 8
+      game.heat = clamp(game.heat + 6)
+      applyFx({ img: -3 }, true)
+      txt = 'A blindagem falhou e a operação ganhou força.'
+    }
+  }
+  applyFx({ ...(r.fx || {}), cash: -(r.cash || 0) }, true)
+  o.forca = clamp(o.forca + df)
+  o.agiu = true
+  if (r.uma) o.colab = true
+  timelineAdd(r.icon, `Operação: ${r.nome.toLowerCase()}.`, df < 0 ? 'up' : 'down')
+  cnt('cracao')
+  save()
+  return { txt }
+}
+function crOpAbrir(i) {
+  i.op = { fase: 1, left: OP_FASE_RODADAS, agiu: false, colab: false, forca: clamp(i.m.esquema * 0.8 + (i.m.integr - 50) * 0.4, 20, 90) }
+  i.ops++
+  timelineAdd('🚨', `Uma operação de combate à corrupção chega ao círculo de ${game.name}.`, 'down')
+  toast('🚨', 'Uma grande operação foi deflagrada.')
+  pushPosts(3, 'down', 'Operacao')
+  cnt('crop')
+}
+function crOpVeredito(i) {
+  const o = i.op
+  i.op = null
+  i.lastOp = game.total
+  const pAbs = clamp(0.9 - o.forca / 110 + (i.m.blind - 50) / 300, 0.05, 0.92)
+  if (R() < pAbs) {
+    applyFx({ img: o.forca < 50 ? 1.2 : 0.2 }, true)
+    i.m.esquema = clamp(i.m.esquema - 25)
+    game.heat = clamp(game.heat - 15)
+    i.absolv++
+    timelineAdd('⚖️', `${game.name} é absolvido(a) no caso da operação.`, 'up')
+    toast('⚖️', 'Você foi absolvido(a).')
+    cnt('cropok')
+    return
+  }
+  applyFx(o.colab ? { img: -3, pop: -1.5, cong: -2 } : { img: -6, pop: -3, cong: -3 }, true)
+  i.m.esquema = clamp(i.m.esquema - 20)
+  game.heat = clamp(game.heat - 10)
+  i.condenados++
+  timelineAdd('⛓️', `${game.name} é denunciado(a) e a Justiça aceita a acusação.`, 'down')
+  toast('⛓️', 'A Justiça aceitou a denúncia.')
+  cnt('cropruim')
+  const inst = instBase()
+  if (!o.colab && !inst.proc && !inst.cai) procAbrir(inst)
+}
+function roundCr() {
+  if (!game.world) return
+  const i = crBase()
+  const m = i.m
+  const inst = instNow()
+  m.esquema = clamp(m.esquema + (clamp(10 + game.termDirty * 6 + game.dirty * 1.5, 5, 85) - m.esquema) * 0.04)
+  m.integr = clamp(m.integr + (clamp(40 + ((inst ? inst.jud : 50) - 50) * 0.3, 20, 70) - m.integr) * 0.03)
+  m.transp = clamp(m.transp + (40 - m.transp) * 0.03)
+  m.blind = clamp(m.blind + (clamp(game.stats.cong * 0.7 - 5, 10, 80) - m.blind) * 0.04)
+  if (m.esquema > 60) applyFx({ img: -(m.esquema - 60) * 0.02 }, true)
+  if (m.esquema >= 40) game.heat = clamp(game.heat + (m.esquema - 40) * 0.04)
+  if (i.op) {
+    const o = i.op
+    o.agiu = false
+    o.forca = clamp(o.forca + game.heat / 60 - 0.3)
+    o.left--
+    if (o.left <= 0) {
+      if (o.fase < 3) { o.fase++; o.left = OP_FASE_RODADAS } else crOpVeredito(i)
+    }
+    return
+  }
+  if (i.pend) {
+    i.pend.left--
+    if (i.pend.left < 0) {
+      const pn = crPendNow()
+      if (pn) gcAplicar(i, pn, PADRAO_CR, true, 'cr', m)
+      else i.pend = null
+    }
+    return
+  }
+  if (game.total >= 8 && game.total - i.lastOp >= OP_CD_RODADAS && m.esquema >= 45 && m.integr >= 40 && game.heat >= 25 && R() < 0.12) return crOpAbrir(i)
+  if (game.total < 5 || game.total - i.last < 6) return
+  for (const c of CASOS_CR) {
+    if (!crQuem(c.quem) || !(c.when ? c.when(m, i) : true) || R() >= c.prob) continue
+    i.pend = { id: c.id, left: 2 }
+    i.last = game.total
+    toast(c.icon, c.nome)
+    cnt('crcaso')
+    break
+  }
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -9281,6 +9450,8 @@ export function pendenciasNow() {
   const cr = crisePendNow(); if (cr) dec('crise', cr.icon, cr.titulo, cr.left)
   const es = escandaloPendNow(); if (es) dec('escandalo', es.icon, es.titulo, es.left)
   const cso = casoPendNow(); if (cso) dec('caso', cso.icon, cso.titulo, cso.left)
+  const crp = crPendNow(); if (crp) dec('crpend', crp.icon, crp.titulo, crp.left)
+  const cop = crOpNow(); if (cop) dec('crop', '🚨', `Operação: ${cop.fase.nome}`, cop.faltam)
   const svp = svPendNow(); if (svp) dec('svpend', svp.icon, svp.titulo, svp.left)
   const sgp = segPendNow(); if (sgp) dec('segpend', sgp.icon, sgp.titulo, sgp.left)
   const pcs = procNow(); if (pcs) dec('processo', '🔨', `${pcs.nome}: ${pcs.fase.nome}`, pcs.faltam)
