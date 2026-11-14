@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import Calendar from './Calendar.vue'
 import Recap from './Recap.vue'
 import Eleicao27 from './Eleicao27.vue'
+import CampanhaQG from './CampanhaQG.vue'
 import Debate27 from './Debate27.vue'
 import MiniPlenario from '../minigames/MiniPlenario.vue'
 import MiniComicio from '../minigames/MiniComicio.vue'
@@ -213,6 +214,7 @@ const planIds = ref([])
       </div>
       <BrazilMap :home="game.region.mapId" :colors="colors" />
       <p class="legend">Estimativa por estado (verde forte, vermelho fraco).</p>
+      <CampanhaQG />
       <Eleicao27 />
       <div class="choices">
         <button v-for="c in CAMPAIGNS" :key="c.id" class="act" :disabled="game.stats.cash < campaignCost(c) || (needsTicket() && !game.election.ticketDone)" @click="chooseCampaign(c.id)">
@@ -239,6 +241,7 @@ const planIds = ref([])
         <div v-for="s in game.election.support" :key="s.id" class="muted">{{ s.v > 0 ? '✅ +1 ponto' : '⚠️ −1 ponto' }}: {{ s.label }}</div>
       </div>
       <BrazilMap :home="game.region.mapId" :colors="colors" />
+      <CampanhaQG />
       <Eleicao27 />
       <div class="choices">
         <button v-for="o in RUNOFF" :key="o.id" class="act" :disabled="game.stats.cash < o.cost" @click="chooseRunoff(o.id)">

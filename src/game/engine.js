@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { DIAS_CAMP, M_CAMP_INI, CAMP_BONUS_MAX, MARQUETEIROS, MARQUETEIRO_CUSTO, AGENDA_CAMP, AGENDA_POR_ID, TV_EST, TV_DIAS, TV_CUSTO, TEMPO_TV_BASE, FINANC, FIN_POR_ID, PADRAO_CAMP, CASOS_CAMP, CASO_CAMP_POR_ID, PROB_CASO_DIA } from './bloco45d'
 import { PADRAO_GC, MET_SV, SAUDE_MET, EDU_MET, ACOES_SV, ACAO_SV_POR_ID, EMENDAS_SV, CASOS_SV, CASO_SV_POR_ID } from './bloco45c'
 import { GRUPOS_SG, FORCA_NOME_SG, OPS_SG, OP_POR_ID_SG, REFORMA_SG, EMENDA_SG, CASOS_SG, CASO_SG_POR_ID, PADRAO_SG, FORNECEDORES_SG, FORNECEDOR_POR_ID_SG, MODALIDADES_SG, MAX_CONTRATOS_SG, ATRASO_SG, EMBARGO_SG, PD_SG, PD_POR_ID_SG, PD_PASSOS_SG, PD_CUSTO_SG, ACORDOS_SG, ACORDO_POR_ID_SG, MAX_ACORDOS_SG } from './bloco45b'
 import { CASOS, CASO_POR_ID, PADRAO_CASO, FASES, FASE_RODADAS, PROC_ACOES, PROC_NOME } from './bloco45'
@@ -1391,7 +1392,7 @@ export function baseScore() {
   const sphere = clamp((game.fame[electionSphere()] - s.pop) * 0.12, -3, 3)
   const ideas = (game.ideas.force - 50) * 0.025
   const ticket = game.election?.ticketBonus || 0
-  return coalVoto() + famVoto() + aliancaBonus() + ticket + tv + focoBonus() - boatosDano() + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
+  return coalVoto() + famVoto() + aliancaBonus() + ticket + tv + focoBonus() - boatosDano() + campBonus() + sphere + ideas + 0.34 * s.pop + 0.16 * s.img + 0.14 * s.eco + 0.1 * s.cong + 0.08 * s.soc + 0.06 * s.seg + game.region.bonus * weight + party + plan
 }
 
 const toShare = (score, rival) => clamp(50 + (score - rival) * 0.9, 30, 70)
@@ -1587,6 +1588,7 @@ export function chooseCampaign(id) {
   const opt = CAMPAIGNS.find((c) => c.id === id)
   if (!opt || game.stats.cash < campaignCost(opt)) return
   if (needsTicket() && !(game.election && game.election.ticketDone)) return
+  campAuto()
   game.delta = {}
   applyFx({ cash: -campaignCost(opt) })
   const e = game.election
@@ -1598,6 +1600,7 @@ export function chooseCampaign(id) {
     const theirs = Math.round((100 - share) * 0.55 * 10) / 10
     if (mine > 50) return finishElection({ share: mine, h2h: share, won: true, campaign: opt.name, outright: true })
     if (share < 38) return finishElection({ share: mine, h2h: share, won: false, campaign: opt.name, out: true })
+    campRunoff()
     e.round = 2
     e.first = { mine, theirs, campaign: opt.name }
     const useB = !!e.labelB && R() < 0.3
@@ -1624,6 +1627,7 @@ export function chooseRunoff(id) {
   const e = game.election
   const opt = RUNOFF.find((o) => o.id === id)
   if (!e || e.round !== 2 || !opt || game.stats.cash < opt.cost) return
+  campAuto()
   game.delta = {}
   if (opt.cost) applyFx({ cash: -opt.cost })
   let bonus = runoffBonus(id)
@@ -6313,6 +6317,185 @@ function roundSv() {
   if (game.total < 5 || game.total - i.last < 6) return
   const c = gcSorteia(i, CASOS_SV, officeInfo().sphere, i.m, 'sv')
   if (c) toast(c.icon, c.nome)
+}
+
+/* ---------- BLOCO 45D: QG de campanha ---------- */
+const campAtiva = () => !!game.election && ['campaign', 'runoff'].includes(game.phase)
+const campNow = () => (game.election && game.election.camp) || null
+function campBase() {
+  const e = game.election
+  if (!e) return null
+  if (!e.camp) e.camp = { dias: DIAS_CAMP.turno1, m: { ...M_CAMP_INI }, pend: null, last: 0, casos: 0, mark: null, tvOk: false, usos: {}, acoes: 0 }
+  return e.camp
+}
+function campBonus() {
+  const c = campNow()
+  if (!c) return 0
+  const raw = (c.m.embalo - 50) * 0.08 + (c.m.org - 50) * 0.04 - Math.max(0, c.m.risco - 40) * 0.05
+  return clamp(raw, -CAMP_BONUS_MAX, CAMP_BONUS_MAX)
+}
+function campRunoff() {
+  const c = campNow()
+  if (!c) return
+  c.dias = DIAS_CAMP.turno2
+  c.pend = null
+  c.tvOk = false
+  c.usos = {}
+  c.m.embalo = 50 + (c.m.embalo - 50) * 0.4
+  c.m.org = 50 + (c.m.org - 50) * 0.7
+}
+function campAuto() {
+  const c = campNow()
+  if (!c || !c.pend) return
+  const pn = campPendNow()
+  if (pn) gcAplicar(c, pn, PADRAO_CAMP, true, 'camp', c.m)
+  else c.pend = null
+}
+export const campPendNow = () => gcView(campNow(), CASO_CAMP_POR_ID, {})
+export const campMotivoCaso = (op) => gcMotivo(campPendNow(), op)
+export function campEscolher(op) {
+  if (campMotivoCaso(op)) return null
+  const c = campBase()
+  const { o, ok, r } = gcAplicar(c, campPendNow(), op, false, 'camp', c.m)
+  save()
+  return { ok, txt: o.id === PADRAO_CAMP ? 'Você deixou passar e o caso seguiu.' : r.t }
+}
+export function campView() {
+  const c = campNow() || { dias: game.election && game.election.round === 2 ? DIAS_CAMP.turno2 : DIAS_CAMP.turno1, m: { ...M_CAMP_INI }, mark: null, tvOk: false, usos: {} }
+  return { dias: c.dias, m: { embalo: Math.round(c.m.embalo), org: Math.round(c.m.org), risco: Math.round(c.m.risco) }, mark: c.mark, tvOk: c.tvOk, usos: c.usos, bonus: Math.round(campBonus() * 10) / 10, ativa: campAtiva() }
+}
+export const marqueteirosNow = () => MARQUETEIROS
+export const agendaCampNow = () => AGENDA_CAMP
+export const tvEstNow = () => TV_EST
+export const financNow = () => FINANC
+export const tempoTvNow = () => {
+  let n = 0
+  try { n = aliancasNow().length } catch { n = 0 }
+  return Math.round(clamp(TEMPO_TV_BASE * (0.8 + 0.15 * n), 0.8, 1.6) * 100) / 100
+}
+const campMark = () => MARQUETEIROS.find((m) => m.id === (campNow() && campNow().mark)) || null
+function campDia(c, dias) {
+  c.dias -= dias
+  c.acoes++
+  if (c.pend || R() >= PROB_CASO_DIA) return
+  const pool = CASOS_CAMP.filter((x) => x.when(c.m))
+  const tot = pool.reduce((a, x) => a + x.prob, 0)
+  let k = R() * tot
+  const d = pool.find((x) => (k -= x.prob) < 0) || pool[0]
+  if (!d) return
+  c.pend = { id: d.id, left: 0 }
+  cnt('campcaso')
+  toast(d.icon, d.nome)
+}
+function campGuard(extra) {
+  if (!campAtiva()) return 'Disponível durante a campanha.'
+  const c = campNow()
+  if (c && c.pend) return 'Resolva o caso pendente primeiro.'
+  return extra || ''
+}
+export function campMarqueteiroMotivo(id) {
+  const m = MARQUETEIROS.find((x) => x.id === id)
+  if (!m) return 'Indisponível.'
+  const g = campGuard()
+  if (g) return g
+  const c = campNow()
+  if (c && c.mark) return 'Você já tem um marqueteiro.'
+  if (game.stats.cash < MARQUETEIRO_CUSTO) return `Sem caixa (${MARQUETEIRO_CUSTO}).`
+  return ''
+}
+export function campMarqueteiro(id) {
+  if (campMarqueteiroMotivo(id)) return null
+  const c = campBase()
+  const m = MARQUETEIROS.find((x) => x.id === id)
+  applyFx({ cash: -MARQUETEIRO_CUSTO }, true)
+  c.mark = id
+  c.m.risco = clamp(c.m.risco + m.risco)
+  timelineAdd(m.icon, `A campanha contrata: ${m.nome.toLowerCase()}.`, 'flat')
+  save()
+  return { txt: `${m.nome} contratado.` }
+}
+export function campAgendaMotivo(id) {
+  const a = AGENDA_POR_ID[id]
+  if (!a) return 'Indisponível.'
+  const g = campGuard()
+  if (g) return g
+  const c = campNow() || { dias: game.election.round === 2 ? DIAS_CAMP.turno2 : DIAS_CAMP.turno1 }
+  if (c.dias < a.dias) return 'Sem dias de campanha.'
+  if (game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function campAgenda(id) {
+  if (campAgendaMotivo(id)) return null
+  const c = campBase()
+  const a = AGENDA_POR_ID[id]
+  applyFx({ cash: -a.cash }, true)
+  const mk = campMark()
+  let txt
+  if (a.p != null) {
+    const ok = R() < a.p
+    const r = ok ? a.ok : a.bad
+    for (const [k, v] of Object.entries(r.m)) c.m[k] = clamp(c.m[k] + v)
+    txt = r.t
+  } else {
+    for (const [k, v] of Object.entries(a.m)) c.m[k] = clamp(c.m[k] + (a.rua && v > 0 && k === 'embalo' && mk ? v * mk.rua : v))
+    txt = `${a.nome}: feito.`
+  }
+  timelineAdd(a.icon, `Campanha: ${a.nome.toLowerCase()}.`, 'up')
+  cnt('campacao')
+  campDia(c, a.dias)
+  save()
+  return { txt }
+}
+export function campTvMotivo(id) {
+  const t = TV_EST.find((x) => x.id === id)
+  if (!t) return 'Indisponível.'
+  const g = campGuard()
+  if (g) return g
+  const c = campNow()
+  if (c && c.tvOk) return 'O horário eleitoral já foi usado neste turno.'
+  if (c && c.dias < TV_DIAS) return 'Sem dias de campanha.'
+  if (game.stats.cash < TV_CUSTO) return `Sem caixa (${TV_CUSTO}).`
+  return ''
+}
+export function campTv(id) {
+  if (campTvMotivo(id)) return null
+  const c = campBase()
+  const t = TV_EST.find((x) => x.id === id)
+  const mk = campMark()
+  applyFx({ cash: -TV_CUSTO, ...(t.img ? { img: t.img } : {}) }, true)
+  const ganho = Math.round(t.m.embalo * tempoTvNow() * (mk ? mk.tv : 1))
+  c.m.embalo = clamp(c.m.embalo + ganho)
+  c.m.risco = clamp(c.m.risco + t.risco + (mk ? mk.risco * 0.5 : 0))
+  c.tvOk = true
+  timelineAdd(t.icon, `Horário eleitoral: ${t.nome.toLowerCase()} (+${ganho} de embalo).`, 'up')
+  cnt('campacao')
+  campDia(c, TV_DIAS)
+  save()
+  return { txt: `${t.nome}: +${ganho} de embalo.` }
+}
+export function campFinMotivo(id) {
+  const f = FIN_POR_ID[id]
+  if (!f) return 'Indisponível.'
+  const g = campGuard()
+  if (g) return g
+  const c = campNow()
+  if (c && (c.usos[id] || 0) >= f.max) return 'Já usado o máximo neste turno.'
+  return ''
+}
+export function campFin(id) {
+  if (campFinMotivo(id)) return null
+  const c = campBase()
+  const f = FIN_POR_ID[id]
+  applyFx({ cash: f.cash }, false)
+  c.usos[id] = (c.usos[id] || 0) + 1
+  c.m.risco = clamp(c.m.risco + f.risco)
+  for (const [k, v] of Object.entries(f.m || {})) c.m[k] = clamp(c.m[k] + v)
+  if (f.dirty) { game.dirty++; game.termDirty++ }
+  if (id === 'doadores') applyFx({ cong: -0.2 }, true)
+  timelineAdd(f.icon, `Financiamento: ${f.nome.toLowerCase()} (+${f.cash} de caixa).`, f.dirty ? 'down' : 'flat')
+  cnt('campacao')
+  save()
+  return { txt: `${f.nome}: +${f.cash} de caixa.` }
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */

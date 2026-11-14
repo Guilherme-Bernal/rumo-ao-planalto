@@ -2872,3 +2872,97 @@ describe('BLOCO 45C — saúde e educação como sistema', () => {
     expect(v.sv.m.infra).toBeGreaterThan(40)
   })
 })
+
+describe('BLOCO 45D — QG de campanha', () => {
+  const eleicao = (target = 'presidente') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = 'governador'
+    E.game.phase = 'campaign'
+    E.game.stats.cash = 60
+    E.game.election = { rival: 55, target, rivalName: 'Rival Teste', pollNoise: 0, result: null, promises: [], planBonus: 0, round: 1, tvDone: false, tv: 0, ticketBonus: 0, ticketDone: true, boatos: [], foco: { g: {}, est: {} }, aliancas: [] }
+  }
+  it('o catálogo é coerente', async () => {
+    const B = await import('../src/game/bloco45d.js')
+    for (const c of B.CASOS_CAMP) {
+      expect(c.ops.find((o) => o.id === B.PADRAO_CAMP), c.id).toBeTruthy()
+      expect(c.prob).toBeGreaterThan(0)
+    }
+    expect(B.MARQUETEIROS.length).toBe(3)
+    expect(B.FINANC.find((f) => f.id === 'caixa2').dirty).toBe(true)
+  })
+  it('sem ações o bônus de campanha é zero', () => {
+    eleicao()
+    expect(E.campView().bonus).toBe(0)
+    expect(E.campView().dias).toBe(6)
+  })
+  it('agenda gasta dias, cobra e mexe no embalo', () => {
+    eleicao()
+    const c0 = E.game.stats.cash
+    const b0 = E.baseScore()
+    expect(E.campAgenda('comicio')).toBeTruthy()
+    const e = E.game.election.camp
+    if (e.pend) e.pend = null
+    expect(e.dias).toBe(5)
+    expect(E.game.stats.cash).toBeLessThan(c0)
+    expect(E.baseScore()).toBeGreaterThan(b0)
+  })
+  it('marqueteiro só uma vez e a TV rende conforme o perfil', () => {
+    eleicao()
+    expect(E.campMarqueteiro('tradicional')).toBeTruthy()
+    E.game.election.camp.pend = null
+    expect(E.campMarqueteiroMotivo('digital')).toMatch(/já tem/)
+    const antes = E.game.election.camp.m.embalo
+    expect(E.campTv('positiva')).toBeTruthy()
+    E.game.election.camp.pend = null
+    expect(E.game.election.camp.m.embalo).toBeGreaterThan(antes + 4)
+    expect(E.campTvMotivo('positiva')).toMatch(/já foi usado/)
+  })
+  it('propaganda negativa e caixa dois aumentam o risco jurídico', () => {
+    eleicao()
+    E.campTv('negativa')
+    E.game.election.camp.pend = null
+    const r1 = E.game.election.camp.m.risco
+    expect(r1).toBeGreaterThan(10)
+    const d = E.game.dirty
+    expect(E.campFin('caixa2')).toBeTruthy()
+    expect(E.game.dirty).toBe(d + 1)
+    expect(E.game.election.camp.m.risco).toBeGreaterThan(r1 + 20)
+    expect(E.campFinMotivo('caixa2')).toMatch(/máximo/)
+  })
+  it('risco alto derruba a conta das urnas', () => {
+    eleicao()
+    E.campFin('fundo')
+    const c = E.game.election.camp
+    c.pend = null
+    const b0 = E.baseScore()
+    c.m.risco = 90
+    expect(E.baseScore()).toBeLessThan(b0)
+  })
+  it('caso pendente bloqueia a agenda, resolve e a escolha padrão vale ao fechar a campanha', () => {
+    eleicao()
+    E.campAgenda('base')
+    const c = E.game.election.camp
+    c.pend = { id: 'audio', left: 0 }
+    expect(E.campAgendaMotivo('comicio')).toMatch(/caso pendente/)
+    expect(E.campEscolher('pedir')).toBeTruthy()
+    expect(c.pend).toBeNull()
+    c.pend = { id: 'apoio', left: 0 }
+    E.chooseCampaign(0)
+    expect(c.pend).toBeNull()
+    expect(c.casos).toBe(2)
+  })
+  it('o segundo turno renova os dias e esfria o embalo', () => {
+    eleicao()
+    const c = (E.campAgenda('carreata'), E.game.election.camp)
+    c.pend = null
+    c.m.embalo = 90
+    c.dias = 0
+    E.game.stats.pop = 60
+    E.game.stats.img = 60
+    for (let k = 0; k < 6 && E.game.phase === 'campaign'; k++) { E.game.election.rival = 70; E.chooseCampaign(0) }
+    if (E.game.phase === 'runoff') {
+      expect(E.game.election.camp.dias).toBe(4)
+      expect(E.game.election.camp.m.embalo).toBeLessThan(90)
+    }
+  })
+})
