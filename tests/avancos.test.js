@@ -3097,3 +3097,120 @@ describe('BLOCO 45E — corrupção sistêmica', () => {
     expect(v.cr.op.colab).toBe(true)
   })
 })
+
+describe('BLOCO 45F — meio ambiente, clima e Amazônia', () => {
+  const inicia = (office = 'governador') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 80
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é coerente', async () => {
+    const B = await import('../src/game/bloco45f.js')
+    for (const c of B.CASOS_AMB) {
+      expect(c.ops.find((o) => o.id === B.PADRAO_AMB), c.id).toBeTruthy()
+      expect(typeof c.when({ floresta: 0, fisc: 0, clima: 0, agro: 0, intl: 0 })).toBe('boolean')
+    }
+    expect(B.ACOES_AMB.length).toBe(12)
+  })
+  it('as ações mudam conforme a esfera', () => {
+    inicia('prefeito')
+    rodada()
+    const ids = E.ambAcoesNow().map((a) => a.id)
+    expect(ids).toContain('drenagem')
+    expect(ids).not.toContain('conservacao')
+    expect(ids).not.toContain('cop')
+    inicia('presidente')
+    rodada()
+    const f = E.ambAcoesNow().map((a) => a.id)
+    expect(f).toContain('cop')
+    expect(f).not.toContain('drenagem')
+  })
+  it('proteger a floresta custa ao agro e liberar custa à floresta e à imagem lá fora', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.amb
+    const f = i.m.floresta
+    const a = i.m.agro
+    E.ambAcaoAgir('conservacao')
+    expect(i.m.floresta).toBe(f + 8)
+    expect(i.m.agro).toBe(a - 7)
+    const intl = i.m.intl
+    E.ambAcaoAgir('licenciamento')
+    expect(i.m.intl).toBe(intl - 4)
+    expect(E.ambAcaoMotivo('conservacao')).toMatch(/Espere/)
+  })
+  it('mineração entra com caixa e derruba a cobertura', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.amb
+    const c = E.game.stats.cash
+    const f = i.m.floresta
+    E.ambAcaoAgir('mineracao')
+    expect(E.game.stats.cash).toBeGreaterThan(c)
+    expect(i.m.floresta).toBe(f - 8)
+  })
+  it('o fundo internacional exige reputação', () => {
+    inicia('presidente')
+    rodada()
+    E.game.poder.amb.m.intl = 30
+    expect(E.ambAcaoMotivo('fundo')).toMatch(/reputação/)
+    E.game.poder.amb.m.intl = 70
+    expect(E.ambAcaoMotivo('fundo')).toBe('')
+    const c = E.game.stats.cash
+    E.ambAcaoAgir('fundo')
+    expect(E.game.stats.cash).toBeGreaterThan(c)
+  })
+  it('caso de queimadas é decidido e a opção padrão resolve sozinha', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.amb
+    i.pend = { id: 'queimadas', left: 2 }
+    expect(E.ambPendNow().ops.some((o) => o.id === 'forcas')).toBe(true)
+    expect(E.ambEscolher('brigada')).toBeTruthy()
+    expect(E.ambPendNow()).toBeNull()
+    i.pend = { id: 'garimpo', left: 0 }
+    i.last = E.game.total
+    rodada()
+    rodada()
+    expect(E.ambPendNow()).toBeNull()
+    expect(i.casos).toBe(2)
+  })
+  it('prefeito não aciona o Exército e legislador só faz emenda', () => {
+    inicia('prefeito')
+    rodada()
+    E.game.poder.amb.pend = { id: 'queimadas', left: 2 }
+    expect(E.ambPendNow().ops.some((o) => o.id === 'forcas')).toBe(false)
+    inicia('dep_federal')
+    rodada()
+    expect(E.ambAcoesNow().length).toBe(0)
+    expect(E.ambEmenda()).toBeTruthy()
+    expect(E.ambEmendaMotivo()).toMatch(/Espere/)
+  })
+  it('fiscalização fraca derruba a floresta, forte a segura, e reputação lá fora acompanha', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.amb
+    i.m.floresta = 65
+    for (let k = 0; k < 120; k++) { i.m.fisc = 5; E.game.stats.pop = 55; E.game.stats.img = 55; rodada(); i.pend = null; E.game.over = null }
+    const baixo = i.m.floresta
+    for (let k = 0; k < 120; k++) { i.m.fisc = 95; E.game.stats.pop = 55; E.game.stats.img = 55; rodada(); i.pend = null; E.game.over = null }
+    expect(i.m.floresta).toBeGreaterThan(baixo + 10)
+  })
+  it('o estado sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    E.ambAcaoAgir('reflorestar')
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.amb.acoes).toBe(1)
+    expect(v.amb.m.floresta).toBeGreaterThan(65)
+  })
+})

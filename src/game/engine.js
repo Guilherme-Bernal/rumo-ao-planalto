@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { MET_AMB, PADRAO_AMB, ACOES_AMB, ACAO_AMB_POR_ID, CASOS_AMB, CASO_AMB_POR_ID } from './bloco45f'
 import { MET_CR, PADRAO_CR, ACOES_CR, ACAO_CR_POR_ID, CASOS_CR, CASO_CR_POR_ID, OP_FASES, OP_FASE_RODADAS, OP_RESP, OP_CD_RODADAS } from './bloco45e'
 import { DIAS_CAMP, M_CAMP_INI, CAMP_BONUS_MAX, MARQUETEIROS, MARQUETEIRO_CUSTO, AGENDA_CAMP, AGENDA_POR_ID, TV_EST, TV_DIAS, TV_CUSTO, TEMPO_TV_BASE, FINANC, FIN_POR_ID, PADRAO_CAMP, CASOS_CAMP, CASO_CAMP_POR_ID, PROB_CASO_DIA } from './bloco45d'
 import { PADRAO_GC, MET_SV, SAUDE_MET, EDU_MET, ACOES_SV, ACAO_SV_POR_ID, EMENDAS_SV, CASOS_SV, CASO_SV_POR_ID } from './bloco45c'
@@ -4330,6 +4331,7 @@ export function roundAvancos() {
   roundSeg()
   roundSv()
   roundCr()
+  roundAmb()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -6665,6 +6667,97 @@ function roundCr() {
     cnt('crcaso')
     break
   }
+}
+
+/* ---------- BLOCO 45F: meio ambiente, clima e Amazônia ---------- */
+function ambBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.amb) p.amb = { m: Object.fromEntries(Object.entries(MET_AMB).map(([k, v]) => [k, v.ini])), pend: null, last: -9, cd: {}, acoes: 0, casos: 0 }
+  return p.amb
+}
+const ambNow = () => (game.poder && game.poder.amb) || null
+export const ambView = () => {
+  const i = ambNow()
+  return Object.entries(MET_AMB).map(([k, d]) => ({ id: k, ...d, v: Math.round(i ? i.m[k] : d.ini) }))
+}
+export const ambAcoesNow = () => (isExec() ? ACOES_AMB.filter((a) => a.esf.includes(officeInfo().sphere)) : [])
+export function ambAcaoMotivo(id) {
+  const a = ACAO_AMB_POR_ID[id]
+  if (!a || !isExec() || !game.world || !a.esf.includes(officeInfo().sphere)) return 'Indisponível.'
+  const i = ambNow()
+  if (i && i.cd[id] && game.total < i.cd[id]) return `Espere ${i.cd[id] - game.total} rodada(s).`
+  if (a.needIntl && (!i || i.m.intl < a.needIntl)) return `Exige reputação ambiental de ${a.needIntl}.`
+  if (a.cash && game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function ambAcaoAgir(id) {
+  if (ambAcaoMotivo(id)) return null
+  const i = ambBase()
+  const a = ACAO_AMB_POR_ID[id]
+  applyFx({ ...a.fx, cash: (a.fx.cash || 0) - (a.cash || 0) }, true)
+  for (const [k, v] of Object.entries(a.m)) i.m[k] = clamp(i.m[k] + v)
+  if (id === 'cop' || id === 'fundo') { shiftRel('onu', 2); shiftRel('ue', 2) }
+  i.cd[id] = game.total + a.cd
+  i.acoes++
+  timelineAdd(a.icon, `${a.nome}.`, a.m.floresta < 0 ? 'down' : 'up')
+  cnt('ambacao')
+  save()
+  return { txt: `${a.nome}: feito.` }
+}
+export function ambEmendaMotivo() {
+  if (isExec() || !game.world) return 'Indisponível.'
+  const i = ambNow()
+  if (i && i.cd.emenda && game.total < i.cd.emenda) return `Espere ${i.cd.emenda - game.total} rodada(s).`
+  if (game.stats.cash < 1) return 'Sem caixa (1).'
+  return ''
+}
+export function ambEmenda() {
+  if (ambEmendaMotivo()) return null
+  const i = ambBase()
+  applyFx({ cash: -1, pop: 0.3, img: 0.2 }, true)
+  i.m.clima = clamp(i.m.clima + 2)
+  i.cd.emenda = game.total + 4
+  timelineAdd('🌳', 'Emenda para áreas verdes e defesa civil na sua base.', 'up')
+  save()
+  return { txt: 'A emenda foi destinada.' }
+}
+export const ambPendNow = () => gcView(ambNow(), CASO_AMB_POR_ID, {})
+export const ambMotivo = (op) => gcMotivo(ambPendNow(), op)
+export function ambEscolher(op) {
+  if (ambMotivo(op)) return null
+  const i = ambBase()
+  const { o, ok, r } = gcAplicar(i, ambPendNow(), op, false, 'amb', i.m)
+  save()
+  return { ok, txt: o.id === PADRAO_AMB ? 'Você esperou e o caso seguiu.' : r.t }
+}
+function roundAmb() {
+  if (!game.world) return
+  const i = ambBase()
+  const m = i.m
+  m.fisc = clamp(m.fisc + (40 - m.fisc) * 0.03)
+  m.clima = clamp(m.clima + (40 - m.clima) * 0.03)
+  m.agro = clamp(m.agro + (50 - m.agro) * 0.03)
+  m.floresta = clamp(m.floresta + (clamp(75 - (60 - m.fisc) * 0.5 - (m.agro - 50) * 0.3, 15, 85) - m.floresta) * 0.025 + (R() - 0.5) * 0.4)
+  m.intl = clamp(m.intl + (clamp(40 + (m.floresta - 50) * 0.5, 15, 80) - m.intl) * 0.04)
+  if (!isExec()) return
+  if (m.floresta < 40) applyFx({ img: -(40 - m.floresta) * 0.02 }, true)
+  else if (m.floresta > 65) applyFx({ img: (m.floresta - 65) * 0.01 }, true)
+  if (m.intl < 35) { shiftRel('ue', -0.4); shiftRel('onu', -0.2) } else if (m.intl > 65) shiftRel('ue', 0.3)
+  if (m.agro < 35) applyFx({ eco: -(35 - m.agro) * 0.015 }, true)
+  else if (m.agro > 65) applyFx({ eco: (m.agro - 65) * 0.01 }, true)
+  if (i.pend) {
+    i.pend.left--
+    if (i.pend.left < 0) {
+      const pn = ambPendNow()
+      if (pn) gcAplicar(i, pn, PADRAO_AMB, true, 'amb', m)
+      else i.pend = null
+    }
+    return
+  }
+  if (game.total < 5 || game.total - i.last < 6) return
+  const c = gcSorteia(i, CASOS_AMB, officeInfo().sphere, m, 'amb')
+  if (c) toast(c.icon, c.nome)
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -9450,6 +9543,7 @@ export function pendenciasNow() {
   const cr = crisePendNow(); if (cr) dec('crise', cr.icon, cr.titulo, cr.left)
   const es = escandaloPendNow(); if (es) dec('escandalo', es.icon, es.titulo, es.left)
   const cso = casoPendNow(); if (cso) dec('caso', cso.icon, cso.titulo, cso.left)
+  const abp = ambPendNow(); if (abp) dec('ambpend', abp.icon, abp.titulo, abp.left)
   const crp = crPendNow(); if (crp) dec('crpend', crp.icon, crp.titulo, crp.left)
   const cop = crOpNow(); if (cop) dec('crop', '🚨', `Operação: ${cop.fase.nome}`, cop.faltam)
   const svp = svPendNow(); if (svp) dec('svpend', svp.icon, svp.titulo, svp.left)
