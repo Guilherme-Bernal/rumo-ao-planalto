@@ -23,6 +23,7 @@ import { FIGURAS, EVENTOS } from './vida'
 import { TEMAS_DEBATE, DEB_ABORDAGENS, DEB_FALAS, GRUPOS, BOATOS_FALSOS, BOATOS_REAIS, BOATO_ACOES } from './eleicao27'
 import { PERFIS_CONJUGE, FAM_ACOES, FAM_EVENTOS, FIG_ACOES, SUC_PERFIS, SUC_ACOES } from './pessoas'
 import { randomLook, hairOk } from './look'
+import { PADRAO_GC, MET_SV, SAUDE_MET, EDU_MET, ACOES_SV, ACAO_SV_POR_ID, EMENDAS_SV, CASOS_SV, CASO_SV_POR_ID } from './bloco45c'
 import { GRUPOS_SG, FORCA_NOME_SG, OPS_SG, OP_POR_ID_SG, REFORMA_SG, EMENDA_SG, CASOS_SG, CASO_SG_POR_ID, PADRAO_SG, FORNECEDORES_SG, FORNECEDOR_POR_ID_SG, MODALIDADES_SG, MAX_CONTRATOS_SG, ATRASO_SG, EMBARGO_SG, PD_SG, PD_POR_ID_SG, PD_PASSOS_SG, PD_CUSTO_SG, ACORDOS_SG, ACORDO_POR_ID_SG, MAX_ACORDOS_SG } from './bloco45b'
 import { CASOS, CASO_POR_ID, PADRAO_CASO, FASES, FASE_RODADAS, PROC_ACOES, PROC_NOME } from './bloco45'
 import { FORMATOS_EST, EQUIP_EST, LINHAS_EST, MANCHETES_EST, POSTURAS_EST, ESC_EST_POR_ID, ESCANDALOS_EST, opsEscandalo, PADRAO_ESC } from './bloco44'
@@ -4322,6 +4323,7 @@ export function roundAvancos() {
   roundEstudio()
   roundInst()
   roundSeg()
+  roundSv()
 }
 
 /* ---------- BLOCO 36: cenário por mandato, identidade do estado, leis com contexto ---------- */
@@ -6178,6 +6180,139 @@ function roundSeg() {
     cnt('segcaso')
     break
   }
+}
+
+/* ---------- gestão por casos (usada pelos blocos 45C a 45F) ---------- */
+function gcAplicar(i, pn, opId, auto, pre, mets) {
+  const o = pn.ops.find((x) => x.id === opId) || pn.ops.find((x) => x.id === PADRAO_GC)
+  const ok = o.p >= 1 ? true : o.id === PADRAO_GC ? false : R() < o.p
+  const r = ok ? o.ok : o.bad
+  applyFx({ ...(r.fx || {}), cash: (r.fx && r.fx.cash ? r.fx.cash : 0) - (o.cash || 0) }, true)
+  for (const [k, v] of Object.entries(r.m || {})) if (k in mets) mets[k] = clamp(mets[k] + v)
+  if (o.heat && !ok) game.heat = clamp(game.heat + o.heat)
+  if (r.sujo) { game.dirty++; game.termDirty++ }
+  timelineAdd(pn.icon, `${pn.nome}${auto ? ' (você deixou passar)' : ''}: ${o.name.toLowerCase()}. ${r.t}`.trim(), ok ? 'up' : 'down')
+  i.pend = null
+  i.last = game.total
+  i.casos++
+  cnt(pre + (ok ? 'casook' : 'casoruim'))
+  return { o, ok, r }
+}
+function gcSorteia(i, cat, esf, mets, pre) {
+  for (const c of cat) {
+    if (!c.esf.includes(esf) || !c.when(mets, i) || R() >= c.prob) continue
+    i.pend = { id: c.id, left: 2 }
+    i.last = game.total
+    cnt(pre + 'caso')
+    return c
+  }
+  return null
+}
+function gcView(i, porId, ctx) {
+  if (!i || !i.pend) return null
+  const d = porId[i.pend.id]
+  if (!d) return null
+  const oid = officeId()
+  return { icon: d.icon, nome: d.nome, titulo: d.titulo || d.nome, texto: d.texto(ctx), left: i.pend.left, ops: d.ops.filter((o) => !o.quem || o.quem.includes(oid)) }
+}
+function gcMotivo(pn, op) {
+  if (!pn) return 'Indisponível.'
+  const o = pn.ops.find((x) => x.id === op)
+  if (!o) return 'Indisponível.'
+  if (o.cash && game.stats.cash < o.cash) return `Sem caixa (${o.cash}).`
+  return ''
+}
+
+/* ---------- BLOCO 45C: saúde e educação como sistema ---------- */
+function svBase() {
+  ensurePoder()
+  const p = game.poder
+  if (!p.sv) p.sv = { m: Object.fromEntries(Object.entries(MET_SV).map(([k, v]) => [k, v.ini])), pend: null, last: -9, cd: {}, acoes: 0, casos: 0 }
+  return p.sv
+}
+const svNow = () => (game.poder && game.poder.sv) || null
+export const svView = () => {
+  const i = svNow()
+  const val = (k) => Math.round(i ? i.m[k] : MET_SV[k].ini)
+  const mk = (k) => ({ id: k, ...MET_SV[k], v: val(k) })
+  return { saude: SAUDE_MET.map(mk), edu: EDU_MET.map(mk) }
+}
+export const svAcoesNow = () => (isExec() ? ACOES_SV.filter((a) => !a.esf || a.esf.includes(officeInfo().sphere)) : [])
+export function svAcaoMotivo(id) {
+  const a = ACAO_SV_POR_ID[id]
+  if (!a || !isExec() || !game.world) return 'Indisponível.'
+  if (a.esf && !a.esf.includes(officeInfo().sphere)) return 'Indisponível neste cargo.'
+  const i = svNow()
+  if (i && i.cd[id] && game.total < i.cd[id]) return `Espere ${i.cd[id] - game.total} rodada(s).`
+  if (game.stats.cash < a.cash) return `Sem caixa (${a.cash}).`
+  return ''
+}
+export function svAcaoAgir(id) {
+  if (svAcaoMotivo(id)) return null
+  const i = svBase()
+  const a = ACAO_SV_POR_ID[id]
+  applyFx({ ...a.fx, cash: -a.cash }, true)
+  for (const [k, v] of Object.entries(a.m)) i.m[k] = clamp(i.m[k] + v)
+  i.cd[id] = game.total + a.cd
+  i.acoes++
+  timelineAdd(a.icon, `${a.nome}: investimento feito.`, 'up')
+  cnt('svacao')
+  save()
+  return { txt: `${a.nome}: feito.` }
+}
+export function svEmendaMotivo(area) {
+  if (isExec() || !game.world || !EMENDAS_SV[area]) return 'Indisponível.'
+  const i = svNow()
+  const e = EMENDAS_SV[area]
+  if (i && i.cd['em:' + area] && game.total < i.cd['em:' + area]) return `Espere ${i.cd['em:' + area] - game.total} rodada(s).`
+  if (game.stats.cash < e.cash) return `Sem caixa (${e.cash}).`
+  return ''
+}
+export function svEmenda(area) {
+  if (svEmendaMotivo(area)) return null
+  const i = svBase()
+  const e = EMENDAS_SV[area]
+  applyFx({ ...e.fx, cash: -e.cash }, true)
+  i.cd['em:' + area] = game.total + e.cd
+  timelineAdd(area === 'saude' ? '🏥' : '🏫', `${e.nome} para a sua base.`, 'up')
+  save()
+  return { txt: `${e.nome}: destinada.` }
+}
+export const svPendNow = () => gcView(svNow(), CASO_SV_POR_ID, {})
+export const svMotivo = (op) => gcMotivo(svPendNow(), op)
+export function svEscolher(op) {
+  if (svMotivo(op)) return null
+  const i = svBase()
+  const { o, ok, r } = gcAplicar(i, svPendNow(), op, false, 'sv', i.m)
+  save()
+  return { ok, txt: o.id === PADRAO_GC ? 'Você esperou e o caso seguiu.' : r.t }
+}
+function roundSv() {
+  if (!game.world) return
+  const i = svBase()
+  const tgt = clamp(20 + game.stats.soc * 0.6 + game.stats.cash * 0.1, 10, 80)
+  for (const k of ['aten', 'hosp', 'estoq', 'alfa', 'infra']) i.m[k] = clamp(i.m[k] + (tgt - i.m[k]) * 0.03 - 0.3)
+  i.m.evas = clamp(i.m.evas + (clamp(80 - tgt, 10, 70) - i.m.evas) * 0.03 + 0.3)
+  if (!isExec()) return
+  const sau = (i.m.aten + i.m.hosp + i.m.estoq) / 3
+  const edu = (100 - i.m.evas + i.m.alfa + i.m.infra) / 3
+  if (sau < 35) applyFx({ soc: -(35 - sau) * 0.02, pop: -(35 - sau) * 0.01 }, true)
+  else if (sau > 60) applyFx({ soc: (sau - 60) * 0.012, pop: (sau - 60) * 0.006 }, true)
+  if (edu < 35) applyFx({ soc: -(35 - edu) * 0.015 }, true)
+  else if (edu > 60) applyFx({ soc: (edu - 60) * 0.01 }, true)
+  eduAdd((i.m.alfa - 50) * 0.004)
+  if (i.pend) {
+    i.pend.left--
+    if (i.pend.left < 0) {
+      const pn = svPendNow()
+      if (pn) gcAplicar(i, pn, PADRAO_GC, true, 'sv', i.m)
+      else i.pend = null
+    }
+    return
+  }
+  if (game.total < 5 || game.total - i.last < 6) return
+  const c = gcSorteia(i, CASOS_SV, officeInfo().sphere, i.m, 'sv')
+  if (c) toast(c.icon, c.nome)
 }
 
 /* ---------- BLOCO 35: pressão do Congresso ---------- */
@@ -8963,6 +9098,7 @@ export function pendenciasNow() {
   const cr = crisePendNow(); if (cr) dec('crise', cr.icon, cr.titulo, cr.left)
   const es = escandaloPendNow(); if (es) dec('escandalo', es.icon, es.titulo, es.left)
   const cso = casoPendNow(); if (cso) dec('caso', cso.icon, cso.titulo, cso.left)
+  const svp = svPendNow(); if (svp) dec('svpend', svp.icon, svp.titulo, svp.left)
   const sgp = segPendNow(); if (sgp) dec('segpend', sgp.icon, sgp.titulo, sgp.left)
   const pcs = procNow(); if (pcs) dec('processo', '🔨', `${pcs.nome}: ${pcs.fase.nome}`, pcs.faltam)
   if (acaoPendente() || inquerito()) out.push({ id: 'tribunal', icon: '⚖️', txt: 'Há um caso no tribunal envolvendo você', left: 0, tab: 'leis', tipo: 'decisao', n: 1 })

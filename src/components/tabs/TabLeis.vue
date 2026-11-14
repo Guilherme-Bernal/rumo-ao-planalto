@@ -3,6 +3,7 @@ import SecMinistros from './SecMinistros.vue'
 import { computed, ref } from 'vue'
 import { billsOf } from '../../game/bills'
 import SecEducacao from './SecEducacao.vue'
+import SecSv from './SecSv.vue'
 import SecDefesa from './SecDefesa.vue'
 import SecObras from './SecObras.vue'
 import SecConstituicao from './SecConstituicao.vue'
@@ -110,6 +111,7 @@ const statName = { soc: 'Serviços', seg: 'Segurança', eco: 'Economia', cash: '
     <SecMinistros />
     <SecObras />
     <SecEducacao />
+    <SecSv />
     <SecDefesa />
     <SecConstituicao />
 

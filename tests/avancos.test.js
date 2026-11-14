@@ -2776,3 +2776,99 @@ describe('BLOCO 45B — segurança pública, compras, pesquisa e acordos', () =>
     expect(v.sg.acordos[0].id).toBe('intel_ue')
   })
 })
+
+describe('BLOCO 45C — saúde e educação como sistema', () => {
+  const inicia = (office = 'prefeito') => {
+    E.startGame({ name: 'Teste', regionId: 'SP' })
+    E.game.office = office
+    E.game.phase = 'actions'
+    E.game.stats.cash = 80
+    E.game.total = 10
+    E.game.world.ameacas = []
+    E.game.world.guerraDef = null
+    E.game.world.laws = []
+  }
+  const rodada = () => {
+    E.game.total++
+    E.roundAvancos()
+  }
+  it('o catálogo é coerente', async () => {
+    const B = await import('../src/game/bloco45c.js')
+    for (const c of B.CASOS_SV) {
+      expect(c.ops.find((o) => o.id === B.PADRAO_GC), c.id).toBeTruthy()
+      expect(typeof c.when({ aten: 0, hosp: 0, estoq: 0, evas: 0, alfa: 0, infra: 0 })).toBe('boolean')
+    }
+    expect(B.ACOES_SV.length).toBe(11)
+  })
+  it('investir sobe a métrica, cobra o custo e tem espera', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.sv
+    i.m.aten = 30
+    const cash = E.game.stats.cash
+    expect(E.svAcaoAgir('ubs')).toBeTruthy()
+    expect(i.m.aten).toBe(42)
+    expect(E.game.stats.cash).toBeLessThan(cash)
+    expect(E.svAcaoMotivo('ubs')).toMatch(/Espere/)
+  })
+  it('busca ativa reduz a evasão', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.sv
+    i.m.evas = 60
+    E.svAcaoAgir('busca')
+    expect(i.m.evas).toBe(48)
+  })
+  it('prefeito não contrata médicos de outras esferas e legislador só faz emenda', () => {
+    inicia('prefeito')
+    rodada()
+    expect(E.svAcaoMotivo('medicos')).toMatch(/Indisponível/)
+    inicia('dep_estadual')
+    rodada()
+    expect(E.svAcoesNow().length).toBe(0)
+    expect(E.svEmenda('saude')).toBeTruthy()
+    expect(E.svEmendaMotivo('saude')).toMatch(/Espere/)
+  })
+  it('caso de surto é decidido e a opção padrão resolve sozinha', () => {
+    inicia()
+    rodada()
+    const i = E.game.poder.sv
+    i.pend = { id: 'surto', left: 2 }
+    expect(E.svPendNow().ops.length).toBe(4)
+    expect(E.svEscolher('campanha')).toBeTruthy()
+    expect(E.svPendNow()).toBeNull()
+    i.pend = { id: 'uti', left: 0 }
+    i.last = E.game.total
+    rodada()
+    rodada()
+    expect(E.svPendNow()).toBeNull()
+    expect(i.casos).toBe(2)
+  })
+  it('a rede se recupera para o patamar da realidade social e rede fraca derruba o social', () => {
+    inicia('governador')
+    rodada()
+    const i = E.game.poder.sv
+    i.m.aten = 100
+    i.m.hosp = 100
+    i.m.estoq = 100
+    for (let k = 0; k < 60; k++) { E.game.stats.soc = 40; E.game.stats.pop = 55; E.game.stats.img = 55; rodada(); i.pend = null; E.game.over = null }
+    expect(i.m.aten).toBeLessThan(80)
+    i.m.aten = 5
+    i.m.hosp = 5
+    i.m.estoq = 5
+    const antes = E.game.stats.soc
+    i.m.alfa = 5
+    E.game.stats.soc = 50
+    rodada()
+    expect(E.game.stats.soc).toBeLessThan(50)
+    expect(antes).toBeGreaterThan(0)
+  })
+  it('o estado sobrevive ao salvamento', () => {
+    inicia()
+    rodada()
+    E.svAcaoAgir('escolas')
+    const v = JSON.parse(JSON.stringify(E.game.poder))
+    expect(v.sv.acoes).toBe(1)
+    expect(v.sv.m.infra).toBeGreaterThan(40)
+  })
+})
